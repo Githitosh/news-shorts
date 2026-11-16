@@ -19,6 +19,12 @@ X とウェブからニュースを12本集める（Grok か Claude）
 
 ### ブラウザで
 
+公開ページは次の URL です。
+
+https://githitosh.github.io/news-shorts/
+
+`main` に入ると、GitHub Actions がルートの静的ファイルを GitHub Pages にデプロイします。初回に 404（Site not found）が出るときは、リポジトリの **Settings → Pages** で Source を **GitHub Actions** にしてから、`Deploy GitHub Pages` ワークフローを実行してください。Branch で公開する場合は **main** / **/(root)** を選んでも同じファイルを配信できます。
+
 1. `index.html` を開く（これ1つで動きます。写真・音楽・プログラムは中に入っています。パソコンなら Chrome・Edge・Safari で開けます）
 2. 「設定」で AI を選び、API キーを入れる
    - **Grok**：X の投稿を直接検索します（xAI の API キー）
