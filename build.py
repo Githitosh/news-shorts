@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""src/ と assets/ から、1つで動く index.html を作る。
+"""Build one self-contained index.html from src/ and assets/.
 
     python build.py
 """
@@ -20,10 +20,15 @@ def main() -> None:
     engine = (ROOT / "src" / "engine.js").read_text(encoding="utf-8")
     sample = json.loads((ROOT / "samples" / "2026-11-14.json").read_text(encoding="utf-8"))
     assets = {f"bg_{g}": b64(ROOT / "assets" / f"bg_{g}.jpg") for g in "ABCDE"}
-    assets["music"] = b64(ROOT / "assets" / "jupiter_1922.m4a")
+    assets["tracks"] = {
+        "jupiter": b64(ROOT / "assets" / "jupiter_1922.m4a"),
+        "neptune": b64(ROOT / "assets" / "neptune_1923.m4a"),
+        "stripes": b64(ROOT / "assets" / "stripes_1909.m4a"),
+        "sandman": b64(ROOT / "assets" / "sandman_1920.m4a"),
+    }
     for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine)):
         if "</script" in code.lower():
-            raise SystemExit(f"{name} に </script が含まれています")
+            raise SystemExit(f"{name} contains </script")
     license_note = "/* mp4-muxer 5.2.2 (MIT License, Copyright (c) 2023 Vanilagy) — lib/mp4-muxer.LICENSE */\n"
     out = (
         html.replace("/*__MUXER__*/", license_note + muxer)

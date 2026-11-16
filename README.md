@@ -1,86 +1,99 @@
-# News Shorts（ニュース動画の自動生成）
+# News Shorts
 
-2026年11月14日の「News Shorts」と同じ形の動画（30fps・41.6秒）を、HTML だけで作ります。形式は3つです。
+Open the page and the news video plays. The layout follows the device: YouTube, X, a phone, or a PC. Four public-domain recordings can be selected under the picture.
 
-| 形式 | 大きさ | 使いみち |
+| Device | Picture | When it is chosen |
 |---|---|---|
-| **X・スマホ**（メイン） | 縦 1080×1920 | X に投稿、スマホで見る。画面いっぱいに文字を出す（11/14 の X 版と同じ形） |
-| YouTube | 縦 1080×1920 | YouTube ショート。右と下をボタンのために空ける（11/14 の YouTube 版と同じ形） |
-| PC | 横 1920×1080 | パソコンで見る。左に見出し、右に日本語 |
-
-```
-X とウェブからニュースを12本集める（Grok か Claude）
-  → コーヒーブレイクを自動で書く
-  → 1本3.2秒 × 13本の映像を描く（大きなキーワード → 見出し → 日本語 → タグ）
-  → 音楽（Holst 指揮の「Jupiter」1922–23年の録音）を付けて、3つの形式の MP4 に書き出す
-```
-
-## 使い方
-
-### ブラウザで
-
-Safari で開く公開ページは次の URL です。
+| **Phone** | Portrait 1080×1920 | A phone browser. Text uses the full width. |
+| **X** | Portrait 1080×1920 | The X app. Same full-width layout as Phone. |
+| **YouTube** | Portrait 1080×1920 | The YouTube app. The right and bottom stay clear for buttons. |
+| **PC** | Landscape 1920×1080 | A computer. The headline is on the left and the Japanese text is on the right. |
 
 https://githitosh.github.io/news-shorts/
 
-`main` ブランチのルートが GitHub Pages として公開されています。開くと、自動生成したニュース動画（2026年11月14日、13本・約42秒）が再生されます。音は、Safari の制限で画面を一度タップすると付きます。「X・スマホ」「YouTube」「PC」で、見る形式を切り替えられます。
+GitHub Pages serves the root of `main`. The picture starts on its own. Safari blocks the sound until the picture is tapped once. The video is the November 14, 2026 edition: 13 stories, about 42 seconds, then it repeats.
 
-新しい日付の動画を作るときは、ページの「新しい動画を作る」から進めます。手元のファイルで開くときも同じです。
+Country, language, and X are under the picture.
 
-1. `index.html` を開く（これ1つで動きます。写真・音楽・プログラムは中に入っています。パソコンなら Chrome・Edge・Safari で開けます）
-2. 「設定」で AI を選び、API キーを入れる
-   - **Grok**：X の投稿を直接検索します（xAI の API キー）
-   - **Claude**：ウェブを検索します（Anthropic の API キー）
-   - キーはその端末のブラウザにだけ保存されます
-3. 「ニュースを集めて動画にする」を押す → 集める・書く・書き出すまで自動で進み、形式ごとに「保存」「共有」が出ます
-   - 書き出す形式は「設定」で選べます（はじめは3つとも）
-   - 画面上の「X・スマホ／YouTube／PC」で、見る形式を切り替えられます
+- **Country** chooses which country's news is collected. **Language** is the language of the lines under the English headline. Changing the country sets its usual language. You can change the language after that.
+- **X account** is the account to link, for example `@name`. **Make video from follows** reads recent posts and replies from accounts that account follows, keeps the ones about the selected country, and plays a new video in the selected language. This uses the saved API key. With no key yet, the page asks for one. A linked account is saved only in this browser.
+- On the next visit, a linked account and a saved key make the video again when the page opens.
 
-スマホでは、Safari の共有ボタン →「ホーム画面に追加」で、アプリのように全画面で開けます。
+```bash
+python run.py --x-user name --country US --lang en
+python run.py --country FR --lang fr --provider claude
+```
 
-「台本（JSON）」で見出しや文を直して「台本を反映」→「MP4を書き出す」で作り直せます。「見本（11/14）」で元の動画の台本を読み込めます。
+Music, under the picture:
 
-### 自動実行（画面なし）
+| Button | Recording |
+|---|---|
+| Jupiter | Holst, “Jupiter”, London Symphony Orchestra, Columbia, 1922–23 |
+| Neptune | Holst, “Neptune”, same recording, 1923 |
+| Stars and Stripes | Sousa’s Band, Edison, 1909 |
+| Sandman | Paul Whiteman and His Ambassador Orchestra, 1920 |
 
-ブラウザから API に直接つながらないときや、決まった時刻に作りたいときに使います。
+## Make a new video
+
+`index.html` contains the pictures, the music, and the program. Chrome, Edge, and Safari can open it.
+
+Add `?edit=1` to show the tools:
+
+1. Open **Settings**, choose Grok or Claude, and enter an API key. The key stays in this browser.
+   - **Grok** searches X and the web (an xAI key).
+   - **Claude** searches the web (an Anthropic key).
+2. Choose **Collect news and make the video**. Collection, the coffee break, and export run on their own.
+3. Edit the script under **Script (JSON)**, then **Apply script** and **Export MP4**. **Sample (Nov 14)** reloads the original script.
+
+On a phone, Share → Add to Home Screen opens it full screen.
+
+## Run without a window
+
+Use this when the browser cannot call the API, or when the video should be made on a schedule.
 
 ```bash
 pip install playwright && python -m playwright install chromium
-export XAI_API_KEY=...        # Grok のとき（Claude なら ANTHROPIC_API_KEY）
-python run.py                 # 今日の動画を out/ に保存（台本 .json と出典 .txt も）
+export XAI_API_KEY=...        # Grok. For Claude, set ANTHROPIC_API_KEY
+python run.py                 # save today's video in out/, plus the script .json and sources .txt
 python run.py --date 2026-11-14 --provider claude
-python run.py --sample        # 見本の台本で書き出すだけ（API なし）
-python run.py --formats x     # X・スマホ用だけ（x / youtube / pc をカンマ区切り）
+python run.py --sample        # export the sample script, no API call
+python run.py --formats x     # one format: x, youtube, or pc
 ```
 
-## 中身
+## Files
 
-| 場所 | 内容 |
+| Path | What it is |
 |---|---|
-| `index.html` | 本体（`build.py` で作ったもの） |
-| `manifest.webmanifest`・`*.png` | ホーム画面に追加したときの名前とアイコン |
-| `run.py` | 画面なしで index.html を動かし、MP4 を保存する |
-| `src/engine.js` | 描画（3つの形式の配置・大きさ・切り替えのタイミング） |
-| `src/app.html` | 画面、ニュース集め、コーヒーブレイク、MP4 書き出し |
-| `assets/` | 背景5枚（元の動画から取り出したもの）と音楽（1922–23年の録音から切り出し、ノイズを除いたもの） |
-| `samples/2026-11-14.json` | 元の動画の台本 |
-| `lib/mp4-muxer.js` | MP4 を組み立てるライブラリ（MIT） |
-| `build.py` | `src/` と `assets/` から `index.html` を作り直す |
+| `index.html` | The page. `build.py` writes it. |
+| `manifest.webmanifest`, `*.png` | Name and icons for Add to Home Screen |
+| `run.py` | Runs `index.html` without a window and saves the MP4 files |
+| `src/engine.js` | Drawing for the three layouts |
+| `src/app.html` | The page, news collection, the coffee break, and MP4 export |
+| `assets/` | Five backgrounds and four music files |
+| `samples/2026-11-14.json` | The original script |
+| `lib/mp4-muxer.js` | MP4 library (MIT) |
+| `build.py` | Rebuilds `index.html` from `src/` and `assets/` |
 
-## 動画の決まり（元の動画から測った値）
+Rebuild after changing `src/` or `assets/`:
 
-- 1本3.2秒。0〜0.77秒は大きなキーワード、0.77秒から0.2秒で見出しに切り替え、1.57秒から日本語、2.37秒からタグ
-- 背景は3.2秒で2.2%ゆっくり寄る。並びは A B C C A B D C D C B D、最後のコーヒーブレイクは書斎の画像
-- 英語の見出しは明朝の極太を横に縮めたもの。副見出しの to / and / of などは小さく出る
-- 文字の範囲：X・スマホは左右60px を空けて全幅、YouTube は60〜900px（右と下はボタンの位置）、PC は120〜1800px
-- X・スマホと PC では、英語の見出し・副見出しの改行を自動で決める（見出しは1行で十分大きければ1行、副見出しは見出しとの釣り合いがいちばんよい行数）。日本語の「／」は、1行に入らないときだけ改行に使う
-- 音楽は `assets/jupiter_1922.m4a` の音をそのまま入れる（作り直さない）。本数が少ないときは、曲の終わりに合わせて途中から始める
+```bash
+python build.py
+```
 
-## 出典・権利
+## Timing
 
-- 音楽：Holst「Jupiter」Holst 指揮 London Symphony Orchestra（Columbia, 1922–23 の録音）、Wikimedia Commons「Holst - The Planets (Columbia 1922-23).flac」の 18:21 から 41.6 秒
-  - 1923年に発売された録音で、曲・録音ともパブリックドメイン
-  - クリックとヒスノイズを除き（ffmpeg の adeclick・afftdn）、音量を -16 LUFS にそろえた
-- 写真：U.S. National Park Service・NOAA（Glacier, Yellowstone, Lake Mead, SE Alaska）、パブリックドメイン
-- コーヒーブレイクの背景：AI で作った画像（Grok）
-- ニュースの文は AI が投稿や記事をもとに短くまとめます。公開する前に台本を確認してください
+- Each story is 3.2 seconds: a large keyword, then the headline at 0.77 seconds, Japanese at 1.57 seconds, and tags at 2.37 seconds.
+- The background eases in by 2.2% over those 3.2 seconds. The order is A B C C A B D C D C B D. The coffee break uses the study picture.
+- English headlines use a heavy serif, condensed. Small words such as to, and, and of stay small.
+- Text bounds: Phone and X use 60px side margins, YouTube uses 60–900px, and PC uses 120–1800px.
+- On Phone, X, and PC, English line breaks are chosen automatically. A Japanese `／` becomes a line break only when the line does not fit.
+- The selected music file is copied into the MP4 as it is. If the video is shorter than the recording, playback starts late enough to finish with the recording.
+
+## Credits
+
+- Jupiter and Neptune: Holst conducting the London Symphony Orchestra (Columbia, 1922–23), from Wikimedia Commons “Holst - The Planets (Columbia 1922-23).flac”. Jupiter is the 41.6 seconds starting at 18:21. Neptune is 41.6 seconds starting at 0:45 of the Neptune excerpt. Clicks and hiss were reduced with ffmpeg `adeclick` and `afftdn`, and loudness was set to -16 LUFS. The music and the recordings are in the public domain.
+- Stars and Stripes Forever: Sousa’s Band for Edison Records, November 1909, Wikimedia Commons. Public domain. The excerpt starts at 0:18.
+- The Japanese Sandman: Paul Whiteman and His Ambassador Orchestra, August 19, 1920, Wikimedia Commons. Public domain. The excerpt starts at 0:12.
+- Photos: U.S. National Park Service and NOAA (Glacier, Yellowstone, Lake Mead, southeast Alaska). Public domain.
+- Coffee-break background: an image made with Grok.
+- News lines are short summaries. Read the script before publishing it.

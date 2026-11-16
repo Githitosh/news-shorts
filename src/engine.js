@@ -4,9 +4,9 @@
 
 const FPS = 30, DUR = 3.2;
 const INK = '#F5F1E9';
-const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
+const F_SERIF = '"Noto Serif JP","Noto Serif KR","Noto Serif SC","Noto Serif TC","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
-const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+const F_SANS = '"Noto Sans JP","Noto Sans KR","Noto Sans SC","Noto Sans TC","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
 
 /* 位置と大きさ（元の動画から測った値）。youtube：11/14 の動画、x：11/14 の X 版、pc：横長（自作） */
 const PRESETS = {
@@ -77,6 +77,8 @@ function use(name) { P = PRESETS[name] || PRESETS.youtube; W = P.W; H = P.H; ret
 
 const BG_ORDER = ['A', 'B', 'C', 'C', 'A', 'B', 'D', 'C', 'D', 'C', 'B', 'D'];
 const CREDIT_MUSIC = 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons';
+let musicCredit = CREDIT_MUSIC;
+function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
 const CREDIT_COFFEE = 'Background: AI-generated image (Karuizawa-style study), Grok Bot';
 
@@ -325,7 +327,7 @@ function prepare(script, preset) {
   });
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
+    header: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1]} ${da}, ${y}${script.market ? ' · ' + script.market : ''}`,
   };
 }
 
@@ -371,9 +373,9 @@ function drawItem(ctx, show, i, t, bgs) {
   textX(ctx, show.header, P.header.cx, P.header.base, P.header.sx, 'center');
   ctx.font = font(400, P.credit.size, F_SANS);
   ctx.fillStyle = P.credit.color; ctx.textAlign = 'left';
-  const mw = ctx.measureText(CREDIT_MUSIC).width, ms = Math.min(P.credit.size, P.credit.size * P.credit.maxW1 / mw);
+  const mw = ctx.measureText(musicCredit).width, ms = Math.min(P.credit.size, P.credit.size * P.credit.maxW1 / mw);
   ctx.font = font(400, ms, F_SANS);
-  ctx.fillText(CREDIT_MUSIC, P.left, P.credit.base1 - (P.credit.size - ms) * 1.33);
+  ctx.fillText(musicCredit, P.left, P.credit.base1 - (P.credit.size - ms) * 1.33);
   ctx.font = font(400, P.credit.size, F_SANS);
   const cw = ctx.measureText(it.credit2).width, cs = Math.min(P.credit.size, P.credit.size * P.credit.maxW / cw);
   ctx.font = font(400, cs, F_SANS);
@@ -439,9 +441,9 @@ function allText(script) {
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
     s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.tags || []), it.src, it.date);
   });
-  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', CREDIT_MUSIC, CREDIT_PHOTO, CREDIT_COFFEE);
+  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts January February March April May June July August September October November December | / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use };
+global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit };
 })(window);

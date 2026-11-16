@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -14,23 +14,29 @@
 <title>News Shorts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@600;700;900&family=Tinos:wght@700&display=swap" rel="stylesheet">
+<link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+JP:wght@600;700;900&family=Noto+Serif+KR:wght@700&family=Noto+Serif+SC:wght@700&family=Noto+Serif+TC:wght@700&family=Tinos:wght@700&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; }
 header { padding: calc(10px + env(safe-area-inset-top)) 16px 8px; font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
 header span { color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin-left: 6px; }
-main { display: grid; gap: 14px; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 980px; margin: 0 auto; }
-@media (min-width: 820px) { main { grid-template-columns: 400px 1fr; align-items: start; } main.wide { grid-template-columns: 1fr; } }
+main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
+main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
 .frame { position: relative; max-width: 400px; margin: 0 auto; }
 canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
 canvas#cv.wide { aspect-ratio: 16 / 9; }
-.fmt { display: flex; gap: 6px; max-width: 400px; margin: 0 auto 8px; }
-.fmt button { flex: 1; padding: 8px 4px; font-size: 13px; border-radius: 8px; }
-.fmt button.on { background: var(--ink); color: #111; border-color: var(--ink); }
-.stage.wide .frame, .stage.wide .fmt, .stage.wide .ctl { max-width: 100%; }
+.stage.wide .frame, .stage.wide .ctl, .stage.wide .music, .stage.wide .picks { max-width: 100%; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; max-width: 400px; margin: 12px auto 0; align-items: end; }
+.picks label { flex: 1 1 42%; color: var(--mute); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.picks .xfield { flex: 1 1 100%; }
+.picks button { flex: 1 1 100%; }
+#keySlot { flex: 1 1 100%; }
+.music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
+.music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
+.music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
+.music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 .caption.err { color: #ff9b8a; }
 #unmute {
@@ -41,8 +47,8 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 }
 [hidden] { display: none !important; }
 @media (max-width: 819px) {
-  body.watching .frame { max-width: min(100%, 520px); }
   body.watching .stage { position: static; }
+  body.watching .frame { max-width: min(100%, calc((100dvh - 360px) * 9 / 16)); }
 }
 #out { flex-wrap: wrap; }
 #out .btn { flex: 1 1 30%; font-size: 14px; }
@@ -54,6 +60,7 @@ button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--acc); color: #1a1408; border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
+.studio { display: grid; gap: 12px; margin-top: 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 #status { min-height: 1.6em; color: var(--ink); font-size: 14px; margin-top: 10px; white-space: pre-wrap; }
 #status.err { color: #ff9b8a; }
@@ -74,72 +81,80 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header>News Shorts<span>ニュース動画</span></header>
+<header>News Shorts<span>Phone</span></header>
 <main>
   <section class="stage" id="stage">
-    <div class="fmt" id="fmt">
-      <button data-f="x" class="on">X・スマホ</button>
-      <button data-f="youtube">YouTube</button>
-      <button data-f="pc">PC</button>
-    </div>
     <div class="frame">
       <canvas id="cv" width="1080" height="1920"></canvas>
-      <button type="button" id="unmute" hidden>タップして音をつける</button>
+      <button type="button" id="unmute" hidden>Tap for sound</button>
     </div>
     <div class="ctl">
-      <button id="play" disabled>再生</button>
+      <button id="play" disabled>Play</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
-    <p id="caption" class="caption">ニュース動画を開いています…</p>
+    <p class="music-label">Music</p>
+    <div class="music" id="music"></div>
+    <div class="picks" id="picks">
+      <label>Country<select id="country"></select></label>
+      <label>Language<select id="lang"></select></label>
+      <label class="xfield">X account
+        <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
+      </label>
+      <label id="keySlot" hidden>API key
+        <input id="keyInline" type="password" autocomplete="off" placeholder="xai-… / sk-ant-…">
+      </label>
+      <button type="button" id="xGo">Make video from follows</button>
+    </div>
+    <p id="caption" class="caption">Opening the news video…</p>
   </section>
 
-  <section style="display:grid;gap:12px">
+  <div id="studio" class="studio" hidden>
     <details id="makeBox">
-      <summary>新しい動画を作る</summary>
-      <button id="go" class="primary">ニュースを集めて動画にする</button>
-      <div id="status">ニュース動画を開いています…</div>
+      <summary>Make a new video</summary>
+      <button id="go" class="primary">Collect news and make the video</button>
+      <div id="status">Opening the news video…</div>
       <div id="prog"><i></i></div>
       <div id="out" class="row"></div>
     </details>
 
     <details id="setBox">
-      <summary>設定</summary>
-      <label for="provider">ニュースを集めるAI</label>
+      <summary>Settings</summary>
+      <label for="provider">News source</label>
       <select id="provider">
-        <option value="grok">Grok（Xとウェブを検索）</option>
-        <option value="claude">Claude（ウェブを検索）</option>
+        <option value="grok">Grok (search X and the web)</option>
+        <option value="claude">Claude (search the web)</option>
       </select>
-      <label for="key">APIキー（この端末にだけ保存）</label>
+      <label for="key">API key (stored only on this device)</label>
       <input type="password" id="key" autocomplete="off" placeholder="xai-… / sk-ant-…">
-      <label for="model">モデル</label>
+      <label for="model">Model</label>
       <input type="text" id="model" autocomplete="off">
-      <label for="date">日付（日本時間）</label>
+      <label for="date">Date (Japan time)</label>
       <input type="date" id="date">
-      <label class="check"><input type="checkbox" id="autoExport" checked> 集めたあと、MP4の書き出しまで続けて行う</label>
-      <label>書き出す形式</label>
-      <label class="check"><input type="checkbox" class="fx" value="x" checked> X・スマホ（縦 1080×1920、メイン）</label>
-      <label class="check"><input type="checkbox" class="fx" value="youtube" checked> YouTube（縦 1080×1920、右と下を空ける）</label>
-      <label class="check"><input type="checkbox" class="fx" value="pc" checked> PC（横 1920×1080）</label>
-      <p class="note">Grok は X の投稿を直接検索できます。ブラウザからつながらないときは、同じフォルダの run.py で自動実行できます。</p>
+      <label class="check"><input type="checkbox" id="autoExport" checked> Export MP4 files after the script is ready</label>
+      <label>Formats to export</label>
+      <label class="check"><input type="checkbox" class="fx" value="x" checked> Phone and X (portrait 1080×1920)</label>
+      <label class="check"><input type="checkbox" class="fx" value="youtube" checked> YouTube (portrait 1080×1920, room for buttons)</label>
+      <label class="check"><input type="checkbox" class="fx" value="pc" checked> PC (landscape 1920×1080)</label>
+      <p class="note">Grok can search X posts directly. If the browser cannot reach the API, run run.py from this folder.</p>
     </details>
 
     <details>
-      <summary>台本（JSON）</summary>
+      <summary>Script (JSON)</summary>
       <textarea id="json" spellcheck="false"></textarea>
       <div class="row" style="margin-top:8px">
-        <button id="apply">台本を反映</button>
-        <button id="sample">見本（11/14）</button>
-        <button id="exportBtn" disabled>MP4を書き出す</button>
+        <button id="apply">Apply script</button>
+        <button id="sample">Sample (Nov 14)</button>
+        <button id="exportBtn" disabled>Export MP4</button>
       </div>
     </details>
 
     <details>
-      <summary>出典</summary>
+      <summary>Sources</summary>
       <pre id="sources"></pre>
-      <button id="copySrc">出典をコピー</button>
+      <button id="copySrc">Copy sources</button>
     </details>
-  </section>
+  </div>
 </main>
 
 <script>/*__MUXER__*/</script>
@@ -160,7 +175,47 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.' + k, v); } catch (e) {} },
 };
-const FORMATS = { x: 'X', youtube: 'YouTube', pc: 'PC' };
+const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
+const COUNTRIES = [
+  { id: 'JP', name: 'Japan', lang: 'ja' },
+  { id: 'US', name: 'United States', lang: 'en' },
+  { id: 'GB', name: 'United Kingdom', lang: 'en' },
+  { id: 'FR', name: 'France', lang: 'fr' },
+  { id: 'DE', name: 'Germany', lang: 'de' },
+  { id: 'ES', name: 'Spain', lang: 'es' },
+  { id: 'BR', name: 'Brazil', lang: 'pt' },
+  { id: 'KR', name: 'South Korea', lang: 'ko' },
+  { id: 'TW', name: 'Taiwan', lang: 'zh-Hant' },
+  { id: 'CN', name: 'China', lang: 'zh-Hans' },
+];
+const LANGS = [
+  { id: 'ja', name: 'Japanese' },
+  { id: 'en', name: 'English' },
+  { id: 'fr', name: 'French' },
+  { id: 'de', name: 'German' },
+  { id: 'es', name: 'Spanish' },
+  { id: 'pt', name: 'Portuguese' },
+  { id: 'ko', name: 'Korean' },
+  { id: 'zh-Hans', name: 'Chinese (Simplified)' },
+  { id: 'zh-Hant', name: 'Chinese (Traditional)' },
+];
+const COFFEE_FALLBACK = {
+  ja: ['ひと息ついて、今日のニュースを振り返る'],
+  en: ['A pause between the headlines'],
+  fr: ['Une pause entre les titres'],
+  de: ['Eine Pause zwischen den Schlagzeilen'],
+  es: ['Una pausa entre los titulares'],
+  pt: ['Uma pausa entre as manchetes'],
+  ko: ['헤드라인 사이의 한숨'],
+  'zh-Hans': ['在标题之间停一下'],
+  'zh-Hant': ['在標題之間停一下'],
+};
+const TRACKS = [
+  { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
+  { id: 'neptune', name: 'Neptune', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
+  { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
+  { id: 'sandman', name: 'Sandman', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
+];
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
 const ctx = $('cv').getContext('2d');
 
@@ -189,8 +244,51 @@ async function loadAssets() {
     const im = new Image(); im.src = 'data:image/jpeg;base64,' + ASSETS['bg_' + g];
     await im.decode(); S.bgs[g] = im;
   }));
-  S.music = b64bytes(ASSETS.music);
+}
+function detectView() {
+  const ua = navigator.userAgent || '';
+  const ref = document.referrer || '';
+  const forced = Q.get('format');
+  if (FORMATS[forced]) return { format: forced, label: forced === 'youtube' ? 'YouTube' : forced === 'pc' ? 'PC' : 'Phone' };
+  const phoneSized = /iPhone|iPod|Android.+Mobile|Windows Phone|IEMobile/i.test(ua)
+    || !!(navigator.userAgentData && navigator.userAgentData.mobile)
+    || window.innerWidth < 900;
+  if (/youtube|youtu\.be/i.test(ua) || (/youtube|youtu\.be/i.test(ref) && phoneSized)) return { format: 'youtube', label: 'YouTube' };
+  if (/\bTwitter\b/.test(ua) || (/twitter\.com|(?:^|\/\/)(?:www\.)?x\.com/i.test(ref) && phoneSized)) return { format: 'x', label: 'X' };
+  if (phoneSized) return { format: 'x', label: 'Phone' };
+  return { format: 'pc', label: 'PC' };
+}
+function setViewLabel(label) {
+  S.viewLabel = label;
+  const sub = document.querySelector('header span');
+  if (sub) sub.textContent = label;
+}
+function useTrack(id) {
+  const available = TRACKS.filter(t => ASSETS.tracks && ASSETS.tracks[t.id]);
+  const t = available.find(x => x.id === id) || available[0];
+  if (!t) return;
+  const wasAudible = !!(S.audioOn && S.playing);
+  S.track = t;
+  S.music = b64bytes(ASSETS.tracks[t.id]);
   try { S.aac = parseM4A(S.music); } catch (e) { console.warn('m4a', e); S.aac = null; }
+  if (S.aac) S.audioFailed = false;
+  S.abuf = null;
+  if (E.setMusicCredit) E.setMusicCredit(t.credit);
+  store.set('music', t.id);
+  document.querySelectorAll('#music button').forEach(b => b.classList.toggle('on', b.dataset.m === t.id));
+  S.audioGen++;
+  if (S.src) { try { S.src.stop(); } catch (e) {} S.src = null; }
+  S.audioOn = false;
+  if (S.script) $('sources').textContent = sourcesText(S.script);
+  if (S.show) {
+    const T = S.playing ? currentT() : (+$('seek').value / 1000) * (S.show.duration || 0);
+    draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
+  }
+  if (wasAudible && S.ac && S.ac.state === 'running') attachAudioFrom();
+  else if (S.playing && !S.audioFailed) {
+    const u = $('unmute');
+    if (u) { u.hidden = false; u.textContent = 'Tap for sound'; }
+  }
 }
 
 /* m4a（AAC）を読み、音のフレームをそのまま取り出す */
@@ -242,7 +340,7 @@ function parseM4A(u8) {
     }
     return { rate, channels, asc, samples, duration: t / ts, bytes: u8 };
   }
-  throw new Error('音のトラックがありません');
+  throw new Error('This file has no audio track');
 }
 function musicOffset(dur) { const md = S.aac ? S.aac.duration : 41.6; return Math.max(0, md - dur); }
 
@@ -275,27 +373,30 @@ function normItem(it) {
   };
 }
 function normalize(s) {
-  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 12).map(normItem) };
+  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 12).map(normItem), market: String(s.market || '').trim() };
   if (s.coffee) {
     const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], ...s.coffee });
     c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK'];
     if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
     out.coffee = c;
   }
-  if (!out.items.length) throw new Error('ニュースが1本もありません');
+  if (!out.items.length) throw new Error('The script has no stories');
   return out;
 }
 function sourcesText(s) {
   const lines = s.items.map((it, i) => `${pad2(i + 1)} ${it.head.join(' ')} — ${it.src}${it.date ? ' (' + it.date + ')' : ''}${it.url ? '\n   ' + it.url : ''}`);
-  return lines.join('\n') + '\n\nMusic: Holst “Jupiter” – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons, public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
+  const music = (S.track && S.track.credit) || 'Music: public domain';
+  return lines.join('\n') + '\n\n' + music + ', public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
 }
 function episodeLabel(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s && s.date) || '');
-  return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日のニュース動画` : 'ニュース動画';
+  if (!m) return 'News video';
+  const month = ['January','February','March','April','May','June','July','August','September','October','November','December'][Number(m[2]) - 1];
+  return `${month} ${Number(m[3])}, ${m[1]} news video`;
 }
 function watchLine(sound) {
   const name = episodeLabel(S.script);
-  return sound ? `${name}を再生しています` : `${name}を再生しています。画面をタップすると音がつきます`;
+  return sound ? `Playing the ${name}.` : `Playing the ${name}. Tap the picture for sound.`;
 }
 async function setScript(raw, quiet) {
   stop();
@@ -306,9 +407,7 @@ async function setScript(raw, quiet) {
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
   $('seek').value = 0; draw(0);
-  const sub = document.querySelector('header span');
-  if (sub) sub.textContent = episodeLabel(s);
-  if (!quiet) say(`台本を読み込みました（${S.show.total}本・${S.show.duration.toFixed(1)}秒）`);
+  if (!quiet) say(`Script loaded (${S.show.total} stories, ${S.show.duration.toFixed(1)}s).`);
   if (WATCH && !S.busy) startWatch();
   await loadFonts(s);
   if (S.script !== s || !S.show) return S.show;
@@ -325,13 +424,12 @@ function sizeCanvas() {
   if (S.show && (cv.width !== S.show.W || cv.height !== S.show.H)) { cv.width = S.show.W; cv.height = S.show.H; }
   cv.classList.toggle('wide', !!wide); $('stage').classList.toggle('wide', !!wide);
   document.querySelector('main').classList.toggle('wide', !!wide);
-  document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b.dataset.f === S.format));
 }
 function setFormat(f) {
   if (!FORMATS[f]) return;
   const was = S.playing;
   const ratio = S.show && S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
-  stop(); S.format = f; store.set('format', f);
+  stop(); S.format = f;
   if (S.script) {
     S.show = E.prepare(S.script, f); sizeCanvas();
     const T = ratio * S.show.duration;
@@ -374,7 +472,7 @@ function beginPlayback(T0) {
   S.t0perf = performance.now();
   S.playing = true;
   $('play').disabled = false;
-  $('play').textContent = '停止';
+  $('play').textContent = 'Pause';
   document.body.classList.add('watching');
   const u = $('unmute');
   if (u) u.hidden = !!S.audioOn;
@@ -439,12 +537,12 @@ async function attachAudioFrom() {
     console.warn('audio', e);
     S.audioFailed = true;
     const u = $('unmute');
-    if (u) { u.hidden = false; u.textContent = '音を出せません。映像は再生しています'; }
+    if (u) { u.hidden = false; u.textContent = 'Sound is unavailable. The picture is still playing.'; }
   } finally { S.audioPending = false; }
 }
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); say('停止しました。再生を押すと続きます。'); return; }
+  if (S.playing) { stop(); say('Paused. Press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
@@ -461,7 +559,7 @@ function stop() {
   S.audioOn = false;
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
-  $('play').textContent = '再生';
+  $('play').textContent = 'Play';
   const u = $('unmute'); if (u) u.hidden = true;
 }
 
@@ -469,16 +567,16 @@ function stop() {
 async function post(url, headers, body, timeoutMs) {
   if (window.nsRelay) {
     const r = JSON.parse(await window.nsRelay(JSON.stringify({ url, headers, body })));
-    if (r.status >= 400) throw new Error(`APIエラー ${r.status}: ${String(r.text || '').slice(0, 300)}`);
+    if (r.status >= 400) throw new Error(`API error ${r.status}: ${String(r.text || '').slice(0, 300)}`);
     return r.json;
   }
   const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeoutMs || 600000);
   let res;
   try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
-  catch (e) { throw new Error('APIにつながりませんでした（ブラウザから直接つなげない可能性があります。run.py で自動実行できます）: ' + e.message); }
+  catch (e) { throw new Error('Could not reach the API. run.py can run this outside the browser: ' + e.message); }
   finally { clearTimeout(tm); }
   const text = await res.text();
-  if (!res.ok) throw new Error(`APIエラー ${res.status}: ${text.slice(0, 300)}`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
   return JSON.parse(text);
 }
 function cfg() {
@@ -487,7 +585,7 @@ function cfg() {
 }
 async function askAI(system, prompt, opt) {
   const c = cfg();
-  if (!c.key && !window.nsRelay) throw new Error('設定でAPIキーを入れてください');
+  if (!c.key && !window.nsRelay) throw new Error('Add an API key in Settings.');
   const date = opt.date;
   if (c.provider === 'grok') {
     const body = {
@@ -516,75 +614,91 @@ function pickJSON(text) {
   let t = String(text || '');
   const m = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (m) t = m[1];
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('AIの返答にJSONがありません');
+  if (a < 0 || b < a) throw new Error('The reply did not contain JSON.');
   t = t.slice(a, b + 1);
   try { return JSON.parse(t); } catch (e) { return JSON.parse(t.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); }
 }
 
-const SYSTEM = 'あなたは縦型ショート動画「News Shorts」の編集者です。X（旧Twitter）の投稿とウェブの報道を検索して、事実を確かめたうえで短い台本を書きます。記事や投稿の文章はそのまま写さず、自分の言葉で短くまとめます。出力はJSONだけです。';
-function jpDate(iso) { const [y, m, d] = iso.split('-').map(Number); return `${y}年${m}月${d}日`; }
+const SYSTEM = 'You are the editor of the vertical video News Shorts. Search X and the web, check the facts, and write a short script in your own words. Do not copy sentences from posts or articles. Do not invent accounts, posts, or numbers. Reply with JSON only.';
+function market() {
+  const country = COUNTRIES.find(c => c.id === (($('country') && $('country').value) || '')) || COUNTRIES[0];
+  const lang = LANGS.find(l => l.id === (($('lang') && $('lang').value) || '')) || LANGS.find(l => l.id === country.lang) || LANGS[0];
+  return { country, lang };
+}
+function xHandle() { return String(S.xUser || '').replace(/^@+/, '').trim(); }
+function lineRule(langId) {
+  return ['ja', 'ko', 'zh-Hans', 'zh-Hant'].includes(langId)
+    ? '1 to 3 lines, at most 18 characters each. Use ／ only as a line break.'
+    : '1 to 3 lines, at most 42 characters each.';
+}
 function newsPrompt(date) {
+  const { country, lang } = market();
+  const handle = xHandle();
   const ex = SAMPLE.items.slice(0, 2).map(x => JSON.stringify(x)).join(',\n');
-  return `今日は${jpDate(date)}（日本時間）です。
-X（旧Twitter）の投稿を中心に、ウェブの報道も使って、直近24時間（古くても48時間以内）のニュースを12本選んでください。
+  const focus = handle
+    ? `The viewer's X account is @${handle}. Search X and find accounts that @${handle} follows. Use only recent posts and replies from those followed accounts. A reply is a comment. Keep a post only when it is about ${country.name}. Skip reposts. If you cannot find who @${handle} follows, return {"date":"${date}","items":[]}.`
+    : `Choose news about ${country.name} from the last 48 hours. Prefer X posts and reporting from that country.`;
+  return `Today is ${date} (Japan time).
+${focus}
 
-■ 選び方
-- 日本と世界のニュースを混ぜる。ジャンルは SPORTS / POLITICS / TECH / WORLD / SOCIETY / ECONOMY / BUSINESS / LIFE / FOOD / SCIENCE / CULTURE / ENERGY などから6種類以上。
-- 報道機関や公式アカウント（例：@nhk_news @nikkei @kantei @Reuters @AP @FirstSquawk）や当事者本人の投稿を優先する。ウェブの記事を使ってもよい。
-- 投稿や記事の中身を確かめられたものだけ。噂や未確認の情報、亡くなった方の詳しい状況や残酷な描写、個人への中傷は入れない。
-- 同じ話題は1本だけ。数字や日付は出典どおりに書く。
+Selection
+- 12 stories, at least 6 genres from SPORTS, POLITICS, TECH, WORLD, SOCIETY, ECONOMY, BUSINESS, LIFE, FOOD, SCIENCE, CULTURE, ENERGY.
+- Prefer news organizations, official accounts, and the people involved. You may use a web article when the X post is thin.
+- Use only posts and articles you actually found. No rumors, graphic detail, or attacks on private people.
+- One topic each. Keep numbers and dates as published.
 
-■ 各ニュースの項目（英語はすべて大文字。英字新聞の見出しのように短く）
-- kw：画面いっぱいに出す英単語1つか短い2語（12文字以内）。例 "RUGBY" "YEN" "MAPO TOFU"
-- cat：ジャンル（上の英語のどれか）
-- topic：右上に出す短い英語ラベル（12文字以内）。例 "USA" "FOREX" "X POST" "KANTEI"
-- head：英語の見出し。1〜2行の配列で、1行14文字以内。例 ["BRAVE","BLOSSOMS"]、["OIL RESERVES"]
-- sub：英語の副見出し。2〜3行の配列で、1行20文字くらいまで。to / and / of / on / for / from の小さな語だけ小文字。例 ["EU and FIVE NATIONS","to JOIN PEACE TALKS"]
-- jp：日本語の要点。1〜3行の配列で、1行18文字以内。長いときは「／」で改行の位置を入れる。例 "熊本地震 非常災害復旧復興本部が／第2回会議"
-- tags：英語のキーワード2〜4個
-- src：出典。Xの投稿なら "X @アカウント名"（2つなら "X @AP / @Reuters"）、ウェブの記事なら "WEB サイト名"
-- date：投稿か記事の日付（"M/D"）
-- url：その投稿か記事のURL（実在するものだけ）
+Fields. English headlines are uppercase and short, like a newspaper.
+- kw: one or two English words, at most 12 characters. Example: "RUGBY"
+- cat: one genre from the list above
+- topic: a short English label, at most 12 characters
+- head: 1 or 2 lines, at most 14 characters each
+- sub: 2 or 3 lines, about 20 characters each. Only to, and, of, on, for, and from are lowercase
+- jp: the story in ${lang.name}. ${lineRule(lang.id)}
+- tags: 2 to 4 English keywords
+- src: "X @account" for a post, or "WEB site name" for an article
+- date: "M/D"
+- url: a real URL, or omit it
 
-■ 例（${'11/14'}の動画から2本）
+Shape example from the November 14 video. Its jp lines are Japanese. Write jp in ${lang.name} instead.
 ${ex}
 
-■ 出力
-次の形のJSONだけを出してください。
-{"date":"${date}","items":[ …12本… ]}`;
+Reply with JSON only:
+{"date":"${date}","items":[ ...12 stories... ]}`;
 }
 function coffeePrompt(date, items) {
+  const { country, lang } = market();
   const list = items.map((it, i) => `${i + 1}. ${it.head.join(' ')} — ${it.jp.join(' ').replace(/／/g, '')}`).join('\n');
-  return `今日は${jpDate(date)}（日本時間）です。News Shorts の最後に置く「COFFEE BREAK」（ひと息つくコラム）を1本書いてください。
+  return `Today is ${date} (Japan time). Write one COFFEE BREAK for the end of a News Shorts video about ${country.name}.
 
-■ 今日のニュース
+Stories
 ${list}
 
-■ 内容
-- 今日のニュースや X での議論から見える、少し大きな流れや気づきを1つ取り上げる（速報ではなく、考えるきっかけになる話題）。必要なら X やウェブを検索してよい。
-- 例：「AI/SI参入のない企業の／リスクが懸念し始めている」
-- 言い切りすぎない。特定の個人を批判しない。
+Write one larger observation from these stories or from the X discussion. Do not attack a person. The jp lines must be in ${lang.name}. ${lineRule(lang.id)}
 
-■ 項目
-- topic：右上の短い英語ラベル（10文字以内）。例 "AI / SI"
-- sub：英語の副見出し3行（大文字。1行20文字くらいまで。to / and / of / on / for / from だけ小文字）。例 ["CONCERNS EMERGE OVER","RISKS for COMPANIES","NOT ENTERING AI/SI"]
-- jp：日本語1〜2行（1行18文字以内。長いときは「／」で改行）
-- tags：["COFFEE BREAK", 英語のキーワード2個]
-
-■ 出力
-JSONだけ：{"topic":"…","sub":["…","…","…"],"jp":["…"],"tags":["COFFEE BREAK","…","…"]}`;
+Reply with JSON only:
+{"topic":"AI / SI","sub":["A PAUSE BETWEEN","THE HEADLINES"],"jp":["..."],"tags":["COFFEE BREAK","NOTE"]}`;
 }
 
 async function collect(date) {
-  say('ニュースを集めています（X とウェブを検索中。1〜3分かかります）…'); progress(0.05);
+  const { country, lang } = market();
+  const handle = xHandle();
+  say(handle
+    ? `Reading posts and replies from accounts @${handle} follows. ${country.name}, ${lang.name}. This takes 1–3 minutes…`
+    : `Collecting ${country.name} news in ${lang.name}. This takes 1–3 minutes…`);
+  progress(0.05);
   const news = pickJSON(await askAI(SYSTEM, newsPrompt(date), { date, searches: 15 }));
   const items = (news.items || []).slice(0, 12).map(normItem);
-  if (!items.length) throw new Error('ニュースを取り出せませんでした');
-  say(`${items.length}本のニュースが集まりました。コーヒーブレイクを書いています…`); progress(0.25);
+  if (!items.length) throw new Error(handle
+    ? `No posts from accounts @${handle} follows matched ${country.name}.`
+    : 'No stories were found.');
+  say(`Collected ${items.length} stories. Writing the coffee break in ${lang.name}…`); progress(0.25);
   let coffee;
   try { coffee = pickJSON(await askAI(SYSTEM, coffeePrompt(date, items), { date, searches: 4 })); }
-  catch (e) { console.warn(e); coffee = { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: ['ひと息ついて、今日のニュースを振り返る'], tags: ['COFFEE BREAK'] }; }
-  return { date, items, coffee };
+  catch (e) {
+    console.warn(e);
+    coffee = { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
+  }
+  return { date, items, coffee, market: `${country.name} · ${lang.name}` };
 }
 
 /* ---------- 書き出し ---------- */
@@ -617,7 +731,7 @@ async function encodeShow(show, label, p0, p1) {
     enc.encode(vf, { keyFrame: f % (fps * 2) === 0 });
     vf.close();
     while (enc.encodeQueueSize > 6) await sleep(4);
-    if (f % 15 === 0) { progress(p0 + (p1 - p0) * f / N); say(`${label}を書き出しています… ${Math.round(f / N * 100)}%`); await sleep(0); }
+    if (f % 15 === 0) { progress(p0 + (p1 - p0) * f / N); say(`Exporting ${label}… ${Math.round(f / N * 100)}%`); await sleep(0); }
   }
   await enc.flush(); enc.close();
   if (fail) throw fail;
@@ -641,11 +755,11 @@ function addOut(fmt, blob) {
   const box = $('out'); box.innerHTML = '';
   const order = ['x', 'youtube', 'pc'];
   S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
-    const a = document.createElement('a'); a.className = 'btn'; a.href = o.url; a.download = o.name; a.textContent = `${FORMATS[o.fmt]}を保存`; a.dataset.f = o.fmt;
+    const a = document.createElement('a'); a.className = 'btn'; a.href = o.url; a.download = o.name; a.textContent = `Save ${FORMATS[o.fmt]}`; a.dataset.f = o.fmt;
     box.appendChild(a);
     const file = new File([o.blob], o.name, { type: o.blob.type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      const b = document.createElement('button'); b.textContent = `${FORMATS[o.fmt]}を共有`;
+      const b = document.createElement('button'); b.textContent = `Share ${FORMATS[o.fmt]}`;
       b.onclick = () => navigator.share({ files: [file], title: 'News Shorts' }).catch(() => {});
       box.appendChild(b);
     }
@@ -667,13 +781,13 @@ async function exportMP4(formats) {
       names.push(addOut(fmt, blob));
     }
     S.show = E.prepare(S.script, S.format); sizeCanvas(); draw(0);
-    progress(1); say(`書き出しました：${names.join('、')}`);
+    progress(1); say(`Exported: ${names.join(', ')}`);
     return names;
   } finally { S.busy = false; setBusy(false); }
 }
 /* WebCodecs がないブラウザでは、再生しながら録画する */
 async function recordRealtime() {
-  if (typeof MediaRecorder === 'undefined' || !$('cv').captureStream) throw new Error('このブラウザでは動画を書き出せません');
+  if (typeof MediaRecorder === 'undefined' || !$('cv').captureStream) throw new Error('This browser cannot export video.');
   const ac = await audioCtx();
   const dest = ac.createMediaStreamDestination();
   const vs = $('cv').captureStream(E.FPS);
@@ -688,7 +802,7 @@ async function recordRealtime() {
     const tick = () => {
       const T = ac.currentTime - t0;
       if (T >= S.show.duration) { res(); return; }
-      draw(Math.max(0, T)); progress(0.3 + 0.65 * T / S.show.duration); say(`録画しています… ${Math.round(T / S.show.duration * 100)}%`);
+      draw(Math.max(0, T)); progress(0.3 + 0.65 * T / S.show.duration); say(`Recording… ${Math.round(T / S.show.duration * 100)}%`);
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -709,7 +823,7 @@ async function runAll(opts) {
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
     progress(0.28);
     await setScript(script, true);
-    say(`台本ができました（${S.show.total}本）。`);
+    say(`Script ready (${S.show.total} stories).`);
   } catch (e) {
     console.error(e); say(e.message || String(e), true); progress(0);
     S.busy = false; setBusy(false); throw e;
@@ -720,6 +834,21 @@ async function runAll(opts) {
     if (opts.download) for (const a of document.querySelectorAll('#out a')) { a.click(); await sleep(400); }
     return names;
   }
+  if (WATCH && S.show && !S.playing) startWatch();
+}
+function refreshMarket() {
+  if (S.busy || Q.get('auto') === '1') return;
+  const { country, lang } = market();
+  if (!xHandle()) {
+    say(`Country: ${country.name}. Language: ${lang.name}. Link an X account to make the video from accounts you follow.`);
+    return;
+  }
+  if (!cfg().key && !window.nsRelay) {
+    $('keySlot').hidden = false;
+    say('Enter an API key. The video is then made from posts and replies by accounts you follow.');
+    return;
+  }
+  runAll({ download: false, export: false }).catch(() => {});
 }
 
 /* ---------- 画面 ---------- */
@@ -740,19 +869,92 @@ function initUI() {
   $('autoExport').checked = store.get('autoExport', '1') === '1';
   $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
 
+  if (Q.get('edit') === '1') $('studio').hidden = false;
   $('go').onclick = () => {
-    if (!$('key').value.trim() && !window.nsRelay) { $('makeBox').open = true; $('setBox').open = true; }
+    if (!$('key').value.trim() && !window.nsRelay) { $('studio').hidden = false; $('makeBox').open = true; $('setBox').open = true; }
     runAll({ download: false }).catch(() => {});
   };
   $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
-  $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('JSONを読めません：' + e.message, true); } };
-  $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('書き出しに失敗しました：' + e.message, true); });
-  document.querySelectorAll('#fmt button').forEach(b => b.onclick = () => {
-    const unlocking = userUnlock();
-    setFormat(b.dataset.f);
-    unlocking.then(ok => { if (ok && S.playing && !S.audioOn && !S.audioFailed) attachAudioFrom(); });
+  $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('Could not read the JSON: ' + e.message, true); } };
+  $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('Export failed: ' + e.message, true); });
+  const view = detectView();
+  S.format = view.format;
+  setViewLabel(view.label);
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    if (Q.get('format') || S.busy) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const next = detectView();
+      setViewLabel(next.label);
+      if (next.format !== S.format) setFormat(next.format);
+    }, 150);
   });
-  S.format = FORMATS[Q.get('format')] ? Q.get('format') : (FORMATS[store.get('format', 'x')] ? store.get('format', 'x') : 'x');
+  const musicBox = $('music');
+  TRACKS.forEach(t => {
+    if (!ASSETS.tracks || !ASSETS.tracks[t.id]) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.m = t.id;
+    b.textContent = t.name;
+    b.onclick = () => {
+      const unlocking = userUnlock();
+      useTrack(t.id);
+      unlocking.then(ok => { if (ok && S.playing && !S.audioOn && !S.audioFailed) attachAudioFrom(); });
+    };
+    musicBox.appendChild(b);
+  });
+  const requested = Q.get('music') || store.get('music', 'jupiter');
+  useTrack(TRACKS.some(t => t.id === requested) ? requested : 'jupiter');
+  const countryBox = $('country');
+  const langBox = $('lang');
+  COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
+  LANGS.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; langBox.appendChild(o); });
+  const nav = (navigator.language || 'en').toLowerCase();
+  const navCountry = { ja: 'JP', 'en-gb': 'GB', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', 'zh-tw': 'TW', 'zh-hk': 'TW', 'zh-cn': 'CN', zh: 'CN' }[nav]
+    || { ja: 'JP', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', zh: 'CN' }[nav.split('-')[0]]
+    || 'US';
+  const pickedCountry = COUNTRIES.some(c => c.id === (Q.get('country') || '')) ? Q.get('country')
+    : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
+  countryBox.value = pickedCountry;
+  const countryDefault = (COUNTRIES.find(c => c.id === pickedCountry) || COUNTRIES[0]).lang;
+  const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
+    : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
+  langBox.value = pickedLang;
+  S.xUser = (Q.get('x') || store.get('xUser', '')).replace(/^@+/, '');
+  $('xUser').value = S.xUser ? '@' + S.xUser : '';
+  const saveMarket = () => { store.set('country', countryBox.value); store.set('lang', langBox.value); };
+  countryBox.onchange = () => {
+    const next = COUNTRIES.find(c => c.id === countryBox.value);
+    if (next) langBox.value = next.lang;
+    saveMarket();
+    refreshMarket();
+  };
+  langBox.onchange = () => { saveMarket(); refreshMarket(); };
+  $('xUser').onchange = () => {
+    S.xUser = $('xUser').value.replace(/^@+/, '').trim();
+    $('xUser').value = S.xUser ? '@' + S.xUser : '';
+    store.set('xUser', S.xUser);
+  };
+  $('keyInline').value = $('key').value;
+  $('keyInline').onchange = () => {
+    $('key').value = $('keyInline').value.trim();
+    store.set('key.' + $('provider').value, $('key').value);
+  };
+  $('key').addEventListener('change', () => { $('keyInline').value = $('key').value; });
+  $('xGo').onclick = () => {
+    S.xUser = $('xUser').value.replace(/^@+/, '').trim();
+    $('xUser').value = S.xUser ? '@' + S.xUser : '';
+    store.set('xUser', S.xUser);
+    saveMarket();
+    if (!S.xUser) { say('Enter the X account to link, such as @name.', true); return; }
+    if (!cfg().key && !window.nsRelay) {
+      $('keySlot').hidden = false;
+      say('Enter an API key. The video is then made from posts and replies by accounts that account follows.', true);
+      return;
+    }
+    runAll({ download: false, export: false }).catch(() => {});
+  };
   const fq = (Q.get('formats') || '').split(',').filter(f => FORMATS[f]);
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
@@ -788,7 +990,7 @@ function initUI() {
     }
     draw(T);
   };
-  $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('出典をコピーしました'));
+  $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('Copied the sources.'));
 }
 
 window.NS = {
@@ -805,10 +1007,12 @@ window.NS = {
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
-      await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true });
+      await runAll({ sample: Q.get('sample') === '1' && !xHandle(), date: Q.get('date') || undefined, download: true, export: true });
       window.NS.done = true;
+    } else if (xHandle() && (cfg().key || window.nsRelay)) {
+      await runAll({ download: false, export: false });
     } else if (!S.playing) {
-      say('再生を押すと、ニュース動画が始まります。');
+      say('Press Play to start the news video.');
     }
   } catch (e) {
     console.error(e); say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
