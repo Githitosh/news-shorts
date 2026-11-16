@@ -93,6 +93,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     </div>
     <div class="ctl">
       <button id="play" disabled>Play</button>
+      <button id="update" type="button">Update</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
@@ -2973,15 +2974,42 @@ function rememberKeys(keys) {
   const prev = [...seenKeys()];
   store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 60)));
 }
+function rssItems(xml) {
+  const items = [];
+  const re = /<item>([\s\S]*?)<\/item>/g;
+  let m;
+  const decode = s => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+  while ((m = re.exec(xml))) {
+    const block = m[1];
+    const title = decode((block.match(/<title>([\s\S]*?)<\/title>/) || [])[1]);
+    const link = decode((block.match(/<link>([\s\S]*?)<\/link>/) || [])[1]);
+    const pubDate = decode((block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]);
+    if (title) items.push({ title, link, pubDate });
+  }
+  return items;
+}
 async function newsRows(rss, cat) {
-  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20&_=' + Date.now();
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url);
-    if (res.status === 429 || res.status === 503) { await sleep(500 * (attempt + 1)); continue; }
-    if (!res.ok) return [];
-    const j = JSON.parse(await res.text());
-    if (!j || j.status !== 'ok') return [];
-    return (j.items || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat }));
+  const readers = [
+    async () => {
+      const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20&_=' + Date.now());
+      if (res.status === 429 || res.status === 503) throw new Error(String(res.status));
+      if (!res.ok) return [];
+      const j = await res.json();
+      if (!j || j.status !== 'ok') return [];
+      return j.items || [];
+    },
+    async () => {
+      const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(rss));
+      if (!res.ok) return [];
+      const j = await res.json();
+      return rssItems(j && j.contents || '');
+    },
+  ];
+  for (const read of readers) {
+    try {
+      const items = await read();
+      if (items.length) return items.map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat }));
+    } catch (e) { console.warn(e); }
   }
   return [];
 }
@@ -3202,7 +3230,7 @@ async function collect(date) {
     store.set('xUser', handle);
     if ($('xUser')) $('xUser').value = '@' + handle;
   }
-  say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', plus posts from accounts @' + handle + ' follows' : '') + '…');
+  say('Creating the news video…');
   progress(0.08);
   const batches = [];
   for (const [rss, cat] of topicFeeds()) {
@@ -3219,7 +3247,14 @@ async function collect(date) {
     rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: it.cat, source: sp.source });
   });
   let xrows = [];
-  if (handle) { try { xrows = await followedPosts(handle); } catch (e) { console.warn(e); } }
+  if (handle) {
+    try {
+      xrows = await Promise.race([
+        followedPosts(handle),
+        new Promise(resolve => setTimeout(() => resolve([]), 8000)),
+      ]) || [];
+    } catch (e) { console.warn(e); }
+  }
   const past = seenKeys();
   const keyOf = r => r.headline.toLowerCase().slice(0, 90);
   const fresh = rows.filter(r => !past.has(keyOf(r)));
@@ -3369,12 +3404,20 @@ async function recordRealtime() {
   return new Blob(parts, { type: type.split(';')[0] || 'video/webm' });
 }
 
-function setBusy(b) { ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id => $(id).disabled = b || (id !== 'go' && id !== 'sample' && id !== 'apply' && !S.show)); }
+function setBusy(b) {
+  ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id => {
+    const el = $(id);
+    if (el) el.disabled = b || (id !== 'go' && id !== 'sample' && id !== 'apply' && !S.show);
+  });
+  const u = $('update');
+  if (u) { u.disabled = !!b; u.textContent = b ? 'Creating…' : 'Update'; }
+}
 
 async function runAll(opts) {
   opts = opts || {};
   if (S.busy) { S.again = opts; return; }
   S.busy = true; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
+  if (!opts.sample) { stop(); say('Creating the news video…'); }
   try {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
@@ -3473,6 +3516,7 @@ function initUI() {
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
+  $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
   $('play').onclick = () => {
     const unlocking = userUnlock();
     play().catch(e => say(e.message, true));
@@ -3531,6 +3575,7 @@ window.NS = {
 (async () => {
   initUI();
   try {
+    if (Q.get('sample') !== '1' && $('update')) { $('update').disabled = true; $('update').textContent = 'Creating…'; say('Creating the news video…'); }
     await loadAssets();
     window.NS.ready = true;
     if (Q.get('auto') === '1') {

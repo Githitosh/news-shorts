@@ -1,6 +1,6 @@
 # News Shorts
 
-Open the page and the news video plays. Today's headlines are collected with no API key, in a new order each time. Pull down at the top to collect again and shuffle the order. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button.
+Open the page and it creates a news video from today's headlines, then plays it. **Update** collects a new edition: the button says Creating… until the new video starts. Pull down at the top does the same. No API key. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button.
 
 | Device | Picture | When it is chosen |
 |---|---|---|
