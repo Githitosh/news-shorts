@@ -4,9 +4,9 @@
 
 const FPS = 30, DUR = 3.2;
 const INK = '#F5F1E9';
-const F_SERIF = '"Noto Serif JP","Noto Serif KR","Noto Serif SC","Noto Serif TC","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
+const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
-const F_SANS = '"Noto Sans JP","Noto Sans KR","Noto Sans SC","Noto Sans TC","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
 
 /* Positions measured from the original videos. youtube: the Nov 14 video. x: the Nov 14 X cut. pc: the wide layout. */
 const PRESETS = {
@@ -327,7 +327,7 @@ function prepare(script, preset) {
   });
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1]} ${da}, ${y}${script.market ? ' · ' + script.market : ''}`,
+    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
   };
 }
 
@@ -441,7 +441,7 @@ function allText(script) {
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
     s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.tags || []), it.src, it.date);
   });
-  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts January February March April May June July August September October November December | / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
+  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');
 }
 

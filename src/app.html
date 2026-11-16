@@ -18,9 +18,10 @@
 <style>
 :root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; touch-action: pan-x; }
 header .title { font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
+header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 #gear { width: 42px; height: 36px; padding: 0; font-size: 22px; line-height: 1; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
@@ -82,7 +83,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><span class="title">News Shorts</span><button type="button" id="gear" aria-label="Settings">*</button></header>
+<header><div><span class="title">News Shorts</span><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
 <main>
   <section class="stage" id="stage">
     <div class="frame">
@@ -113,7 +114,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="country"></select>
       <label for="lang">Language</label>
       <select id="lang"></select>
-      <p class="note">News lines use this language. Japanese is one of the choices. Headlines stay in English.</p>
+      <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label for="xUser">X account</label>
       <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
       <p class="note">Posts and replies from accounts this user follows are added to the video. Opening this page from that account on X fills the name in.</p>
@@ -168,38 +169,18 @@ const store = {
 };
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
 const COUNTRIES = [
-  { id: 'JP', name: 'Japan', lang: 'ja' },
+  { id: 'JP', name: 'Japan', lang: 'both' },
   { id: 'US', name: 'United States', lang: 'en' },
-  { id: 'GB', name: 'United Kingdom', lang: 'en' },
-  { id: 'FR', name: 'France', lang: 'fr' },
-  { id: 'DE', name: 'Germany', lang: 'de' },
-  { id: 'ES', name: 'Spain', lang: 'es' },
-  { id: 'BR', name: 'Brazil', lang: 'pt' },
-  { id: 'KR', name: 'South Korea', lang: 'ko' },
-  { id: 'TW', name: 'Taiwan', lang: 'zh-Hant' },
-  { id: 'CN', name: 'China', lang: 'zh-Hans' },
 ];
 const LANGS = [
-  { id: 'ja', name: 'Japanese' },
   { id: 'en', name: 'English' },
-  { id: 'fr', name: 'French' },
-  { id: 'de', name: 'German' },
-  { id: 'es', name: 'Spanish' },
-  { id: 'pt', name: 'Portuguese' },
-  { id: 'ko', name: 'Korean' },
-  { id: 'zh-Hans', name: 'Chinese (Simplified)' },
-  { id: 'zh-Hant', name: 'Chinese (Traditional)' },
+  { id: 'ja', name: 'Japanese' },
+  { id: 'both', name: 'Both' },
 ];
 const COFFEE_FALLBACK = {
-  ja: ['ひと息ついて、今日のニュースを振り返る'],
-  en: ['A pause between the headlines'],
-  fr: ['Une pause entre les titres'],
-  de: ['Eine Pause zwischen den Schlagzeilen'],
-  es: ['Una pausa entre los titulares'],
-  pt: ['Uma pausa entre as manchetes'],
-  ko: ['헤드라인 사이의 한숨'],
-  'zh-Hans': ['在标题之间停一下'],
-  'zh-Hant': ['在標題之間停一下'],
+  ja: ['ひと息ついて', '今日のニュースを振り返る'],
+  en: ['A pause between', 'the headlines'],
+  both: ['A pause between headlines', 'ひと息ついて振り返る'],
 };
 const TRACKS = [
   { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
@@ -577,8 +558,9 @@ const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'k
 
 function edition() {
   const { country, lang } = market();
-  const hl = { ja: 'ja', en: 'en-US', fr: 'fr', de: 'de', es: 'es', pt: 'pt-BR', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' }[lang.id] || 'en-US';
-  const ceidLang = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt-419', ko: 'ko', 'zh-Hans': 'zh-Hans', 'zh-Hant': 'zh-Hant' }[lang.id] || 'en';
+  const feed = lang.id === 'both' ? (country.id === 'JP' ? 'ja' : 'en') : lang.id;
+  const hl = feed === 'ja' ? 'ja' : 'en-US';
+  const ceidLang = feed === 'ja' ? 'ja' : 'en';
   return { hl, gl: country.id, ceid: country.id + ':' + ceidLang, lang, country };
 }
 function feedUrl(section) {
@@ -689,7 +671,7 @@ async function followedPosts(handle) {
       more.forEach(r => { if (!seen.has(r.headline)) rows.push(r); });
     } catch (e) { console.warn(e); }
   }
-  const want = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh', 'zh-Hant': 'zh' }[market().lang.id] || '';
+  const want = { ja: 'ja', en: 'en' }[market().lang.id] || '';
   const matched = rows.filter(r => !r.lang || !want || r.lang.toLowerCase().startsWith(want));
   return (matched.length >= 4 ? matched : rows).slice(0, 6);
 }
@@ -729,16 +711,60 @@ function linesOf(text, max, count, cjk) {
   if (cur && out.length < count) out.push(cur);
   return out;
 }
+function contentWords(text) {
+  return String(text || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').split(/\s+/).filter(w => w.length > 1 && !SMALL.has(w.toLowerCase()));
+}
+function packWords(words, limit, maxLines) {
+  const lines = [];
+  let used = 0;
+  let cur = '';
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const w = word.length <= limit + 3 ? word : word.slice(0, limit);
+    const next = cur ? cur + ' ' + w : w;
+    if (cur && next.length > limit + 3) {
+      lines.push(cur);
+      if (lines.length === maxLines) return { lines, used };
+      cur = w;
+      used = i + 1;
+    } else {
+      cur = next;
+      used = i + 1;
+    }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  return { lines, used };
+}
+function cutLines(text, limit, maxLines, cjk) {
+  const clean = String(text || '').replace(/\s+/g, cjk ? '' : ' ').trim();
+  if (!clean) return [];
+  if (cjk) {
+    const out = [];
+    for (let i = 0; i < clean.length && out.length < maxLines; i += limit) {
+      const line = clean.slice(i, i + limit).replace(/^[、。，．・\s]+/, '');
+      if (line) out.push(line);
+    }
+    return out;
+  }
+  return packWords(clean.split(' ').filter(Boolean), limit, maxLines).lines;
+}
 function storyFrom(raw, english, local, langId) {
   const en = String(english || raw.headline || '').replace(/\s+/g, ' ').trim();
-  const loc = String(local || raw.headline || '').replace(/\s+/g, ' ').trim();
-  const cjk = cjkLang(langId);
-  const headSrc = en.toUpperCase();
-  const words = headSrc.split(' ').filter(w => w.length > 2 && !SMALL.has(w.toLowerCase()));
-  const kw = ((words[0] || headSrc.split(' ')[0] || 'NEWS').replace(/[^A-Z0-9]/g, '').slice(0, 12)) || 'NEWS';
-  const head = linesOf(headSrc, 32, 2, false);
-  const sub = linesOf('FROM ' + (raw.source || 'NEWS'), 34, 2, false);
-  const jp = linesOf(loc, cjk ? 18 : 42, 3, cjk);
+  const loc = String(local || '').replace(/\s+/g, ' ').replace(/^[、。，．\s]+/, '').trim();
+  const skip = new Set(['ONE', 'TWO', 'NEW', 'SAYS', 'SAID', 'AFTER', 'AMID', 'OVER', 'INTO', 'ITS', 'HIS', 'HER']);
+  const all = contentWords(en);
+  const words = all.filter(w => !skip.has(w));
+  const picked = words.length ? words : all;
+  const rawKw = (picked[0] || 'NEWS').replace(/[^A-Z0-9]/g, '') || 'NEWS';
+  const kw = rawKw.length > 16 ? rawKw.slice(0, 16) : rawKw;
+  const headPack = packWords(picked.slice(0, 3), 16, 2);
+  const subPack = packWords(picked.slice(headPack.used), 18, 2);
+  const head = headPack.lines;
+  const sub = subPack.lines;
+  let jp;
+  if (langId === 'both') jp = [...cutLines(en, 28, 1, false), ...cutLines(loc, 14, 2, true)];
+  else if (langId === 'ja') jp = cutLines(loc || en, 14, 3, true);
+  else jp = cutLines(en, 28, 3, false);
   let md = '';
   if (raw.pubDate) {
     const stamp = String(raw.pubDate);
@@ -748,13 +774,21 @@ function storyFrom(raw, english, local, langId) {
   return {
     kw, cat: raw.cat || 'NEWS', topic: kw,
     head: head.length ? head : [kw],
-    sub: sub.length ? sub : ['FROM THE WIRE'],
-    jp: jp.length ? jp : [(loc || en).slice(0, cjk ? 18 : 42)],
+    sub: sub.length ? sub : ['LATEST REPORT'],
+    jp: jp.length ? jp : [kw],
     tags: [raw.cat || 'NEWS', kw].slice(0, 3),
-    src: raw.x ? (raw.source || 'X') : ('WEB ' + (raw.source || 'News')),
+    src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 24),
     date: md,
     url: raw.link || '',
   };
+}
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
 }
 function mixRows(rows) {
   const by = {};
@@ -775,10 +809,11 @@ async function collect(date) {
   }
   say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', plus posts from accounts @' + handle + ' follows' : '') + '…');
   progress(0.08);
+  const extra = SECTIONS.slice(1);
+  const plan = [['', 'NEWS'], extra[Math.floor(Math.random() * extra.length)]];
   const batches = [];
-  for (const [sec, cat] of SECTIONS) {
+  for (const [sec, cat] of plan) {
     try { batches.push(await newsRows(sec, cat)); } catch (e) { console.warn(e); batches.push([]); }
-    if (batches.reduce((n, list) => n + list.length, 0) >= 16) break;
   }
   const seen = new Set();
   const rows = [];
@@ -792,15 +827,9 @@ async function collect(date) {
   });
   let xrows = [];
   if (handle) { try { xrows = await followedPosts(handle); } catch (e) { console.warn(e); } }
-  const chosen = [];
-  const picked = new Set();
-  for (const r of [...xrows.slice(0, 6), ...mixRows(rows)]) {
-    const key = r.headline.toLowerCase().slice(0, 90);
-    if (picked.has(key)) continue;
-    picked.add(key);
-    chosen.push(r);
-    if (chosen.length === 12) break;
-  }
+  const posts = shuffle(xrows).slice(0, 4);
+  const news = shuffle(rows).slice(0, 12 - posts.length);
+  const chosen = shuffle([...posts, ...news]);
   if (chosen.length < 4) throw new Error('Could not collect enough headlines. The sample keeps playing.');
   progress(0.45);
   const originals = chosen.map(r => r.headline);
@@ -808,11 +837,15 @@ async function collect(date) {
   let local = originals.slice();
   try {
     english = await translateMany(originals, 'en');
-    local = lang.id === 'en' ? english.slice() : originals.slice();
-    const xIdx = chosen.map((r, i) => (r.x ? i : -1)).filter(i => i >= 0);
-    if (xIdx.length && lang.id !== 'en') {
-      const locX = await translateMany(xIdx.map(i => chosen[i].headline), GTX[lang.id] || 'en');
-      xIdx.forEach((i, k) => { local[i] = locX[k]; });
+    if (lang.id === 'en') local = english.slice();
+    else {
+      local = originals.map(src => /[\u3040-\u30ff\u4e00-\u9fff]/.test(src) ? src : '');
+      const need = [];
+      local.forEach((v, i) => { if (!v) need.push(i); });
+      if (need.length) {
+        const got = await translateMany(need.map(i => originals[i]), 'ja');
+        need.forEach((i, k) => { local[i] = got[k]; });
+      }
     }
   } catch (e) {
     console.warn(e);
@@ -1013,9 +1046,7 @@ function initUI() {
   COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
   LANGS.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; langBox.appendChild(o); });
   const nav = (navigator.language || 'en').toLowerCase();
-  const navCountry = { ja: 'JP', 'en-gb': 'GB', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', 'zh-tw': 'TW', 'zh-hk': 'TW', 'zh-cn': 'CN', zh: 'CN' }[nav]
-    || { ja: 'JP', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', zh: 'CN' }[nav.split('-')[0]]
-    || 'US';
+  const navCountry = nav.startsWith('ja') ? 'JP' : 'US';
   const pickedCountry = COUNTRIES.some(c => c.id === (Q.get('country') || '')) ? Q.get('country')
     : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
   countryBox.value = pickedCountry;
@@ -1057,6 +1088,21 @@ function initUI() {
   };
   $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn && !S.audioFailed) tapSound(); });
+  let pull = null;
+  window.addEventListener('pointerdown', e => {
+    if (e.clientY > 120) return;
+    if (e.target.closest && e.target.closest('button, a, input, select, textarea, summary, label')) return;
+    pull = { y: e.clientY, id: e.pointerId };
+  });
+  window.addEventListener('pointerup', e => {
+    if (!pull || pull.id !== e.pointerId) return;
+    const dy = e.clientY - pull.y;
+    pull = null;
+    if (dy < 70) return;
+    say('Refreshing. The stories and their order change.');
+    runAll({ download: false, export: false }).catch(() => {});
+  });
+  window.addEventListener('pointercancel', () => { pull = null; });
   $('seek').oninput = () => {
     if (!S.show) return;
     const T = +$('seek').value / 1000 * S.show.duration;
