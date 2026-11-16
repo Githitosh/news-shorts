@@ -17,7 +17,7 @@ GitHub Pages serves the root of `main`. The picture starts on its own. Safari bl
 
 - **Layout** follows the device until you choose Phone, X, YouTube, or PC.
 - **Country** chooses the headlines. **Language** is the language of the lines under the English headline, and Japanese is one of the choices. Changing the country sets its usual language.
-- **X account**, for example `@name`, adds that account's public posts. When this browser is signed in to X and X allows the page to read it, posts and replies from that session are used. No API key.
+- **X account**, for example `@name`, adds recent posts and replies from accounts that account follows. No API key. Opening the page from that account on X fills the name in, and the next visit collects again.
 - Choices stay in this browser. The next visit collects again.
 
 ```bash
