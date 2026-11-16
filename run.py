@@ -7,6 +7,7 @@
     python run.py                     # 今日（日本時間）の動画を out/ に保存
     python run.py --date 2026-11-14 --provider claude
     python run.py --sample            # 見本の台本で書き出すだけ（APIを使わない）
+    python run.py --formats x         # X・スマホ用だけ（x / youtube / pc）
 
 APIへの通信はこのスクリプトが代わりに行うので、ブラウザの制限（CORS）を受けない。
 """
@@ -50,13 +51,14 @@ async def main() -> int:
     ap.add_argument("--model")
     ap.add_argument("--out", default=str(ROOT / "out"))
     ap.add_argument("--sample", action="store_true", help="見本の台本で書き出す")
+    ap.add_argument("--formats", default="x,youtube,pc", help="書き出す形式（x / youtube / pc をカンマ区切り）")
     a = ap.parse_args()
 
     provider = a.provider or ("grok" if os.environ.get("XAI_API_KEY") else "claude")
     if not a.sample and not os.environ.get("XAI_API_KEY" if provider == "grok" else "ANTHROPIC_API_KEY"):
         print("APIキーがありません（XAI_API_KEY か ANTHROPIC_API_KEY）", file=sys.stderr)
         return 2
-    q = f"auto=1&provider={provider}"
+    q = f"auto=1&provider={provider}&formats={a.formats}"
     if a.sample:
         q += "&sample=1"
     if a.date:
@@ -87,21 +89,25 @@ async def main() -> int:
             print("失敗:", err, file=sys.stderr)
             await browser.close()
             return 1
+        want = len([f for f in a.formats.split(",") if f in ("x", "youtube", "pc")])
         for _ in range(120):
-            if downloads:
+            if len(downloads) >= want:
                 break
             await asyncio.sleep(0.5)
         if not downloads:
             print("失敗: 動画のファイルが出てきませんでした", file=sys.stderr)
             await browser.close()
             return 1
-        d = downloads[0]
         st = await page.evaluate("window.NS.state()")
-        path = out / (st.get("name") or d.suggested_filename)
-        await d.save_as(path)
-        path.with_suffix(".json").write_text(json.dumps(st["script"], ensure_ascii=False, indent=2), encoding="utf-8")
-        path.with_suffix(".txt").write_text(st["sources"], encoding="utf-8")
-        print("保存:", path)
+        for d in downloads:
+            path = out / d.suggested_filename
+            await d.save_as(path)
+            print("保存:", path)
+        stem = out / downloads[0].suggested_filename.split("_NewsShorts_")[0]
+        base = f"{stem}_NewsShorts_{st['script']['date']}"
+        Path(base + ".json").write_text(json.dumps(st["script"], ensure_ascii=False, indent=2), encoding="utf-8")
+        Path(base + ".txt").write_text(st["sources"], encoding="utf-8")
+        print("台本・出典:", base + ".json / .txt")
         await browser.close()
     return 0
 

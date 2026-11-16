@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0d0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="News Shorts">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>News Shorts 自動生成</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,9 +22,16 @@ html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6
 header { padding: calc(10px + env(safe-area-inset-top)) 16px 8px; font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
 header span { color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin-left: 6px; }
 main { display: grid; gap: 14px; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 980px; margin: 0 auto; }
-@media (min-width: 820px) { main { grid-template-columns: 400px 1fr; align-items: start; } }
+@media (min-width: 820px) { main { grid-template-columns: 400px 1fr; align-items: start; } main.wide { grid-template-columns: 1fr; } }
 .stage { position: sticky; top: 8px; }
 canvas#cv { display: block; width: 100%; max-width: 400px; aspect-ratio: 9 / 16; height: auto; margin: 0 auto; background: #000; border-radius: 10px; }
+canvas#cv.wide { max-width: 100%; aspect-ratio: 16 / 9; }
+.fmt { display: flex; gap: 6px; max-width: 400px; margin: 0 auto 8px; }
+.fmt button { flex: 1; padding: 8px 4px; font-size: 13px; border-radius: 8px; }
+.fmt button.on { background: var(--ink); color: #111; border-color: var(--ink); }
+.stage.wide .fmt, .stage.wide .ctl { max-width: 100%; }
+#out { flex-wrap: wrap; }
+#out .btn { flex: 1 1 30%; font-size: 14px; }
 .ctl { display: flex; align-items: center; gap: 10px; max-width: 400px; margin: 8px auto 0; }
 .ctl input[type=range] { flex: 1; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; font-size: 13px; }
@@ -48,7 +62,12 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 <body>
 <header>News Shorts<span>ニュース動画の自動生成</span></header>
 <main>
-  <section class="stage">
+  <section class="stage" id="stage">
+    <div class="fmt" id="fmt">
+      <button data-f="x" class="on">X・スマホ</button>
+      <button data-f="youtube">YouTube</button>
+      <button data-f="pc">PC</button>
+    </div>
     <canvas id="cv" width="1080" height="1920"></canvas>
     <div class="ctl">
       <button id="play" disabled>再生</button>
@@ -62,10 +81,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="go" class="primary">ニュースを集めて動画にする</button>
       <div id="status">準備しています…</div>
       <div id="prog"><i></i></div>
-      <div id="out" class="row">
-        <a id="dl" class="btn" download>MP4を保存</a>
-        <button id="share" hidden>共有</button>
-      </div>
+      <div id="out" class="row"></div>
     </div>
 
     <details id="setBox">
@@ -82,6 +98,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label for="date">日付（日本時間）</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport" checked> 集めたあと、MP4の書き出しまで続けて行う</label>
+      <label>書き出す形式</label>
+      <label class="check"><input type="checkbox" class="fx" value="x" checked> X・スマホ（縦 1080×1920、メイン）</label>
+      <label class="check"><input type="checkbox" class="fx" value="youtube" checked> YouTube（縦 1080×1920、右と下を空ける）</label>
+      <label class="check"><input type="checkbox" class="fx" value="pc" checked> PC（横 1920×1080）</label>
       <p class="note">Grok は X の投稿を直接検索できます。ブラウザからつながらないときは、同じフォルダの run.py で自動実行できます。</p>
     </details>
 
@@ -119,7 +139,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.' + k, v); } catch (e) {} },
 };
-const S = { script: null, show: null, bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, blob: null, name: '', busy: false };
+const FORMATS = { x: 'X', youtube: 'YouTube', pc: 'PC' };
+const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false };
 const ctx = $('cv').getContext('2d');
 
 const PROVIDERS = {
@@ -247,7 +268,8 @@ async function setScript(raw, quiet) {
   stop();
   const s = normalize(raw);
   await loadFonts(s);
-  S.script = s; S.show = E.prepare(s);
+  S.script = s; S.show = E.prepare(s, S.format);
+  sizeCanvas();
   $('json').value = JSON.stringify(s, null, 2);
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
@@ -255,6 +277,22 @@ async function setScript(raw, quiet) {
   if (!quiet) say(`台本を読み込みました（${S.show.total}本・${S.show.duration.toFixed(1)}秒）`);
   return S.show;
 }
+
+/* ---------- 形式 ---------- */
+function sizeCanvas() {
+  const cv = $('cv'), wide = S.show && S.show.W > S.show.H;
+  if (S.show && (cv.width !== S.show.W || cv.height !== S.show.H)) { cv.width = S.show.W; cv.height = S.show.H; }
+  cv.classList.toggle('wide', !!wide); $('stage').classList.toggle('wide', !!wide);
+  document.querySelector('main').classList.toggle('wide', !!wide);
+  document.querySelectorAll('#fmt button').forEach(b => b.classList.toggle('on', b.dataset.f === S.format));
+}
+function setFormat(f) {
+  if (!FORMATS[f]) return;
+  stop(); S.format = f; store.set('format', f);
+  if (S.script) { S.show = E.prepare(S.script, f); sizeCanvas(); draw(+$('seek').value / 1000 * S.show.duration); }
+  else sizeCanvas();
+}
+function chosenFormats() { return [...document.querySelectorAll('.fx')].filter(x => x.checked).map(x => x.value); }
 
 /* ---------- 再生 ---------- */
 function draw(T) {
@@ -415,65 +453,87 @@ async function collect(date) {
 }
 
 /* ---------- 書き出し ---------- */
-function fileName(date) {
+function fileName(date, fmt) {
   const d = new Date(), h = d.getHours();
   const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${h < 12 ? 'am' : 'pm'}${pad2(h)}${pad2(d.getMinutes())}`;
-  return `${stamp}_NewsShorts_${date}.mp4`;
+  return `${stamp}_NewsShorts_${FORMATS[fmt] || fmt}_${date}.mp4`;
 }
-async function exportMP4() {
-  if (!S.show || S.busy) return;
+async function encodeShow(show, label, p0, p1) {
+  const W = show.W, H = show.H, fps = E.FPS, dur = show.duration, N = Math.round(dur * fps);
+  const vcfg = { codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: fps, avc: { format: 'avc' } };
+  let ok = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined' && window.Mp4Muxer;
+  if (ok) { try { ok = (await VideoEncoder.isConfigSupported(vcfg)).supported; } catch (e) { ok = false; } }
+  if (!ok) return null;
+  const muxer = new Mp4Muxer.Muxer({
+    target: new Mp4Muxer.ArrayBufferTarget(),
+    video: { codec: 'avc', width: W, height: H, frameRate: fps },
+    audio: S.aac ? { codec: 'aac', numberOfChannels: S.aac.channels, sampleRate: S.aac.rate } : undefined,
+    fastStart: 'in-memory', firstTimestampBehavior: 'offset',
+  });
+  let fail = null;
+  const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { fail = e; } });
+  enc.configure(vcfg);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c2 = cv.getContext('2d');
+  for (let f = 0; f < N; f++) {
+    if (fail) throw fail;
+    E.drawFrame(c2, show, f / fps, S.bgs);
+    const vf = new VideoFrame(cv, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
+    enc.encode(vf, { keyFrame: f % (fps * 2) === 0 });
+    vf.close();
+    while (enc.encodeQueueSize > 6) await sleep(4);
+    if (f % 15 === 0) { progress(p0 + (p1 - p0) * f / N); say(`${label}を書き出しています… ${Math.round(f / N * 100)}%`); await sleep(0); }
+  }
+  await enc.flush(); enc.close();
+  if (fail) throw fail;
+  if (S.aac) {
+    const off = musicOffset(dur), A = S.aac; let first = true;
+    for (const s of A.samples) {
+      if (s.t < off - 1e-6) continue;
+      if (s.t - off >= dur) break;
+      muxer.addAudioChunkRaw(A.bytes.subarray(s.o, s.o + s.n), 'key', Math.round((s.t - off) * 1e6), Math.round(s.d * 1e6),
+        first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: A.channels, sampleRate: A.rate, description: A.asc } } : undefined);
+      first = false;
+    }
+  }
+  muxer.finalize();
+  return new Blob([muxer.target.buffer], { type: 'video/mp4' });
+}
+function addOut(fmt, blob) {
+  const name = fileName(S.script.date, fmt).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
+  const url = URL.createObjectURL(blob);
+  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url });
+  const box = $('out'); box.innerHTML = '';
+  const order = ['x', 'youtube', 'pc'];
+  S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
+    const a = document.createElement('a'); a.className = 'btn'; a.href = o.url; a.download = o.name; a.textContent = `${FORMATS[o.fmt]}を保存`; a.dataset.f = o.fmt;
+    box.appendChild(a);
+    const file = new File([o.blob], o.name, { type: o.blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      const b = document.createElement('button'); b.textContent = `${FORMATS[o.fmt]}を共有`;
+      b.onclick = () => navigator.share({ files: [file], title: 'News Shorts' }).catch(() => {});
+      box.appendChild(b);
+    }
+  });
+  box.classList.add('show');
+  return name;
+}
+async function exportMP4(formats) {
+  if (!S.script || S.busy) return;
+  formats = (formats && formats.length ? formats : [S.format]).filter(f => FORMATS[f]);
   S.busy = true; stop(); setBusy(true);
   try {
-    const W = E.W, H = E.H, fps = E.FPS, dur = S.show.duration, N = Math.round(dur * fps);
-    const vcfg = { codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: fps, avc: { format: 'avc' } };
-    let ok = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined' && window.Mp4Muxer;
-    if (ok) { try { ok = (await VideoEncoder.isConfigSupported(vcfg)).supported; } catch (e) { ok = false; } }
-    let blob;
-    if (ok) {
-      const muxer = new Mp4Muxer.Muxer({
-        target: new Mp4Muxer.ArrayBufferTarget(),
-        video: { codec: 'avc', width: W, height: H, frameRate: fps },
-        audio: S.aac ? { codec: 'aac', numberOfChannels: S.aac.channels, sampleRate: S.aac.rate } : undefined,
-        fastStart: 'in-memory', firstTimestampBehavior: 'offset',
-      });
-      let fail = null;
-      const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { fail = e; } });
-      enc.configure(vcfg);
-      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-      const c2 = cv.getContext('2d');
-      for (let f = 0; f < N; f++) {
-        if (fail) throw fail;
-        E.drawFrame(c2, S.show, f / fps, S.bgs);
-        const vf = new VideoFrame(cv, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
-        enc.encode(vf, { keyFrame: f % (fps * 2) === 0 });
-        vf.close();
-        while (enc.encodeQueueSize > 6) await sleep(4);
-        if (f % 15 === 0) { progress(0.3 + 0.65 * f / N); say(`動画を書き出しています… ${Math.round(f / N * 100)}%`); if (f % 90 === 0) draw(f / fps); await sleep(0); }
-      }
-      await enc.flush(); enc.close();
-      if (fail) throw fail;
-      if (S.aac) {
-        const off = musicOffset(dur), A = S.aac; let first = true;
-        for (const s of A.samples) {
-          if (s.t < off - 1e-6) continue;
-          if (s.t - off >= dur) break;
-          muxer.addAudioChunkRaw(A.bytes.subarray(s.o, s.o + s.n), 'key', Math.round((s.t - off) * 1e6), Math.round(s.d * 1e6),
-            first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: A.channels, sampleRate: A.rate, description: A.asc } } : undefined);
-          first = false;
-        }
-      }
-      muxer.finalize();
-      blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
-    } else {
-      blob = await recordRealtime();
+    const names = [];
+    for (let i = 0; i < formats.length; i++) {
+      const fmt = formats[i], show = E.prepare(S.script, fmt);
+      const p0 = 0.3 + 0.68 * i / formats.length, p1 = 0.3 + 0.68 * (i + 1) / formats.length;
+      let blob = await encodeShow(show, FORMATS[fmt], p0, p1);
+      if (!blob) { setFormat(fmt); blob = await recordRealtime(); }
+      names.push(addOut(fmt, blob));
     }
-    S.blob = blob; S.name = fileName(S.script.date).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
-    const url = URL.createObjectURL(blob);
-    $('dl').href = url; $('dl').download = S.name; $('out').classList.add('show');
-    $('share').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([blob], S.name, { type: blob.type })] }));
-    progress(1); say(`書き出しました：${S.name}（${(blob.size / 1048576).toFixed(1)}MB）`);
-    draw(0);
-    return blob;
+    S.show = E.prepare(S.script, S.format); sizeCanvas(); draw(0);
+    progress(1); say(`書き出しました：${names.join('、')}`);
+    return names;
   } finally { S.busy = false; setBusy(false); }
 }
 /* WebCodecs がないブラウザでは、再生しながら録画する */
@@ -508,7 +568,7 @@ function setBusy(b) { ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id 
 async function runAll(opts) {
   opts = opts || {};
   if (S.busy) return;
-  S.busy = true; setBusy(true); $('out').classList.remove('show');
+  S.busy = true; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   try {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
@@ -521,9 +581,9 @@ async function runAll(opts) {
   }
   S.busy = false; setBusy(false);
   if (opts.export !== false && $('autoExport').checked) {
-    const blob = await exportMP4();
-    if (opts.download) $('dl').click();
-    return blob;
+    const names = await exportMP4(opts.formats || chosenFormats());
+    if (opts.download) for (const a of document.querySelectorAll('#out a')) { a.click(); await sleep(400); }
+    return names;
   }
 }
 
@@ -549,17 +609,22 @@ function initUI() {
   $('go').onclick = () => runAll({ download: false }).catch(() => {});
   $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
   $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('JSONを読めません：' + e.message, true); } };
-  $('exportBtn').onclick = () => exportMP4().catch(e => { console.error(e); say('書き出しに失敗しました：' + e.message, true); });
+  $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('書き出しに失敗しました：' + e.message, true); });
+  document.querySelectorAll('#fmt button').forEach(b => b.onclick = () => setFormat(b.dataset.f));
+  S.format = FORMATS[Q.get('format')] ? Q.get('format') : (FORMATS[store.get('format', 'x')] ? store.get('format', 'x') : 'x');
+  const fq = (Q.get('formats') || '').split(',').filter(f => FORMATS[f]);
+  const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
+  const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
+  document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
   $('play').onclick = () => play().catch(e => say(e.message, true));
   $('seek').oninput = () => { if (S.playing) stop(); if (S.show) draw(+$('seek').value / 1000 * S.show.duration); };
-  $('share').onclick = () => navigator.share({ files: [new File([S.blob], S.name, { type: S.blob.type })], title: 'News Shorts' }).catch(() => {});
   $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('出典をコピーしました'));
 }
 
 window.NS = {
   run: runAll, exportMP4, setScript,
-  state: () => ({ script: S.script, sources: S.script ? sourcesText(S.script) : '', name: S.name, size: S.blob ? S.blob.size : 0 }),
-  blobBase64: async () => { const b = new Uint8Array(await S.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); },
+  state: () => ({ script: S.script, sources: S.script ? sourcesText(S.script) : '', names: S.outs.map(o => o.name), sizes: S.outs.map(o => o.blob.size) }),
+  blobBase64: async (i) => { const b = new Uint8Array(await S.outs[i || 0].blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); },
 };
 
 (async () => {
