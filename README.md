@@ -1,6 +1,6 @@
 # News Shorts
 
-Open the page and it creates a news video from today's headlines, then plays it. **Update** collects a new edition: the button says Creating… until the new video starts. Pull down at the top does the same. No API key. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button.
+Open the page and it creates a news video from today's headlines, then plays it. **Update** collects a new edition: the button says Creating… until the new video starts. Pull down at the top does the same. No API key. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button. Genres are Space, Politics, Science, Culture, Local, Entertainment, Public safety, Sports, Food, and Restaurant. Each one can sit at the Top, Middle, or Bottom. Hide violent crime is on. Uncheck a source to leave it out.
 
 | Device | Picture | When it is chosen |
 |---|---|---|
@@ -24,6 +24,8 @@ GitHub Pages serves the root of `main`. The picture starts on its own. Safari bl
 python run.py --country JP --lang ja
 python run.py --x-user name --country US --lang en
 ```
+
+Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter.
 
 Music, under the picture:
 

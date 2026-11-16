@@ -78,6 +78,10 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; margin-top: 10px; }
 .check input { width: 18px; height: 18px; accent-color: var(--acc); }
 .note { color: var(--mute); font-size: 12px; margin: 6px 0 0; }
+.filters { display: grid; gap: 6px; margin: 4px 0 8px; }
+.filter-row { display: flex; align-items: center; gap: 8px; }
+.filter-row .check { margin: 0; flex: 1; }
+.filter-row select { width: 7.2em; }
 pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace; color: #d6d2ca; margin: 0 0 8px; }
 #out { display: none; gap: 8px; margin-top: 10px; }
 #out.show { display: flex; }
@@ -97,6 +101,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
+    <p class="music-label">Wallpaper</p>
+    <div class="music" id="walls"></div>
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
     <p id="caption" class="caption">Opening the news video…</p>
@@ -118,6 +124,11 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label for="lang">Language</label>
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
+      <label>Genres</label>
+      <div id="genres" class="filters"></div>
+      <label class="check"><input type="checkbox" id="hideViolent" checked> Hide violent crime</label>
+      <label>Sources</label>
+      <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X account</label>
       <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
       <p class="note">Posts and replies from accounts this user follows are added to the video. Opening this page from that account on X fills the name in.</p>
@@ -2139,6 +2150,14 @@ const BG_ORDER = ['A', 'B', 'C', 'C', 'A', 'B', 'D', 'C', 'D', 'C', 'B', 'D'];
 const CREDIT_MUSIC = 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons';
 let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
+const WALLPAPERS = {
+  morning: '',
+  evening: 'brightness(0.72) saturate(1.35) sepia(0.45)',
+  night: 'brightness(0.38) saturate(0.5)',
+  pop: 'brightness(1.65) saturate(1.85) contrast(1.04)',
+};
+let wallpaper = 'morning';
+function setWallpaper(id) { wallpaper = Object.prototype.hasOwnProperty.call(WALLPAPERS, id) ? id : 'morning'; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
 const CREDIT_COFFEE = 'Background: AI-generated image (Karuizawa-style study), Grok Bot';
 
@@ -2412,12 +2431,18 @@ function drawBg(ctx, img, t, key) {
   const s = 1 + P.zoom * (Math.floor(t * FPS + 1e-6) / (DUR * FPS));
   ctx.save();
   ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
+  if (WALLPAPERS[wallpaper]) ctx.filter = WALLPAPERS[wallpaper];
   if (!img) { ctx.fillStyle = '#111'; ctx.fillRect(0, 0, W, H); }
   else if (P.bgFocus) {
     const k = W / img.width, fy = (P.bgFocus[key] || img.height / 2);
     const y0 = Math.min(0, Math.max(H - img.height * k, H / 2 - fy * k));
     ctx.drawImage(img, 0, y0, W, img.height * k);
   } else ctx.drawImage(img, 0, 0, W, H);
+  ctx.filter = 'none';
+  if (wallpaper === 'evening') {
+    ctx.fillStyle = 'rgba(140,48,0,0.18)';
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.restore();
 }
 
@@ -2505,7 +2530,7 @@ function allText(script) {
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit };
+global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
 })(window);
 </script>
 <script>
@@ -2539,6 +2564,12 @@ const COFFEE_FALLBACK = {
   en: ['A pause between', 'the headlines'],
   both: ['A pause between headlines', 'ひと息ついて振り返る'],
 };
+const WALLS = [
+  { id: 'morning', name: 'Morning' },
+  { id: 'evening', name: 'Evening' },
+  { id: 'night', name: 'Night' },
+  { id: 'pop', name: 'Pop' },
+];
 const TRACKS = [
   { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
   { id: 'neptune', name: 'Neptune', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
@@ -2592,6 +2623,16 @@ function applyLayout() {
   if (choice === 'phone' || choice === 'x') format = 'x';
   else if (choice === 'youtube' || choice === 'pc') format = choice;
   if (format !== S.format) setFormat(format);
+}
+function useWall(id) {
+  const w = WALLS.find(x => x.id === id) || WALLS[0];
+  if (E.setWallpaper) E.setWallpaper(w.id);
+  store.set('wall', w.id);
+  document.querySelectorAll('#walls button').forEach(b => b.classList.toggle('on', b.dataset.w === w.id));
+  if (S.show) {
+    const T = S.playing ? currentT() : (+$('seek').value / 1000) * (S.show.duration || 0);
+    draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
+  }
 }
 function useTrack(id) {
   const available = TRACKS.filter(t => ASSETS.tracks && ASSETS.tracks[t.id]);
@@ -2926,7 +2967,32 @@ const SECTIONS = [
   ['SCIENCE', 'SCIENCE'],
   ['ENTERTAINMENT', 'CULTURE'],
 ];
-const GRAPHIC = /murder|stabbed|shot dead|shooting|killed|beheading|殺害|刺殺|遺体|刺され|死傷|銃乱射/i;
+const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
+const GENRES = [
+  { id: 'space', name: 'Space', place: 'middle', q: { JP: '宇宙', US: 'space NASA' } },
+  { id: 'politics', name: 'Politics', place: 'top', q: { JP: '政治', US: 'politics' } },
+  { id: 'science', name: 'Science', place: 'middle', q: { JP: '科学', US: 'science' } },
+  { id: 'culture', name: 'Culture', place: 'bottom', q: { JP: '文化', US: 'culture arts' } },
+  { id: 'local', name: 'Local', place: 'bottom', q: { JP: '地域 ニュース', US: 'local news' } },
+  { id: 'entertainment', name: 'Entertainment', place: 'bottom', q: { JP: '芸能', US: 'entertainment' } },
+  { id: 'safety', name: 'Public safety', place: 'top', q: { JP: '治安 警察', US: 'public safety police' } },
+  { id: 'sports', name: 'Sports', place: 'middle', q: { JP: 'スポーツ', US: 'sports' } },
+  { id: 'food', name: 'Food', place: 'bottom', q: { JP: '食べ物', US: 'food' } },
+  { id: 'restaurant', name: 'Restaurant', place: 'bottom', q: { JP: 'レストラン', US: 'restaurant' } },
+];
+const SOURCES = [
+  { id: 'x', name: 'X' },
+  { id: 'nhk', name: 'NHK' },
+  { id: 'reuters', name: 'Reuters' },
+  { id: 'ap', name: 'Associated Press' },
+  { id: 'nikkei', name: 'Nikkei' },
+  { id: 'bbc', name: 'BBC' },
+  { id: 'cnn', name: 'CNN' },
+  { id: 'nyt', name: 'The New York Times' },
+  { id: 'asahi', name: 'Asahi Shimbun' },
+  { id: 'yomiuri', name: 'Yomiuri Shimbun' },
+  { id: 'web', name: 'Other web' },
+];
 const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
 
 function edition() {
@@ -2950,6 +3016,82 @@ function splitHeadline(title) {
   const parts = String(title || '').split(/\s[-–—]\s/);
   if (parts.length < 2) return { headline: String(title || '').trim(), source: 'News' };
   return { headline: parts.slice(0, -1).join(' - ').trim(), source: parts[parts.length - 1].trim() };
+}
+function savedJson(key) {
+  try { return JSON.parse(store.get(key, '{}')); } catch (e) { return {}; }
+}
+function genreChoices() {
+  const saved = savedJson('genres');
+  return GENRES.map(g => {
+    const box = document.querySelector('.genre[value="' + g.id + '"]');
+    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
+    const rec = saved[g.id] || {};
+    return {
+      ...g,
+      on: box ? box.checked : rec.on !== false,
+      place: (place && place.value) || rec.place || g.place,
+    };
+  }).filter(g => g.on);
+}
+function sourceOn(id) {
+  const box = document.querySelector('.srcf[value="' + id + '"]');
+  if (box) return box.checked;
+  const saved = savedJson('sourcesOn');
+  return saved[id] !== false;
+}
+function matchedGenre(text, countryId) {
+  const hay = String(text || '').toLowerCase();
+  let hit = null;
+  GENRES.forEach(g => {
+    const words = (g.q[countryId] || g.q.US).toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    if (words.some(w => hay.includes(w))) hit = g;
+  });
+  return hit;
+}
+function sourceId(row) {
+  const s = String((row && row.source) || '');
+  if (row && (row.x || /^x\b/i.test(s))) return 'x';
+  if (/nhk/i.test(s)) return 'nhk';
+  if (/reuters/i.test(s)) return 'reuters';
+  if (/associated press|\bap news\b/i.test(s)) return 'ap';
+  if (/nikkei|日経/i.test(s)) return 'nikkei';
+  if (/\bbbc\b/i.test(s)) return 'bbc';
+  if (/\bcnn\b/i.test(s)) return 'cnn';
+  if (/new york times|\bnyt\b/i.test(s)) return 'nyt';
+  if (/asahi|朝日/i.test(s)) return 'asahi';
+  if (/yomiuri|読売/i.test(s)) return 'yomiuri';
+  return 'web';
+}
+function violentHidden() {
+  const box = $('hideViolent');
+  return box ? box.checked : store.get('hideViolent', '1') !== '0';
+}
+function searchFeed(query) {
+  const e = edition();
+  return 'https://news.google.com/rss/search?q=' + encodeURIComponent('(' + query + ') when:2d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
+}
+function orderStories(rows, limit) {
+  const bands = { top: [], middle: [], bottom: [] };
+  rows.forEach(r => (bands[r.place] || bands.middle).push(r));
+  ['top', 'middle', 'bottom'].forEach(k => { bands[k] = shuffle(bands[k]); });
+  const keys = ['top', 'middle', 'bottom'].filter(k => bands[k].length);
+  if (!keys.length) return [];
+  const total = keys.reduce((n, k) => n + bands[k].length, 0);
+  if (total <= limit) return [...bands.top, ...bands.middle, ...bands.bottom];
+  const keep = { top: 0, middle: 0, bottom: 0 };
+  let remain = limit;
+  keys.forEach(k => {
+    const later = keys.filter(x => keys.indexOf(x) > keys.indexOf(k)).reduce((n, x) => n + bands[x].length, 0);
+    const share = Math.max(1, Math.round(remain * bands[k].length / (bands[k].length + later)));
+    keep[k] = Math.min(bands[k].length, share, remain);
+    remain -= keep[k];
+  });
+  keys.forEach(k => {
+    const extra = Math.min(remain, bands[k].length - keep[k]);
+    keep[k] += extra;
+    remain -= extra;
+  });
+  return [...bands.top.slice(0, keep.top), ...bands.middle.slice(0, keep.middle), ...bands.bottom.slice(0, keep.bottom)];
 }
 function topicFeeds() {
   const { country } = market();
@@ -2989,27 +3131,25 @@ function rssItems(xml) {
   return items;
 }
 async function newsRows(rss, cat) {
-  const readers = [
-    async () => {
-      const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20&_=' + Date.now());
-      if (res.status === 429 || res.status === 503) throw new Error(String(res.status));
-      if (!res.ok) return [];
-      const j = await res.json();
-      if (!j || j.status !== 'ok') return [];
-      return j.items || [];
-    },
-    async () => {
-      const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(rss));
-      if (!res.ok) return [];
-      const j = await res.json();
-      return rssItems(j && j.contents || '');
-    },
-  ];
-  for (const read of readers) {
+  const read = async () => {
+    const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=15&_=' + Date.now());
+    if (res.status === 429 || res.status === 503) throw new Error(String(res.status));
+    if (!res.ok) return [];
+    const j = await res.json();
+    if (!j || j.status !== 'ok') return [];
+    return j.items || [];
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const items = await read();
-      if (items.length) return items.map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat }));
-    } catch (e) { console.warn(e); }
+      const items = await Promise.race([
+        read(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+      ]);
+      return items.map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat }));
+    } catch (e) {
+      console.warn(e);
+      if (attempt === 0) await sleep(1500);
+    }
   }
   return [];
 }
@@ -3057,7 +3197,7 @@ function rowFromStatus(st) {
   if (!st || (st.type && st.type !== 'status')) return null;
   const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
   const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!author || text.length < 12 || GRAPHIC.test(text)) return null;
+  if (!author || text.length < 12 || (violentHidden() && VIOLENT.test(text))) return null;
   const created = st.created_at ? new Date(st.created_at) : null;
   return {
     headline: text.slice(0, 220),
@@ -3223,47 +3363,77 @@ function mixRows(rows) {
 }
 async function collect(date) {
   const { country, lang } = market();
-  let handle = xHandle() || handleFromReferrer();
-  if (!handle) handle = await sessionHandle();
-  if (handle && handle !== xHandle()) {
-    S.xUser = handle;
-    store.set('xUser', handle);
-    if ($('xUser')) $('xUser').value = '@' + handle;
+  const genres = genreChoices();
+  if (!genres.length) throw new Error('Choose at least one genre in Settings.');
+  const allowX = sourceOn('x');
+  let handle = '';
+  if (allowX) {
+    handle = xHandle() || handleFromReferrer();
+    if (!handle) handle = await sessionHandle();
+    if (handle && handle !== xHandle()) {
+      S.xUser = handle;
+      store.set('xUser', handle);
+      if ($('xUser')) $('xUser').value = '@' + handle;
+    }
   }
   say('Creating the news video…');
   progress(0.08);
   const batches = [];
-  for (const [rss, cat] of topicFeeds()) {
-    try { batches.push(await newsRows(rss, cat)); } catch (e) { console.warn(e); batches.push([]); }
+  const bands = { top: [], middle: [], bottom: [] };
+  genres.forEach(g => (bands[g.place] || bands.middle).push(g));
+  for (const place of ['top', 'middle', 'bottom']) {
+    const group = bands[place];
+    if (!group.length) continue;
+    const q = group.map(g => {
+      const text = g.q[country.id] || g.q.US;
+      return text.includes(' ') ? '(' + text + ')' : text;
+    }).join(' OR ');
+    const catOf = title => {
+      if (group.length === 1) return group[0].name.toUpperCase();
+      const hay = String(title || '').toLowerCase();
+      const hit = group.find(g => (g.q[country.id] || g.q.US).toLowerCase().split(/\s+/).some(w => w.length > 2 && hay.includes(w)));
+      return (hit || group[0]).name.toUpperCase();
+    };
+    try {
+      const items = await newsRows(searchFeed(q), 'NEWS');
+      batches.push(items.map(it => ({ ...it, place, cat: catOf(it.title) })));
+    } catch (e) { console.warn(e); }
+    await sleep(250);
   }
   const used = new Set();
   const rows = [];
+  const blocked = text => violentHidden() && VIOLENT.test(text);
   batches.flat().forEach(it => {
     const sp = splitHeadline(it.title);
-    if (!sp.headline || GRAPHIC.test(sp.headline)) return;
+    if (!sp.headline || blocked(sp.headline)) return;
     const key = sp.headline.toLowerCase().slice(0, 90);
     if (used.has(key)) return;
+    const named = matchedGenre(sp.headline, country.id);
+    const selected = named && genres.find(g => g.id === named.id);
+    if (named && !selected) return;
+    const row = { headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: selected ? selected.name.toUpperCase() : it.cat, source: sp.source, place: selected ? selected.place : (it.place || 'middle') };
+    if (!sourceOn(sourceId(row))) return;
     used.add(key);
-    rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: it.cat, source: sp.source });
+    rows.push(row);
   });
   let xrows = [];
-  if (handle) {
+  if (allowX && handle) {
     try {
       xrows = await Promise.race([
         followedPosts(handle),
         new Promise(resolve => setTimeout(() => resolve([]), 8000)),
       ]) || [];
     } catch (e) { console.warn(e); }
+    xrows = xrows.filter(r => !blocked(r.headline)).map(r => ({ ...r, place: 'middle', cat: 'X' }));
   }
   const past = seenKeys();
   const keyOf = r => r.headline.toLowerCase().slice(0, 90);
   const fresh = rows.filter(r => !past.has(keyOf(r)));
   const pool = fresh.length >= 8 ? fresh : rows;
-  const posts = shuffle(xrows.filter(r => !past.has(keyOf(r)))).slice(0, 3);
-  const news = shuffle(pool.length ? pool : rows).slice(0, 12 - posts.length);
-  const chosen = shuffle([...posts, ...news]);
+  const posts = xrows.filter(r => !past.has(keyOf(r))).slice(0, 3);
+  const chosen = orderStories([...posts, ...pool], 12);
   rememberKeys(chosen.map(r => r.headline.toLowerCase().slice(0, 90)));
-  if (chosen.length < 4) throw new Error('Could not collect enough headlines. The sample keeps playing.');
+  if (chosen.length < 4) throw new Error('Not enough stories after the filters. Turn a genre or a source back on.');
   progress(0.45);
   const originals = chosen.map(r => r.headline);
   let english = originals.slice();
@@ -3482,6 +3652,17 @@ function initUI() {
   });
   const requested = Q.get('music') || store.get('music', 'jupiter');
   useTrack(TRACKS.some(t => t.id === requested) ? requested : 'jupiter');
+  const wallBox = $('walls');
+  WALLS.forEach(w => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.w = w.id;
+    b.textContent = w.name;
+    b.onclick = () => useWall(w.id);
+    wallBox.appendChild(b);
+  });
+  const requestedWall = Q.get('wall') || store.get('wall', 'morning');
+  useWall(WALLS.some(w => w.id === requestedWall) ? requestedWall : 'morning');
   const countryBox = $('country');
   const langBox = $('lang');
   COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
@@ -3498,6 +3679,7 @@ function initUI() {
   S.xUser = (Q.get('x') || store.get('xUser', '') || handleFromReferrer()).replace(/^@+/, '');
   $('xUser').value = S.xUser ? '@' + S.xUser : '';
   const saveMarket = () => { store.set('country', countryBox.value); store.set('lang', langBox.value); };
+  buildFilters();
   countryBox.onchange = () => {
     const next = COUNTRIES.find(c => c.id === countryBox.value);
     if (next) langBox.value = next.lang;
@@ -3517,6 +3699,74 @@ function initUI() {
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
   $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
+  keepInitTail();
+}
+function saveFilters() {
+  const genres = {};
+  GENRES.forEach(g => {
+    const box = document.querySelector('.genre[value="' + g.id + '"]');
+    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
+    genres[g.id] = { on: !!(box && box.checked), place: place ? place.value : g.place };
+  });
+  store.set('genres', JSON.stringify(genres));
+  const sources = {};
+  SOURCES.forEach(s => {
+    const box = document.querySelector('.srcf[value="' + s.id + '"]');
+    sources[s.id] = !!(box && box.checked);
+  });
+  store.set('sourcesOn', JSON.stringify(sources));
+  store.set('hideViolent', $('hideViolent').checked ? '1' : '0');
+}
+function buildFilters() {
+  const savedG = savedJson('genres');
+  const savedS = savedJson('sourcesOn');
+  const box = $('genres');
+  GENRES.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'filter-row';
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'genre';
+    input.value = g.id;
+    input.checked = !savedG[g.id] || savedG[g.id].on !== false;
+    lab.appendChild(input);
+    lab.appendChild(document.createTextNode(g.name));
+    const sel = document.createElement('select');
+    sel.className = 'place';
+    sel.dataset.genre = g.id;
+    [['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']].forEach(([value, name]) => {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = name;
+      sel.appendChild(o);
+    });
+    sel.value = (savedG[g.id] && savedG[g.id].place) || g.place;
+    const changed = () => { saveFilters(); refreshMarket(); };
+    input.onchange = changed;
+    sel.onchange = changed;
+    row.append(lab, sel);
+    box.appendChild(row);
+  });
+  $('hideViolent').checked = store.get('hideViolent', '1') !== '0';
+  $('hideViolent').onchange = () => { saveFilters(); refreshMarket(); };
+  const sbox = $('sourceFilters');
+  SOURCES.forEach(s => {
+    const lab = document.createElement('label');
+    lab.className = 'check';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'srcf';
+    input.value = s.id;
+    input.checked = savedS[s.id] !== false;
+    input.onchange = () => { saveFilters(); refreshMarket(); };
+    lab.appendChild(input);
+    lab.appendChild(document.createTextNode(s.name));
+    sbox.appendChild(lab);
+  });
+}
+function keepInitTail() {
   $('play').onclick = () => {
     const unlocking = userUnlock();
     play().catch(e => say(e.message, true));

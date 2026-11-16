@@ -79,6 +79,14 @@ const BG_ORDER = ['A', 'B', 'C', 'C', 'A', 'B', 'D', 'C', 'D', 'C', 'B', 'D'];
 const CREDIT_MUSIC = 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons';
 let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
+const WALLPAPERS = {
+  morning: '',
+  evening: 'brightness(0.72) saturate(1.35) sepia(0.45)',
+  night: 'brightness(0.38) saturate(0.5)',
+  pop: 'brightness(1.65) saturate(1.85) contrast(1.04)',
+};
+let wallpaper = 'morning';
+function setWallpaper(id) { wallpaper = Object.prototype.hasOwnProperty.call(WALLPAPERS, id) ? id : 'morning'; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
 const CREDIT_COFFEE = 'Background: AI-generated image (Karuizawa-style study), Grok Bot';
 
@@ -352,12 +360,18 @@ function drawBg(ctx, img, t, key) {
   const s = 1 + P.zoom * (Math.floor(t * FPS + 1e-6) / (DUR * FPS));
   ctx.save();
   ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
+  if (WALLPAPERS[wallpaper]) ctx.filter = WALLPAPERS[wallpaper];
   if (!img) { ctx.fillStyle = '#111'; ctx.fillRect(0, 0, W, H); }
   else if (P.bgFocus) {
     const k = W / img.width, fy = (P.bgFocus[key] || img.height / 2);
     const y0 = Math.min(0, Math.max(H - img.height * k, H / 2 - fy * k));
     ctx.drawImage(img, 0, y0, W, img.height * k);
   } else ctx.drawImage(img, 0, 0, W, H);
+  ctx.filter = 'none';
+  if (wallpaper === 'evening') {
+    ctx.fillStyle = 'rgba(140,48,0,0.18)';
+    ctx.fillRect(0, 0, W, H);
+  }
   ctx.restore();
 }
 
@@ -445,5 +459,5 @@ function allText(script) {
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit };
+global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
 })(window);
