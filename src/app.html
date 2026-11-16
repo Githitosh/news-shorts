@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0f">
+<title>News Shorts 自動生成</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@600;700;900&family=Tinos:wght@700&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; }
+header { padding: calc(10px + env(safe-area-inset-top)) 16px 8px; font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
+header span { color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin-left: 6px; }
+main { display: grid; gap: 14px; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 980px; margin: 0 auto; }
+@media (min-width: 820px) { main { grid-template-columns: 400px 1fr; align-items: start; } }
+.stage { position: sticky; top: 8px; }
+canvas#cv { display: block; width: 100%; max-width: 400px; aspect-ratio: 9 / 16; height: auto; margin: 0 auto; background: #000; border-radius: 10px; }
+.ctl { display: flex; align-items: center; gap: 10px; max-width: 400px; margin: 8px auto 0; }
+.ctl input[type=range] { flex: 1; accent-color: var(--acc); }
+.ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; font-size: 13px; }
+button, .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--acc); color: #1a1408; border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+#status { min-height: 1.6em; color: var(--ink); font-size: 14px; margin-top: 10px; white-space: pre-wrap; }
+#status.err { color: #ff9b8a; }
+#prog { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+#prog i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .2s; }
+details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; }
+details[open] { padding-bottom: 12px; }
+summary { cursor: pointer; padding: 12px 0; font-weight: 700; }
+label { display: block; color: var(--mute); font-size: 13px; margin: 8px 0 4px; }
+input[type=text], input[type=password], input[type=date], select, textarea { width: 100%; background: #0f0f12; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 15px "Noto Sans JP",sans-serif; }
+textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; margin-top: 10px; }
+.check input { width: 18px; height: 18px; accent-color: var(--acc); }
+.note { color: var(--mute); font-size: 12px; margin: 6px 0 0; }
+pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace; color: #d6d2ca; margin: 0 0 8px; }
+#out { display: none; gap: 8px; margin-top: 10px; }
+#out.show { display: flex; }
+</style>
+</head>
+<body>
+<header>News Shorts<span>ニュース動画の自動生成</span></header>
+<main>
+  <section class="stage">
+    <canvas id="cv" width="1080" height="1920"></canvas>
+    <div class="ctl">
+      <button id="play" disabled>再生</button>
+      <input type="range" id="seek" min="0" max="1000" value="0" disabled>
+      <span id="time">0.0 / 0.0</span>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:12px">
+    <div class="card">
+      <button id="go" class="primary">ニュースを集めて動画にする</button>
+      <div id="status">準備しています…</div>
+      <div id="prog"><i></i></div>
+      <div id="out" class="row">
+        <a id="dl" class="btn" download>MP4を保存</a>
+        <button id="share" hidden>共有</button>
+      </div>
+    </div>
+
+    <details id="setBox">
+      <summary>設定</summary>
+      <label for="provider">ニュースを集めるAI</label>
+      <select id="provider">
+        <option value="grok">Grok（Xとウェブを検索）</option>
+        <option value="claude">Claude（ウェブを検索）</option>
+      </select>
+      <label for="key">APIキー（この端末にだけ保存）</label>
+      <input type="password" id="key" autocomplete="off" placeholder="xai-… / sk-ant-…">
+      <label for="model">モデル</label>
+      <input type="text" id="model" autocomplete="off">
+      <label for="date">日付（日本時間）</label>
+      <input type="date" id="date">
+      <label class="check"><input type="checkbox" id="autoExport" checked> 集めたあと、MP4の書き出しまで続けて行う</label>
+      <p class="note">Grok は X の投稿を直接検索できます。ブラウザからつながらないときは、同じフォルダの run.py で自動実行できます。</p>
+    </details>
+
+    <details>
+      <summary>台本（JSON）</summary>
+      <textarea id="json" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="apply">台本を反映</button>
+        <button id="sample">見本（11/14）</button>
+        <button id="exportBtn" disabled>MP4を書き出す</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>出典</summary>
+      <pre id="sources"></pre>
+      <button id="copySrc">出典をコピー</button>
+    </details>
+  </section>
+</main>
+
+<script>/*__MUXER__*/</script>
+<script>/*__ENGINE__*/</script>
+<script>
+const ASSETS = /*__ASSETS__*/;
+const SAMPLE = /*__SAMPLE__*/;
+</script>
+<script>
+(() => {
+'use strict';
+const E = window.NSEngine;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('newsShorts.' + k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('newsShorts.' + k, v); } catch (e) {} },
+};
+const S = { script: null, show: null, bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, blob: null, name: '', busy: false };
+const ctx = $('cv').getContext('2d');
+
+const PROVIDERS = {
+  grok: { model: 'grok-4.7', url: 'https://api.x.ai/v1/responses' },
+  claude: { model: 'claude-sonnet-5-5', url: 'https://api.anthropic.com/v1/messages' },
+};
+
+function say(msg, err) { $('status').textContent = msg; $('status').classList.toggle('err', !!err); console.log('[news-shorts]', msg); }
+function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad2 = n => String(n).padStart(2, '0');
+
+function jstNow() { return new Date(Date.now() + 9 * 3600e3); }
+function todayJST() { const d = jstNow(); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
+function addDays(iso, n) { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+/* ---------- 素材 ---------- */
+function b64bytes(b64) { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function loadAssets() {
+  await Promise.all('ABCDE'.split('').map(async g => {
+    const im = new Image(); im.src = 'data:image/jpeg;base64,' + ASSETS['bg_' + g];
+    await im.decode(); S.bgs[g] = im;
+  }));
+  S.music = b64bytes(ASSETS.music);
+  try { S.aac = parseM4A(S.music); } catch (e) { console.warn('m4a', e); S.aac = null; }
+}
+
+/* m4a（AAC）を読み、音のフレームをそのまま取り出す */
+function parseM4A(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const str = (p, n) => String.fromCharCode(...u8.subarray(p, p + n));
+  function boxes(a, b) {
+    const out = []; let p = a;
+    while (p + 8 <= b) {
+      let size = dv.getUint32(p), hdr = 8; const type = str(p + 4, 4);
+      if (size === 1) { size = Number(dv.getBigUint64(p + 8)); hdr = 16; } else if (size === 0) size = b - p;
+      if (size < 8) break;
+      out.push({ type, data: p + hdr, end: p + size }); p += size;
+    }
+    return out;
+  }
+  const find = (l, t) => l.find(x => x.type === t);
+  const moov = find(boxes(0, u8.length), 'moov');
+  for (const trak of boxes(moov.data, moov.end).filter(x => x.type === 'trak')) {
+    const mdia = find(boxes(trak.data, trak.end), 'mdia'); const mb = boxes(mdia.data, mdia.end);
+    if (str(find(mb, 'hdlr').data + 8, 4) !== 'soun') continue;
+    const mdhd = find(mb, 'mdhd'); const ts = u8[mdhd.data] === 1 ? dv.getUint32(mdhd.data + 20) : dv.getUint32(mdhd.data + 12);
+    const minf = find(mb, 'minf'); const stbl = find(boxes(minf.data, minf.end), 'stbl'); const sb = boxes(stbl.data, stbl.end);
+    const entry = find(sb, 'stsd').data + 8;
+    const channels = dv.getUint16(entry + 24), rate = dv.getUint32(entry + 32) >>> 16;
+    const esds = find(boxes(entry + 36, entry + dv.getUint32(entry)), 'esds');
+    let p = esds.data + 4, asc = null;
+    const len = () => { let n = 0, b; do { b = u8[p++]; n = (n << 7) | (b & 0x7f); } while (b & 0x80); return n; };
+    while (p < esds.end) {
+      const tag = u8[p++]; const n = len();
+      if (tag === 3) { const fl = u8[p + 2]; p += 3; if (fl & 0x80) p += 2; if (fl & 0x40) p += 1 + u8[p]; if (fl & 0x20) p += 2; }
+      else if (tag === 4) p += 13;
+      else if (tag === 5) { asc = u8.slice(p, p + n); break; }
+      else p += n;
+    }
+    const stts = find(sb, 'stts'), stsz = find(sb, 'stsz'), stsc = find(sb, 'stsc'), stco = find(sb, 'stco') || find(sb, 'co64');
+    const durs = [];
+    for (let i = 0, n = dv.getUint32(stts.data + 4); i < n; i++) { const c = dv.getUint32(stts.data + 8 + i * 8), d = dv.getUint32(stts.data + 12 + i * 8); for (let k = 0; k < c; k++) durs.push(d); }
+    const fixed = dv.getUint32(stsz.data + 4), count = dv.getUint32(stsz.data + 8);
+    const sizes = []; for (let i = 0; i < count; i++) sizes.push(fixed || dv.getUint32(stsz.data + 12 + i * 4));
+    const big = stco.type === 'co64', nch = dv.getUint32(stco.data + 4), offs = [];
+    for (let i = 0; i < nch; i++) offs.push(big ? Number(dv.getBigUint64(stco.data + 8 + i * 8)) : dv.getUint32(stco.data + 8 + i * 4));
+    const sc = []; for (let i = 0, n = dv.getUint32(stsc.data + 4); i < n; i++) sc.push([dv.getUint32(stsc.data + 8 + i * 12), dv.getUint32(stsc.data + 12 + i * 12)]);
+    const samples = []; let s = 0, t = 0;
+    for (let c = 0; c < nch && s < count; c++) {
+      let per = 0; for (const [first, spc] of sc) if (c + 1 >= first) per = spc;
+      let o = offs[c];
+      for (let k = 0; k < per && s < count; k++, s++) { samples.push({ o, n: sizes[s], t: t / ts, d: (durs[s] || 1024) / ts }); o += sizes[s]; t += durs[s] || 1024; }
+    }
+    return { rate, channels, asc, samples, duration: t / ts, bytes: u8 };
+  }
+  throw new Error('音のトラックがありません');
+}
+function musicOffset(dur) { const md = S.aac ? S.aac.duration : 41.6; return Math.max(0, md - dur); }
+
+async function loadFonts(script) {
+  const txt = E.allText(script);
+  if (!document.fonts || !document.fonts.load) return;
+  const link = document.getElementById('gf');
+  if (link && !link.sheet) await Promise.race([new Promise(r => { link.addEventListener('load', r, { once: true }); link.addEventListener('error', r, { once: true }); }), sleep(8000)]);
+  await Promise.race([
+    Promise.all(E.fontSpecs().map(f => document.fonts.load(f, txt).catch(() => {}))).then(() => document.fonts.ready),
+    sleep(20000),
+  ]);
+}
+
+/* ---------- 台本 ---------- */
+const SMALL = new Set(['to', 'and', 'of', 'on', 'for', 'from', 'in', 'at', 'by', 'with', 'the', 'a', 'an', 'into', 'vs']);
+const arr = v => Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : (v ? String(v).split(/\n/).map(s => s.trim()).filter(Boolean) : []);
+const up = s => String(s || '').trim().toUpperCase();
+function subCase(line) { return String(line).trim().split(/\s+/).map(w => SMALL.has(w.toLowerCase()) ? w.toLowerCase() : w.toUpperCase()).join(' '); }
+function normItem(it) {
+  const head = arr(it.head).map(up).slice(0, 2);
+  return {
+    kw: up(it.kw || (head[0] || '').split(' ')[0]).slice(0, 16),
+    cat: up(it.cat || 'NEWS'), topic: up(it.topic || ''),
+    head: head.length ? head : [up(it.kw)],
+    sub: arr(it.sub).slice(0, 3).map(subCase),
+    jp: arr(it.jp).slice(0, 3),
+    tags: arr(it.tags).map(up).slice(0, 4),
+    src: String(it.src || '').trim(), date: String(it.date || '').trim(), url: String(it.url || '').trim(),
+  };
+}
+function normalize(s) {
+  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 12).map(normItem) };
+  if (s.coffee) {
+    const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], ...s.coffee });
+    c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK'];
+    if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
+    out.coffee = c;
+  }
+  if (!out.items.length) throw new Error('ニュースが1本もありません');
+  return out;
+}
+function sourcesText(s) {
+  const lines = s.items.map((it, i) => `${pad2(i + 1)} ${it.head.join(' ')} — ${it.src}${it.date ? ' (' + it.date + ')' : ''}${it.url ? '\n   ' + it.url : ''}`);
+  return lines.join('\n') + '\n\nMusic: Holst “Jupiter” – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons, public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
+}
+async function setScript(raw, quiet) {
+  stop();
+  const s = normalize(raw);
+  await loadFonts(s);
+  S.script = s; S.show = E.prepare(s);
+  $('json').value = JSON.stringify(s, null, 2);
+  $('sources').textContent = sourcesText(s);
+  $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
+  $('seek').value = 0; draw(0);
+  if (!quiet) say(`台本を読み込みました（${S.show.total}本・${S.show.duration.toFixed(1)}秒）`);
+  return S.show;
+}
+
+/* ---------- 再生 ---------- */
+function draw(T) {
+  if (!S.show) return;
+  E.drawFrame(ctx, S.show, Math.min(T, S.show.duration - 1 / E.FPS), S.bgs);
+  $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
+}
+async function audioCtx() {
+  if (!S.ac) S.ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (S.ac.state === 'suspended') await S.ac.resume();
+  if (!S.abuf) S.abuf = await new Promise((ok, ng) => S.ac.decodeAudioData(S.music.slice(0).buffer, ok, ng));
+  return S.ac;
+}
+async function play() {
+  if (!S.show) return;
+  if (S.playing) { stop(); return; }
+  const ac = await audioCtx();
+  let T0 = (+$('seek').value / 1000) * S.show.duration;
+  if (T0 >= S.show.duration - 0.05) T0 = 0;
+  const src = ac.createBufferSource(); src.buffer = S.abuf;
+  const g = ac.createGain(); src.connect(g); g.connect(ac.destination);
+  src.start(0, musicOffset(S.show.duration) + T0);
+  S.src = src; S.t0 = ac.currentTime - T0; S.playing = true; $('play').textContent = '停止';
+  const tick = () => {
+    if (!S.playing) return;
+    const T = S.ac.currentTime - S.t0;
+    if (T >= S.show.duration) { stop(); $('seek').value = 0; draw(0); return; }
+    draw(T); $('seek').value = Math.round(T / S.show.duration * 1000);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function stop() {
+  if (S.src) { try { S.src.stop(); } catch (e) {} S.src = null; }
+  S.playing = false; $('play').textContent = '再生';
+}
+
+/* ---------- AI ---------- */
+async function post(url, headers, body, timeoutMs) {
+  if (window.nsRelay) {
+    const r = JSON.parse(await window.nsRelay(JSON.stringify({ url, headers, body })));
+    if (r.status >= 400) throw new Error(`APIエラー ${r.status}: ${String(r.text || '').slice(0, 300)}`);
+    return r.json;
+  }
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeoutMs || 600000);
+  let res;
+  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
+  catch (e) { throw new Error('APIにつながりませんでした（ブラウザから直接つなげない可能性があります。run.py で自動実行できます）: ' + e.message); }
+  finally { clearTimeout(tm); }
+  const text = await res.text();
+  if (!res.ok) throw new Error(`APIエラー ${res.status}: ${text.slice(0, 300)}`);
+  return JSON.parse(text);
+}
+function cfg() {
+  const provider = $('provider').value;
+  return { provider, key: $('key').value.trim(), model: $('model').value.trim() || PROVIDERS[provider].model };
+}
+async function askAI(system, prompt, opt) {
+  const c = cfg();
+  if (!c.key && !window.nsRelay) throw new Error('設定でAPIキーを入れてください');
+  const date = opt.date;
+  if (c.provider === 'grok') {
+    const body = {
+      model: c.model,
+      input: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+      tools: [{ type: 'x_search', from_date: addDays(date, -2), to_date: addDays(date, 1) }, { type: 'web_search' }],
+    };
+    const j = await post(PROVIDERS.grok.url, { 'Content-Type': 'application/json', Authorization: 'Bearer ' + c.key }, body);
+    if (typeof j.output_text === 'string' && j.output_text) return j.output_text;
+    let t = '';
+    for (const o of j.output || []) if (o.type === 'message') for (const k of o.content || []) if (typeof k.text === 'string') t += k.text;
+    if (!t && j.choices) t = j.choices.map(x => x.message && x.message.content || '').join('');
+    return t;
+  }
+  const headers = { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  const messages = [{ role: 'user', content: prompt }];
+  let j;
+  for (let k = 0; k < 5; k++) {
+    j = await post(PROVIDERS.claude.url, headers, { model: c.model, max_tokens: 12000, system, messages, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: opt.searches || 12 }] });
+    if (j.stop_reason !== 'pause_turn') break;
+    messages.push({ role: 'assistant', content: j.content });
+  }
+  return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+}
+function pickJSON(text) {
+  let t = String(text || '');
+  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (m) t = m[1];
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b < a) throw new Error('AIの返答にJSONがありません');
+  t = t.slice(a, b + 1);
+  try { return JSON.parse(t); } catch (e) { return JSON.parse(t.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); }
+}
+
+const SYSTEM = 'あなたは縦型ショート動画「News Shorts」の編集者です。X（旧Twitter）の投稿とウェブの報道を検索して、事実を確かめたうえで短い台本を書きます。記事や投稿の文章はそのまま写さず、自分の言葉で短くまとめます。出力はJSONだけです。';
+function jpDate(iso) { const [y, m, d] = iso.split('-').map(Number); return `${y}年${m}月${d}日`; }
+function newsPrompt(date) {
+  const ex = SAMPLE.items.slice(0, 2).map(x => JSON.stringify(x)).join(',\n');
+  return `今日は${jpDate(date)}（日本時間）です。
+X（旧Twitter）の投稿を中心に、ウェブの報道も使って、直近24時間（古くても48時間以内）のニュースを12本選んでください。
+
+■ 選び方
+- 日本と世界のニュースを混ぜる。ジャンルは SPORTS / POLITICS / TECH / WORLD / SOCIETY / ECONOMY / BUSINESS / LIFE / FOOD / SCIENCE / CULTURE / ENERGY などから6種類以上。
+- 報道機関や公式アカウント（例：@nhk_news @nikkei @kantei @Reuters @AP @FirstSquawk）や当事者本人の投稿を優先する。ウェブの記事を使ってもよい。
+- 投稿や記事の中身を確かめられたものだけ。噂や未確認の情報、亡くなった方の詳しい状況や残酷な描写、個人への中傷は入れない。
+- 同じ話題は1本だけ。数字や日付は出典どおりに書く。
+
+■ 各ニュースの項目（英語はすべて大文字。英字新聞の見出しのように短く）
+- kw：画面いっぱいに出す英単語1つか短い2語（12文字以内）。例 "RUGBY" "YEN" "MAPO TOFU"
+- cat：ジャンル（上の英語のどれか）
+- topic：右上に出す短い英語ラベル（12文字以内）。例 "USA" "FOREX" "X POST" "KANTEI"
+- head：英語の見出し。1〜2行の配列で、1行14文字以内。例 ["BRAVE","BLOSSOMS"]、["OIL RESERVES"]
+- sub：英語の副見出し。2〜3行の配列で、1行20文字くらいまで。to / and / of / on / for / from の小さな語だけ小文字。例 ["EU and FIVE NATIONS","to JOIN PEACE TALKS"]
+- jp：日本語の要点。1〜3行の配列で、1行18文字以内。長いときは「／」で改行の位置を入れる。例 "熊本地震 非常災害復旧復興本部が／第2回会議"
+- tags：英語のキーワード2〜4個
+- src：出典。Xの投稿なら "X @アカウント名"（2つなら "X @AP / @Reuters"）、ウェブの記事なら "WEB サイト名"
+- date：投稿か記事の日付（"M/D"）
+- url：その投稿か記事のURL（実在するものだけ）
+
+■ 例（${'11/14'}の動画から2本）
+${ex}
+
+■ 出力
+次の形のJSONだけを出してください。
+{"date":"${date}","items":[ …12本… ]}`;
+}
+function coffeePrompt(date, items) {
+  const list = items.map((it, i) => `${i + 1}. ${it.head.join(' ')} — ${it.jp.join(' ').replace(/／/g, '')}`).join('\n');
+  return `今日は${jpDate(date)}（日本時間）です。News Shorts の最後に置く「COFFEE BREAK」（ひと息つくコラム）を1本書いてください。
+
+■ 今日のニュース
+${list}
+
+■ 内容
+- 今日のニュースや X での議論から見える、少し大きな流れや気づきを1つ取り上げる（速報ではなく、考えるきっかけになる話題）。必要なら X やウェブを検索してよい。
+- 例：「AI/SI参入のない企業の／リスクが懸念し始めている」
+- 言い切りすぎない。特定の個人を批判しない。
+
+■ 項目
+- topic：右上の短い英語ラベル（10文字以内）。例 "AI / SI"
+- sub：英語の副見出し3行（大文字。1行20文字くらいまで。to / and / of / on / for / from だけ小文字）。例 ["CONCERNS EMERGE OVER","RISKS for COMPANIES","NOT ENTERING AI/SI"]
+- jp：日本語1〜2行（1行18文字以内。長いときは「／」で改行）
+- tags：["COFFEE BREAK", 英語のキーワード2個]
+
+■ 出力
+JSONだけ：{"topic":"…","sub":["…","…","…"],"jp":["…"],"tags":["COFFEE BREAK","…","…"]}`;
+}
+
+async function collect(date) {
+  say('ニュースを集めています（X とウェブを検索中。1〜3分かかります）…'); progress(0.05);
+  const news = pickJSON(await askAI(SYSTEM, newsPrompt(date), { date, searches: 15 }));
+  const items = (news.items || []).slice(0, 12).map(normItem);
+  if (!items.length) throw new Error('ニュースを取り出せませんでした');
+  say(`${items.length}本のニュースが集まりました。コーヒーブレイクを書いています…`); progress(0.25);
+  let coffee;
+  try { coffee = pickJSON(await askAI(SYSTEM, coffeePrompt(date, items), { date, searches: 4 })); }
+  catch (e) { console.warn(e); coffee = { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: ['ひと息ついて、今日のニュースを振り返る'], tags: ['COFFEE BREAK'] }; }
+  return { date, items, coffee };
+}
+
+/* ---------- 書き出し ---------- */
+function fileName(date) {
+  const d = new Date(), h = d.getHours();
+  const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${h < 12 ? 'am' : 'pm'}${pad2(h)}${pad2(d.getMinutes())}`;
+  return `${stamp}_NewsShorts_${date}.mp4`;
+}
+async function exportMP4() {
+  if (!S.show || S.busy) return;
+  S.busy = true; stop(); setBusy(true);
+  try {
+    const W = E.W, H = E.H, fps = E.FPS, dur = S.show.duration, N = Math.round(dur * fps);
+    const vcfg = { codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: fps, avc: { format: 'avc' } };
+    let ok = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined' && window.Mp4Muxer;
+    if (ok) { try { ok = (await VideoEncoder.isConfigSupported(vcfg)).supported; } catch (e) { ok = false; } }
+    let blob;
+    if (ok) {
+      const muxer = new Mp4Muxer.Muxer({
+        target: new Mp4Muxer.ArrayBufferTarget(),
+        video: { codec: 'avc', width: W, height: H, frameRate: fps },
+        audio: S.aac ? { codec: 'aac', numberOfChannels: S.aac.channels, sampleRate: S.aac.rate } : undefined,
+        fastStart: 'in-memory', firstTimestampBehavior: 'offset',
+      });
+      let fail = null;
+      const enc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { fail = e; } });
+      enc.configure(vcfg);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const c2 = cv.getContext('2d');
+      for (let f = 0; f < N; f++) {
+        if (fail) throw fail;
+        E.drawFrame(c2, S.show, f / fps, S.bgs);
+        const vf = new VideoFrame(cv, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
+        enc.encode(vf, { keyFrame: f % (fps * 2) === 0 });
+        vf.close();
+        while (enc.encodeQueueSize > 6) await sleep(4);
+        if (f % 15 === 0) { progress(0.3 + 0.65 * f / N); say(`動画を書き出しています… ${Math.round(f / N * 100)}%`); if (f % 90 === 0) draw(f / fps); await sleep(0); }
+      }
+      await enc.flush(); enc.close();
+      if (fail) throw fail;
+      if (S.aac) {
+        const off = musicOffset(dur), A = S.aac; let first = true;
+        for (const s of A.samples) {
+          if (s.t < off - 1e-6) continue;
+          if (s.t - off >= dur) break;
+          muxer.addAudioChunkRaw(A.bytes.subarray(s.o, s.o + s.n), 'key', Math.round((s.t - off) * 1e6), Math.round(s.d * 1e6),
+            first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: A.channels, sampleRate: A.rate, description: A.asc } } : undefined);
+          first = false;
+        }
+      }
+      muxer.finalize();
+      blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+    } else {
+      blob = await recordRealtime();
+    }
+    S.blob = blob; S.name = fileName(S.script.date).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
+    const url = URL.createObjectURL(blob);
+    $('dl').href = url; $('dl').download = S.name; $('out').classList.add('show');
+    $('share').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([blob], S.name, { type: blob.type })] }));
+    progress(1); say(`書き出しました：${S.name}（${(blob.size / 1048576).toFixed(1)}MB）`);
+    draw(0);
+    return blob;
+  } finally { S.busy = false; setBusy(false); }
+}
+/* WebCodecs がないブラウザでは、再生しながら録画する */
+async function recordRealtime() {
+  if (typeof MediaRecorder === 'undefined' || !$('cv').captureStream) throw new Error('このブラウザでは動画を書き出せません');
+  const ac = await audioCtx();
+  const dest = ac.createMediaStreamDestination();
+  const vs = $('cv').captureStream(E.FPS);
+  const stream = new MediaStream([...vs.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const type = ['video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 });
+  const parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  const done = new Promise(r => rec.onstop = r);
+  const src = ac.createBufferSource(); src.buffer = S.abuf; src.connect(dest);
+  draw(0); rec.start(250); const t0 = ac.currentTime + 0.05; src.start(t0, musicOffset(S.show.duration));
+  await new Promise(res => {
+    const tick = () => {
+      const T = ac.currentTime - t0;
+      if (T >= S.show.duration) { res(); return; }
+      draw(Math.max(0, T)); progress(0.3 + 0.65 * T / S.show.duration); say(`録画しています… ${Math.round(T / S.show.duration * 100)}%`);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  rec.stop(); try { src.stop(); } catch (e) {}
+  await done;
+  return new Blob(parts, { type: type.split(';')[0] || 'video/webm' });
+}
+
+function setBusy(b) { ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id => $(id).disabled = b || (id !== 'go' && id !== 'sample' && id !== 'apply' && !S.show)); }
+
+async function runAll(opts) {
+  opts = opts || {};
+  if (S.busy) return;
+  S.busy = true; setBusy(true); $('out').classList.remove('show');
+  try {
+    const date = opts.date || $('date').value || todayJST();
+    const script = opts.sample ? { ...SAMPLE } : await collect(date);
+    progress(0.28);
+    await setScript(script, true);
+    say(`台本ができました（${S.show.total}本）。`);
+  } catch (e) {
+    console.error(e); say(e.message || String(e), true); progress(0);
+    S.busy = false; setBusy(false); throw e;
+  }
+  S.busy = false; setBusy(false);
+  if (opts.export !== false && $('autoExport').checked) {
+    const blob = await exportMP4();
+    if (opts.download) $('dl').click();
+    return blob;
+  }
+}
+
+/* ---------- 画面 ---------- */
+function initUI() {
+  const prov = Q.get('provider') || store.get('provider', 'grok');
+  $('provider').value = PROVIDERS[prov] ? prov : 'grok';
+  const loadProv = () => {
+    const p = $('provider').value;
+    $('key').value = store.get('key.' + p, '');
+    $('model').value = store.get('model.' + p, '') || PROVIDERS[p].model;
+  };
+  loadProv();
+  if (Q.get('model')) $('model').value = Q.get('model');
+  $('date').value = Q.get('date') || todayJST();
+  $('provider').onchange = () => { store.set('provider', $('provider').value); loadProv(); };
+  $('key').onchange = () => store.set('key.' + $('provider').value, $('key').value.trim());
+  $('model').onchange = () => store.set('model.' + $('provider').value, $('model').value.trim());
+  $('autoExport').checked = store.get('autoExport', '1') === '1';
+  $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
+  if (!$('key').value) $('setBox').open = true;
+
+  $('go').onclick = () => runAll({ download: false }).catch(() => {});
+  $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
+  $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('JSONを読めません：' + e.message, true); } };
+  $('exportBtn').onclick = () => exportMP4().catch(e => { console.error(e); say('書き出しに失敗しました：' + e.message, true); });
+  $('play').onclick = () => play().catch(e => say(e.message, true));
+  $('seek').oninput = () => { if (S.playing) stop(); if (S.show) draw(+$('seek').value / 1000 * S.show.duration); };
+  $('share').onclick = () => navigator.share({ files: [new File([S.blob], S.name, { type: S.blob.type })], title: 'News Shorts' }).catch(() => {});
+  $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('出典をコピーしました'));
+}
+
+window.NS = {
+  run: runAll, exportMP4, setScript,
+  state: () => ({ script: S.script, sources: S.script ? sourcesText(S.script) : '', name: S.name, size: S.blob ? S.blob.size : 0 }),
+  blobBase64: async () => { const b = new Uint8Array(await S.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); },
+};
+
+(async () => {
+  initUI();
+  try {
+    await loadAssets();
+    await setScript(SAMPLE, true);
+    say('準備ができました。「ニュースを集めて動画にする」を押すと、集めて書き出すまで自動で進みます。');
+    window.NS.ready = true;
+    if (Q.get('auto') === '1') {
+      $('autoExport').checked = true;
+      await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true });
+      window.NS.done = true;
+    }
+  } catch (e) {
+    console.error(e); say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
+  }
+})();
+})();
+</script>
+</body>
+</html>
