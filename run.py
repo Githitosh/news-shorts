@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Open index.html in a headless browser and run collection through MP4 export.
+"""Open index.html in a headless browser and save the MP4 files.
 
     pip install playwright && python -m playwright install chromium
-    export XAI_API_KEY=...            # Grok searches X and the web
-    export ANTHROPIC_API_KEY=...      # Claude searches the web
-    python run.py                     # save today's video (Japan time) in out/
-    python run.py --date 2026-11-14 --provider claude
-    python run.py --sample            # export the sample script, no API call
+    python run.py                     # collect public headlines and save today's video in out/
+    python run.py --country JP --lang ja
+    python run.py --x-user name       # add public posts from that X account
+    python run.py --sample            # export the sample script
     python run.py --formats x         # one format: x, youtube, or pc
-
-This script calls the API itself, so the browser CORS limit does not apply.
 """
 import argparse
 import asyncio
@@ -47,21 +44,17 @@ async def main() -> int:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", help="YYYY-MM-DD in Japan time. Defaults to today")
-    ap.add_argument("--provider", choices=["grok", "claude"], default=None)
-    ap.add_argument("--model")
+    ap.add_argument("--provider", choices=["grok", "claude"], default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--model", help=argparse.SUPPRESS)
     ap.add_argument("--out", default=str(ROOT / "out"))
-    ap.add_argument("--sample", action="store_true", help="Export the sample script without an API call")
-    ap.add_argument("--formats", default="x,youtube,pc", help="Formats to export, comma-separated: x, youtube, pc")
+    ap.add_argument("--sample", action="store_true", help="Export the sample script")
+    ap.add_argument("--formats", default="x,youtube,pc", help="Formats to export, comma-separated: x, youtube, or pc")
     ap.add_argument("--country", default="", help="Country code: JP, US, GB, FR, DE, ES, BR, KR, TW, CN")
     ap.add_argument("--lang", default="", help="Language code: ja, en, fr, de, es, pt, ko, zh-Hans, zh-Hant")
-    ap.add_argument("--x-user", default="", help="X username. The video uses posts and replies from accounts this user follows")
+    ap.add_argument("--x-user", default="", help="X username. Public posts from this account are added")
     a = ap.parse_args()
 
-    provider = a.provider or ("grok" if os.environ.get("XAI_API_KEY") else "claude")
-    if not a.sample and not os.environ.get("XAI_API_KEY" if provider == "grok" else "ANTHROPIC_API_KEY"):
-        print("Missing API key. Set XAI_API_KEY or ANTHROPIC_API_KEY.", file=sys.stderr)
-        return 2
-    q = f"auto=1&provider={provider}&formats={a.formats}"
+    q = f"auto=1&formats={a.formats}"
     if a.sample:
         q += "&sample=1"
     if a.date:

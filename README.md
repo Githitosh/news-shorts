@@ -1,27 +1,28 @@
 # News Shorts
 
-Open the page and the news video plays. The layout follows the device: YouTube, X, a phone, or a PC. Four public-domain recordings can be selected under the picture.
+Open the page and the news video plays. Today's headlines are collected with no API key, then the video switches to them. The layout follows the device. Four public-domain recordings can be selected under the picture. Settings are behind the * button: layout, country, language (including Japanese), and an X account.
 
 | Device | Picture | When it is chosen |
 |---|---|---|
 | **Phone** | Portrait 1080×1920 | A phone browser. Text uses the full width. |
 | **X** | Portrait 1080×1920 | The X app. Same full-width layout as Phone. |
 | **YouTube** | Portrait 1080×1920 | The YouTube app. The right and bottom stay clear for buttons. |
-| **PC** | Landscape 1920×1080 | A computer. The headline is on the left and the Japanese text is on the right. |
+| **PC** | Landscape 1920×1080 | A computer. The headline is on the left and the news text is on the right. |
 
 https://githitosh.github.io/news-shorts/
 
 GitHub Pages serves the root of `main`. The picture starts on its own. Safari blocks the sound until the picture is tapped once. The video is the November 14, 2026 edition: 13 stories, about 42 seconds, then it repeats.
 
-Country, language, and X are under the picture.
+* opens Settings. The device name (Phone, X, YouTube, or PC) is there, with the country, the language, and the X account.
 
-- **Country** chooses which country's news is collected. **Language** is the language of the lines under the English headline. Changing the country sets its usual language. You can change the language after that.
-- **X account** is the account to link, for example `@name`. **Make video from follows** reads recent posts and replies from accounts that account follows, keeps the ones about the selected country, and plays a new video in the selected language. This uses the saved API key. With no key yet, the page asks for one. A linked account is saved only in this browser.
-- On the next visit, a linked account and a saved key make the video again when the page opens.
+- **Layout** follows the device until you choose Phone, X, YouTube, or PC.
+- **Country** chooses the headlines. **Language** is the language of the lines under the English headline, and Japanese is one of the choices. Changing the country sets its usual language.
+- **X account**, for example `@name`, adds that account's public posts. When this browser is signed in to X and X allows the page to read it, posts and replies from that session are used. No API key.
+- Choices stay in this browser. The next visit collects again.
 
 ```bash
+python run.py --country JP --lang ja
 python run.py --x-user name --country US --lang en
-python run.py --country FR --lang fr --provider claude
 ```
 
 Music, under the picture:
@@ -35,28 +36,23 @@ Music, under the picture:
 
 ## Make a new video
 
-`index.html` contains the pictures, the music, and the program. Chrome, Edge, and Safari can open it.
+`index.html` contains the pictures, the music, and the program. Chrome, Edge, and Safari can open it. Collection uses public headlines, so there is no API key.
 
-Add `?edit=1` to show the tools:
+* opens the tools:
 
-1. Open **Settings**, choose Grok or Claude, and enter an API key. The key stays in this browser.
-   - **Grok** searches X and the web (an xAI key).
-   - **Claude** searches the web (an Anthropic key).
-2. Choose **Collect news and make the video**. Collection, the coffee break, and export run on their own.
-3. Edit the script under **Script (JSON)**, then **Apply script** and **Export MP4**. **Sample (Nov 14)** reloads the original script.
+1. Choose the country and the language, then **Collect and play**.
+2. Edit the script under **Script (JSON)**, then **Apply script** and **Export MP4**. **Sample (Nov 14)** reloads the original script.
+3. **Export MP4 files after the stories are ready** saves Phone, YouTube, and PC files.
 
 On a phone, Share → Add to Home Screen opens it full screen.
 
 ## Run without a window
 
-Use this when the browser cannot call the API, or when the video should be made on a schedule.
-
 ```bash
 pip install playwright && python -m playwright install chromium
-export XAI_API_KEY=...        # Grok. For Claude, set ANTHROPIC_API_KEY
 python run.py                 # save today's video in out/, plus the script .json and sources .txt
-python run.py --date 2026-11-14 --provider claude
-python run.py --sample        # export the sample script, no API call
+python run.py --country JP --lang ja
+python run.py --sample        # export the sample script
 python run.py --formats x     # one format: x, youtube, or pc
 ```
 
@@ -82,11 +78,11 @@ python build.py
 
 ## Timing
 
-- Each story is 3.2 seconds: a large keyword, then the headline at 0.77 seconds, Japanese at 1.57 seconds, and tags at 2.37 seconds.
+- Each story is 3.2 seconds: a large keyword, then the headline at 0.77 seconds, the news lines at 1.57 seconds, and tags at 2.37 seconds.
 - The background eases in by 2.2% over those 3.2 seconds. The order is A B C C A B D C D C B D. The coffee break uses the study picture.
 - English headlines use a heavy serif, condensed. Small words such as to, and, and of stay small.
 - Text bounds: Phone and X use 60px side margins, YouTube uses 60–900px, and PC uses 120–1800px.
-- On Phone, X, and PC, English line breaks are chosen automatically. A Japanese `／` becomes a line break only when the line does not fit.
+- On Phone, X, and PC, English line breaks are chosen automatically. A `／` in the news lines becomes a line break only when the line does not fit.
 - The selected music file is copied into the MP4 as it is. If the video is shorter than the recording, playback starts late enough to finish with the recording.
 
 ## Credits

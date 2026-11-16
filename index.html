@@ -19,8 +19,9 @@
 :root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; }
-header { padding: calc(10px + env(safe-area-inset-top)) 16px 8px; font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
-header span { color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin-left: 6px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; }
+header .title { font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
+#gear { width: 42px; height: 36px; padding: 0; font-size: 22px; line-height: 1; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
@@ -48,7 +49,7 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 [hidden] { display: none !important; }
 @media (max-width: 819px) {
   body.watching .stage { position: static; }
-  body.watching .frame { max-width: min(100%, calc((100dvh - 360px) * 9 / 16)); }
+  body.watching .frame { max-width: min(100%, calc((100dvh - 300px) * 9 / 16)); }
 }
 #out { flex-wrap: wrap; }
 #out .btn { flex: 1 1 30%; font-size: 14px; }
@@ -81,7 +82,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header>News Shorts<span>Phone</span></header>
+<header><span class="title">News Shorts</span><button type="button" id="gear" aria-label="Settings">*</button></header>
 <main>
   <section class="stage" id="stage">
     <div class="frame">
@@ -95,49 +96,39 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     </div>
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
-    <div class="picks" id="picks">
-      <label>Country<select id="country"></select></label>
-      <label>Language<select id="lang"></select></label>
-      <label class="xfield">X account
-        <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
-      </label>
-      <label id="keySlot" hidden>API key
-        <input id="keyInline" type="password" autocomplete="off" placeholder="xai-… / sk-ant-…">
-      </label>
-      <button type="button" id="xGo">Make video from follows</button>
-    </div>
     <p id="caption" class="caption">Opening the news video…</p>
   </section>
 
   <div id="studio" class="studio" hidden>
-    <details id="makeBox">
-      <summary>Make a new video</summary>
-      <button id="go" class="primary">Collect news and make the video</button>
-      <div id="status">Opening the news video…</div>
-      <div id="prog"><i></i></div>
-      <div id="out" class="row"></div>
-    </details>
-
-    <details id="setBox">
-      <summary>Settings</summary>
-      <label for="provider">News source</label>
-      <select id="provider">
-        <option value="grok">Grok (search X and the web)</option>
-        <option value="claude">Claude (search the web)</option>
+    <section class="card" id="setBox">
+      <label for="layout">Layout</label>
+      <select id="layout">
+        <option value="auto">Auto</option>
+        <option value="phone">Phone</option>
+        <option value="x">X</option>
+        <option value="youtube">YouTube</option>
+        <option value="pc">PC</option>
       </select>
-      <label for="key">API key (stored only on this device)</label>
-      <input type="password" id="key" autocomplete="off" placeholder="xai-… / sk-ant-…">
-      <label for="model">Model</label>
-      <input type="text" id="model" autocomplete="off">
-      <label for="date">Date (Japan time)</label>
+      <label for="country">Country</label>
+      <select id="country"></select>
+      <label for="lang">Language</label>
+      <select id="lang"></select>
+      <p class="note">News lines use this language. Japanese is included. Headlines stay in English.</p>
+      <label for="xUser">X account</label>
+      <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
+      <p class="note">Public posts and replies from this account are added to the country's headlines. A signed-in X session in this browser is used when X allows the page to read it.</p>
+      <label for="date">Date</label>
       <input type="date" id="date">
-      <label class="check"><input type="checkbox" id="autoExport" checked> Export MP4 files after the script is ready</label>
+      <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
       <label>Formats to export</label>
       <label class="check"><input type="checkbox" class="fx" value="x" checked> Phone and X (portrait 1080×1920)</label>
       <label class="check"><input type="checkbox" class="fx" value="youtube" checked> YouTube (portrait 1080×1920, room for buttons)</label>
       <label class="check"><input type="checkbox" class="fx" value="pc" checked> PC (landscape 1920×1080)</label>
-      <p class="note">Grok can search X posts directly. If the browser cannot reach the API, run run.py from this folder.</p>
-    </details>
+      <button id="go" class="primary">Collect and play</button>
+      <div id="status">Opening the news video…</div>
+      <div id="prog"><i></i></div>
+      <div id="out" class="row"></div>
+    </section>
 
     <details>
       <summary>Script (JSON)</summary>
@@ -2573,11 +2564,6 @@ const TRACKS = [
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
 const ctx = $('cv').getContext('2d');
 
-const PROVIDERS = {
-  grok: { model: 'grok-4.7', url: 'https://api.x.ai/v1/responses' },
-  claude: { model: 'claude-sonnet-5-5', url: 'https://api.anthropic.com/v1/messages' },
-};
-
 function say(msg, err) {
   $('status').textContent = msg; $('status').classList.toggle('err', !!err);
   const c = $('caption'); if (c) { c.textContent = msg; c.classList.toggle('err', !!err); }
@@ -2612,10 +2598,16 @@ function detectView() {
   if (phoneSized) return { format: 'x', label: 'Phone' };
   return { format: 'pc', label: 'PC' };
 }
-function setViewLabel(label) {
-  S.viewLabel = label;
-  const sub = document.querySelector('header span');
-  if (sub) sub.textContent = label;
+function applyLayout() {
+  const box = $('layout');
+  const detected = detectView();
+  const opt = box && box.querySelector('option[value="auto"]');
+  if (opt) opt.textContent = 'Auto (' + detected.label + ')';
+  const choice = box ? box.value : 'auto';
+  let format = detected.format;
+  if (choice === 'phone' || choice === 'x') format = 'x';
+  else if (choice === 'youtube' || choice === 'pc') format = choice;
+  if (format !== S.format) setFormat(format);
 }
 function useTrack(id) {
   const available = TRACKS.filter(t => ASSETS.tracks && ASSETS.tracks[t.id]);
@@ -2917,142 +2909,205 @@ function stop() {
   const u = $('unmute'); if (u) u.hidden = true;
 }
 
-/* ---------- AI ---------- */
-async function post(url, headers, body, timeoutMs) {
-  if (window.nsRelay) {
-    const r = JSON.parse(await window.nsRelay(JSON.stringify({ url, headers, body })));
-    if (r.status >= 400) throw new Error(`API error ${r.status}: ${String(r.text || '').slice(0, 300)}`);
-    return r.json;
-  }
-  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeoutMs || 600000);
-  let res;
-  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
-  catch (e) { throw new Error('Could not reach the API. run.py can run this outside the browser: ' + e.message); }
-  finally { clearTimeout(tm); }
-  const text = await res.text();
-  if (!res.ok) throw new Error(`API error ${res.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
-}
-function cfg() {
-  const provider = $('provider').value;
-  return { provider, key: $('key').value.trim(), model: $('model').value.trim() || PROVIDERS[provider].model };
-}
-async function askAI(system, prompt, opt) {
-  const c = cfg();
-  if (!c.key && !window.nsRelay) throw new Error('Add an API key in Settings.');
-  const date = opt.date;
-  if (c.provider === 'grok') {
-    const body = {
-      model: c.model,
-      input: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
-      tools: [{ type: 'x_search', from_date: addDays(date, -2), to_date: addDays(date, 1) }, { type: 'web_search' }],
-    };
-    const j = await post(PROVIDERS.grok.url, { 'Content-Type': 'application/json', Authorization: 'Bearer ' + c.key }, body);
-    if (typeof j.output_text === 'string' && j.output_text) return j.output_text;
-    let t = '';
-    for (const o of j.output || []) if (o.type === 'message') for (const k of o.content || []) if (typeof k.text === 'string') t += k.text;
-    if (!t && j.choices) t = j.choices.map(x => x.message && x.message.content || '').join('');
-    return t;
-  }
-  const headers = { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
-  const messages = [{ role: 'user', content: prompt }];
-  let j;
-  for (let k = 0; k < 5; k++) {
-    j = await post(PROVIDERS.claude.url, headers, { model: c.model, max_tokens: 12000, system, messages, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: opt.searches || 12 }] });
-    if (j.stop_reason !== 'pause_turn') break;
-    messages.push({ role: 'assistant', content: j.content });
-  }
-  return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-}
-function pickJSON(text) {
-  let t = String(text || '');
-  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (m) t = m[1];
-  const a = t.indexOf('{'), b = t.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('The reply did not contain JSON.');
-  t = t.slice(a, b + 1);
-  try { return JSON.parse(t); } catch (e) { return JSON.parse(t.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); }
-}
-
-const SYSTEM = 'You are the editor of the vertical video News Shorts. Search X and the web, check the facts, and write a short script in your own words. Do not copy sentences from posts or articles. Do not invent accounts, posts, or numbers. Reply with JSON only.';
+/* ---------- collection ---------- */
 function market() {
   const country = COUNTRIES.find(c => c.id === (($('country') && $('country').value) || '')) || COUNTRIES[0];
   const lang = LANGS.find(l => l.id === (($('lang') && $('lang').value) || '')) || LANGS.find(l => l.id === country.lang) || LANGS[0];
   return { country, lang };
 }
 function xHandle() { return String(S.xUser || '').replace(/^@+/, '').trim(); }
-function lineRule(langId) {
-  return ['ja', 'ko', 'zh-Hans', 'zh-Hant'].includes(langId)
-    ? '1 to 3 lines, at most 18 characters each. Use ／ only as a line break.'
-    : '1 to 3 lines, at most 42 characters each.';
-}
-function newsPrompt(date) {
+const SECTIONS = [
+  ['', 'NEWS'],
+  ['WORLD', 'WORLD'],
+  ['NATION', 'POLITICS'],
+  ['BUSINESS', 'BUSINESS'],
+  ['TECHNOLOGY', 'TECH'],
+  ['SPORTS', 'SPORTS'],
+  ['SCIENCE', 'SCIENCE'],
+  ['ENTERTAINMENT', 'CULTURE'],
+];
+const GRAPHIC = /murder|stabbed|shot dead|shooting|killed|beheading|殺害|刺殺|遺体|刺され|死傷|銃乱射/i;
+const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
+
+function edition() {
   const { country, lang } = market();
-  const handle = xHandle();
-  const ex = SAMPLE.items.slice(0, 2).map(x => JSON.stringify(x)).join(',\n');
-  const focus = handle
-    ? `The viewer's X account is @${handle}. Search X and find accounts that @${handle} follows. Use only recent posts and replies from those followed accounts. A reply is a comment. Keep a post only when it is about ${country.name}. Skip reposts. If you cannot find who @${handle} follows, return {"date":"${date}","items":[]}.`
-    : `Choose news about ${country.name} from the last 48 hours. Prefer X posts and reporting from that country.`;
-  return `Today is ${date} (Japan time).
-${focus}
-
-Selection
-- 12 stories, at least 6 genres from SPORTS, POLITICS, TECH, WORLD, SOCIETY, ECONOMY, BUSINESS, LIFE, FOOD, SCIENCE, CULTURE, ENERGY.
-- Prefer news organizations, official accounts, and the people involved. You may use a web article when the X post is thin.
-- Use only posts and articles you actually found. No rumors, graphic detail, or attacks on private people.
-- One topic each. Keep numbers and dates as published.
-
-Fields. English headlines are uppercase and short, like a newspaper.
-- kw: one or two English words, at most 12 characters. Example: "RUGBY"
-- cat: one genre from the list above
-- topic: a short English label, at most 12 characters
-- head: 1 or 2 lines, at most 14 characters each
-- sub: 2 or 3 lines, about 20 characters each. Only to, and, of, on, for, and from are lowercase
-- jp: the story in ${lang.name}. ${lineRule(lang.id)}
-- tags: 2 to 4 English keywords
-- src: "X @account" for a post, or "WEB site name" for an article
-- date: "M/D"
-- url: a real URL, or omit it
-
-Shape example from the November 14 video. Its jp lines are Japanese. Write jp in ${lang.name} instead.
-${ex}
-
-Reply with JSON only:
-{"date":"${date}","items":[ ...12 stories... ]}`;
+  const hl = { ja: 'ja', en: 'en-US', fr: 'fr', de: 'de', es: 'es', pt: 'pt-BR', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' }[lang.id] || 'en-US';
+  const ceidLang = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt-419', ko: 'ko', 'zh-Hans': 'zh-Hans', 'zh-Hant': 'zh-Hant' }[lang.id] || 'en';
+  return { hl, gl: country.id, ceid: country.id + ':' + ceidLang, lang, country };
 }
-function coffeePrompt(date, items) {
-  const { country, lang } = market();
-  const list = items.map((it, i) => `${i + 1}. ${it.head.join(' ')} — ${it.jp.join(' ').replace(/／/g, '')}`).join('\n');
-  return `Today is ${date} (Japan time). Write one COFFEE BREAK for the end of a News Shorts video about ${country.name}.
-
-Stories
-${list}
-
-Write one larger observation from these stories or from the X discussion. Do not attack a person. The jp lines must be in ${lang.name}. ${lineRule(lang.id)}
-
-Reply with JSON only:
-{"topic":"AI / SI","sub":["A PAUSE BETWEEN","THE HEADLINES"],"jp":["..."],"tags":["COFFEE BREAK","NOTE"]}`;
+function feedUrl(section) {
+  const e = edition();
+  const base = section ? 'https://news.google.com/rss/headlines/section/topic/' + section : 'https://news.google.com/rss';
+  return base + '?hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
 }
-
+async function getText(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Could not load news (' + res.status + ').');
+  return res.text();
+}
+function splitHeadline(title) {
+  const parts = String(title || '').split(/\s[-–—]\s/);
+  if (parts.length < 2) return { headline: String(title || '').trim(), source: 'News' };
+  return { headline: parts.slice(0, -1).join(' - ').trim(), source: parts[parts.length - 1].trim() };
+}
+async function newsRows(section, cat) {
+  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl(section));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429 || res.status === 503) { await sleep(500 * (attempt + 1)); continue; }
+    if (!res.ok) return [];
+    const j = JSON.parse(await res.text());
+    if (!j || j.status !== 'ok') return [];
+    return (j.items || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat }));
+  }
+  return [];
+}
+function postsFromMarkdown(md, handle) {
+  if (!md || /onboarding\/web|redirect_after_login/.test(md)) return [];
+  const posts = [];
+  for (const chunk of md.split(/\n\*\s+/).slice(1)) {
+    const m = chunk.match(/\]\(https:\/\/x\.com\/[A-Za-z0-9_]+\)\s+([\s\S]+)/);
+    if (!m) continue;
+    const text = m[1].replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+    if (text.length < 24) continue;
+    posts.push({ headline: text.slice(0, 280), link: 'https://x.com/' + handle, pubDate: '', cat: 'NEWS', source: 'X @' + handle, x: true });
+  }
+  return posts.slice(0, 6);
+}
+async function publicPosts(handle) {
+  return postsFromMarkdown(await getText('https://r.jina.ai/https://x.com/' + encodeURIComponent(handle)), handle);
+}
+async function sessionPosts(handle) {
+  const targets = [
+    'https://x.com/' + encodeURIComponent(handle) + '/with_replies',
+    'https://x.com/search?q=' + encodeURIComponent('(from:' + handle + ') OR (to:' + handle + ')') + '&src=typed_query&f=live',
+    'https://x.com/home',
+  ];
+  for (const url of targets) {
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      const text = await res.text();
+      const posts = postsFromMarkdown(text, handle);
+      if (posts.length) return posts;
+    } catch (e) { /* This page cannot read a signed-in X tab when X blocks it. */ }
+  }
+  return publicPosts(handle);
+}
+async function translateMany(texts, tl) {
+  const sep = '\n###\n';
+  const out = texts.slice();
+  for (let i = 0; i < texts.length; i += 5) {
+    const slice = texts.slice(i, i + 5);
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + encodeURIComponent(tl) + '&dt=t&q=' + encodeURIComponent(slice.join(sep));
+    const data = JSON.parse(await getText(url));
+    const joined = (data[0] || []).map(row => (row && row[0]) || '').join('');
+    const parts = joined.split(/\s*###\s*/);
+    slice.forEach((src, k) => { out[i + k] = ((parts[k] || src).trim() || src); });
+  }
+  return out;
+}
+function cjkLang(id) { return ['ja', 'ko', 'zh-Hans', 'zh-Hant'].includes(id); }
+function linesOf(text, max, count, cjk) {
+  const clean = String(text || '').replace(/\s+/g, cjk ? '' : ' ').trim();
+  if (!clean) return [];
+  if (cjk) {
+    const out = [];
+    for (let i = 0; i < clean.length && out.length < count; i += max) out.push(clean.slice(i, i + max));
+    return out;
+  }
+  const words = clean.split(' ').filter(Boolean);
+  const out = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur ? cur + ' ' + w : w;
+    if (cur && next.length > max) {
+      out.push(cur);
+      if (out.length === count) return out;
+      cur = w;
+    } else cur = next;
+  }
+  if (cur && out.length < count) out.push(cur);
+  return out;
+}
+function storyFrom(raw, english, local, langId) {
+  const en = String(english || raw.headline || '').replace(/\s+/g, ' ').trim();
+  const loc = String(local || raw.headline || '').replace(/\s+/g, ' ').trim();
+  const cjk = cjkLang(langId);
+  const headSrc = en.toUpperCase();
+  const words = headSrc.split(' ').filter(w => w.length > 2 && !SMALL.has(w.toLowerCase()));
+  const kw = ((words[0] || headSrc.split(' ')[0] || 'NEWS').replace(/[^A-Z0-9]/g, '').slice(0, 12)) || 'NEWS';
+  const head = linesOf(headSrc, 32, 2, false);
+  const sub = linesOf('FROM ' + (raw.source || 'NEWS'), 34, 2, false);
+  const jp = linesOf(loc, cjk ? 18 : 42, 3, cjk);
+  let md = '';
+  if (raw.pubDate) {
+    const stamp = String(raw.pubDate);
+    const d = new Date(stamp.includes('T') ? stamp : stamp.replace(' ', 'T') + 'Z');
+    if (!Number.isNaN(d.getTime())) md = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+  }
+  return {
+    kw, cat: raw.cat || 'NEWS', topic: kw,
+    head: head.length ? head : [kw],
+    sub: sub.length ? sub : ['FROM THE WIRE'],
+    jp: jp.length ? jp : [(loc || en).slice(0, cjk ? 18 : 42)],
+    tags: [raw.cat || 'NEWS', kw].slice(0, 3),
+    src: raw.x ? (raw.source || 'X') : ('WEB ' + (raw.source || 'News')),
+    date: md,
+    url: raw.link || '',
+  };
+}
+function mixRows(rows) {
+  const by = {};
+  rows.forEach(r => { (by[r.cat] || (by[r.cat] = [])).push(r); });
+  const cats = Object.keys(by);
+  const mixed = [];
+  for (let n = 0; mixed.length < 16 && cats.some(c => by[c][n]); n++) cats.forEach(c => { if (by[c][n]) mixed.push(by[c][n]); });
+  return mixed;
+}
 async function collect(date) {
   const { country, lang } = market();
   const handle = xHandle();
-  say(handle
-    ? `Reading posts and replies from accounts @${handle} follows. ${country.name}, ${lang.name}. This takes 1–3 minutes…`
-    : `Collecting ${country.name} news in ${lang.name}. This takes 1–3 minutes…`);
-  progress(0.05);
-  const news = pickJSON(await askAI(SYSTEM, newsPrompt(date), { date, searches: 15 }));
-  const items = (news.items || []).slice(0, 12).map(normItem);
-  if (!items.length) throw new Error(handle
-    ? `No posts from accounts @${handle} follows matched ${country.name}.`
-    : 'No stories were found.');
-  say(`Collected ${items.length} stories. Writing the coffee break in ${lang.name}…`); progress(0.25);
-  let coffee;
-  try { coffee = pickJSON(await askAI(SYSTEM, coffeePrompt(date, items), { date, searches: 4 })); }
-  catch (e) {
-    console.warn(e);
-    coffee = { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
+  say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', including @' + handle + ' on X' : '') + '…');
+  progress(0.08);
+  const batches = [];
+  for (const [sec, cat] of SECTIONS) {
+    try { batches.push(await newsRows(sec, cat)); } catch (e) { console.warn(e); batches.push([]); }
+    if (batches.reduce((n, list) => n + list.length, 0) >= 16) break;
   }
-  return { date, items, coffee, market: `${country.name} · ${lang.name}` };
+  const seen = new Set();
+  const rows = [];
+  batches.flat().forEach(it => {
+    const sp = splitHeadline(it.title);
+    if (!sp.headline || GRAPHIC.test(sp.headline)) return;
+    const key = sp.headline.toLowerCase().slice(0, 90);
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: it.cat, source: sp.source });
+  });
+  let xrows = [];
+  if (handle) { try { xrows = await sessionPosts(handle); } catch (e) { console.warn(e); } }
+  const chosen = [...xrows, ...mixRows(rows)].slice(0, 12);
+  if (chosen.length < 4) throw new Error('Could not collect enough headlines. The sample keeps playing.');
+  progress(0.45);
+  const originals = chosen.map(r => r.headline);
+  let english = lang.id === 'en' ? originals.slice() : await translateMany(originals, 'en');
+  let local = lang.id === 'en' ? english.slice() : originals.slice();
+  const xIdx = chosen.map((r, i) => (r.x ? i : -1)).filter(i => i >= 0);
+  if (xIdx.length) {
+    const enX = await translateMany(xIdx.map(i => chosen[i].headline), 'en');
+    xIdx.forEach((i, k) => { english[i] = enX[k]; });
+    if (lang.id === 'en') xIdx.forEach((i, k) => { local[i] = enX[k]; });
+    else {
+      const locX = await translateMany(xIdx.map(i => chosen[i].headline), GTX[lang.id] || 'en');
+      xIdx.forEach((i, k) => { local[i] = locX[k]; });
+    }
+  }
+  return {
+    date,
+    items: chosen.map((r, i) => storyFrom(r, english[i], local[i], lang.id)),
+    coffee: { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] },
+    market: country.name + ' · ' + lang.name,
+  };
 }
 
 /* ---------- 書き出し ---------- */
@@ -3170,19 +3225,22 @@ function setBusy(b) { ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id 
 
 async function runAll(opts) {
   opts = opts || {};
-  if (S.busy) return;
+  if (S.busy) { S.again = opts; return; }
   S.busy = true; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   try {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
-    progress(0.28);
+    progress(0.7);
     await setScript(script, true);
-    say(`Script ready (${S.show.total} stories).`);
+    say(watchLine(!!(S.ac && S.ac.state === 'running')));
   } catch (e) {
     console.error(e); say(e.message || String(e), true); progress(0);
-    S.busy = false; setBusy(false); throw e;
+    S.busy = false; setBusy(false);
+    if (S.again) { const next = S.again; S.again = null; return runAll(next); }
+    throw e;
   }
   S.busy = false; setBusy(false);
+  if (S.again) { const next = S.again; S.again = null; return runAll(next); }
   if (opts.export !== false && $('autoExport').checked) {
     const names = await exportMP4(opts.formats || chosenFormats());
     if (opts.download) for (const a of document.querySelectorAll('#out a')) { a.click(); await sleep(400); }
@@ -3191,58 +3249,31 @@ async function runAll(opts) {
   if (WATCH && S.show && !S.playing) startWatch();
 }
 function refreshMarket() {
-  if (S.busy || Q.get('auto') === '1') return;
-  const { country, lang } = market();
-  if (!xHandle()) {
-    say(`Country: ${country.name}. Language: ${lang.name}. Link an X account to make the video from accounts you follow.`);
-    return;
-  }
-  if (!cfg().key && !window.nsRelay) {
-    $('keySlot').hidden = false;
-    say('Enter an API key. The video is then made from posts and replies by accounts you follow.');
-    return;
-  }
+  if (Q.get('auto') === '1') return;
   runAll({ download: false, export: false }).catch(() => {});
 }
 
 /* ---------- 画面 ---------- */
 function initUI() {
-  const prov = Q.get('provider') || store.get('provider', 'grok');
-  $('provider').value = PROVIDERS[prov] ? prov : 'grok';
-  const loadProv = () => {
-    const p = $('provider').value;
-    $('key').value = store.get('key.' + p, '');
-    $('model').value = store.get('model.' + p, '') || PROVIDERS[p].model;
-  };
-  loadProv();
-  if (Q.get('model')) $('model').value = Q.get('model');
   $('date').value = Q.get('date') || todayJST();
-  $('provider').onchange = () => { store.set('provider', $('provider').value); loadProv(); };
-  $('key').onchange = () => store.set('key.' + $('provider').value, $('key').value.trim());
-  $('model').onchange = () => store.set('model.' + $('provider').value, $('model').value.trim());
-  $('autoExport').checked = store.get('autoExport', '1') === '1';
+  $('autoExport').checked = store.get('autoExport', '0') === '1';
   $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
-
+  $('gear').onclick = () => { $('studio').hidden = !$('studio').hidden; };
   if (Q.get('edit') === '1') $('studio').hidden = false;
-  $('go').onclick = () => {
-    if (!$('key').value.trim() && !window.nsRelay) { $('studio').hidden = false; $('makeBox').open = true; $('setBox').open = true; }
-    runAll({ download: false }).catch(() => {});
-  };
+  const forced = Q.get('format');
+  const savedLayout = store.get('layout', 'auto');
+  $('layout').value = forced === 'pc' || forced === 'youtube' ? forced : (forced === 'x' ? 'phone' : (['auto', 'phone', 'x', 'youtube', 'pc'].includes(savedLayout) ? savedLayout : 'auto'));
+  $('layout').onchange = () => { if (!Q.get('format')) store.set('layout', $('layout').value); applyLayout(); };
+  applyLayout();
+  $('go').onclick = () => runAll({ download: false, export: $('autoExport').checked }).catch(() => {});
   $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
   $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('Could not read the JSON: ' + e.message, true); } };
   $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('Export failed: ' + e.message, true); });
-  const view = detectView();
-  S.format = view.format;
-  setViewLabel(view.label);
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
-    if (Q.get('format') || S.busy) return;
+    if (Q.get('format') || $('layout').value !== 'auto' || S.busy) return;
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      const next = detectView();
-      setViewLabel(next.label);
-      if (next.format !== S.format) setFormat(next.format);
-    }, 150);
+    resizeTimer = setTimeout(applyLayout, 150);
   });
   const musicBox = $('music');
   TRACKS.forEach(t => {
@@ -3289,25 +3320,8 @@ function initUI() {
     S.xUser = $('xUser').value.replace(/^@+/, '').trim();
     $('xUser').value = S.xUser ? '@' + S.xUser : '';
     store.set('xUser', S.xUser);
-  };
-  $('keyInline').value = $('key').value;
-  $('keyInline').onchange = () => {
-    $('key').value = $('keyInline').value.trim();
-    store.set('key.' + $('provider').value, $('key').value);
-  };
-  $('key').addEventListener('change', () => { $('keyInline').value = $('key').value; });
-  $('xGo').onclick = () => {
-    S.xUser = $('xUser').value.replace(/^@+/, '').trim();
-    $('xUser').value = S.xUser ? '@' + S.xUser : '';
-    store.set('xUser', S.xUser);
     saveMarket();
-    if (!S.xUser) { say('Enter the X account to link, such as @name.', true); return; }
-    if (!cfg().key && !window.nsRelay) {
-      $('keySlot').hidden = false;
-      say('Enter an API key. The video is then made from posts and replies by accounts that account follows.', true);
-      return;
-    }
-    runAll({ download: false, export: false }).catch(() => {});
+    refreshMarket();
   };
   const fq = (Q.get('formats') || '').split(',').filter(f => FORMATS[f]);
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
@@ -3361,9 +3375,9 @@ window.NS = {
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
-      await runAll({ sample: Q.get('sample') === '1' && !xHandle(), date: Q.get('date') || undefined, download: true, export: true });
+      await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true, export: true });
       window.NS.done = true;
-    } else if (xHandle() && (cfg().key || window.nsRelay)) {
+    } else if (Q.get('sample') !== '1') {
       await runAll({ download: false, export: false });
     } else if (!S.playing) {
       say('Press Play to start the news video.');
