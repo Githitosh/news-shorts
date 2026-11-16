@@ -40,6 +40,7 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
 .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
+#storyLink { color: var(--acc); }
 .caption.err { color: #ff9b8a; }
 #unmute {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -98,6 +99,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
     <p id="caption" class="caption">Opening the news video…</p>
+    <p class="caption"><a id="storyLink" href="" target="_blank" rel="noopener" hidden>Open this story</a></p>
   </section>
 
   <div id="studio" class="studio" hidden>
@@ -2768,10 +2770,26 @@ function setFormat(f) {
 function chosenFormats() { return [...document.querySelectorAll('.fx')].filter(x => x.checked).map(x => x.value); }
 
 /* ---------- playback ---------- */
+function safeUrl(u) {
+  try {
+    const x = new URL(String(u || ''), location.href);
+    return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : '';
+  } catch (e) { return ''; }
+}
 function draw(T) {
   if (!S.show) return;
-  E.drawFrame(ctx, S.show, Math.min(T, S.show.duration - 1 / E.FPS), S.bgs);
+  const shown = Math.min(T, S.show.duration - 1 / E.FPS);
+  E.drawFrame(ctx, S.show, shown, S.bgs);
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
+  const a = $('storyLink');
+  if (!a || !S.show.items.length) return;
+  const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / E.DUR)));
+  const it = S.show.items[i];
+  const url = it && it.kind !== 'coffee' ? safeUrl(it.url) : '';
+  if (!url) { a.hidden = true; return; }
+  a.hidden = false;
+  a.href = url;
+  a.textContent = (it.src || 'Source') + ' — open this story';
 }
 async function audioCtx() {
   if (!S.ac) S.ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -2932,8 +2950,31 @@ function splitHeadline(title) {
   if (parts.length < 2) return { headline: String(title || '').trim(), source: 'News' };
   return { headline: parts.slice(0, -1).join(' - ').trim(), source: parts[parts.length - 1].trim() };
 }
-async function newsRows(section, cat) {
-  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl(section));
+function topicFeeds() {
+  const { country } = market();
+  const topics = country.id === 'JP'
+    ? ['日本', '政治', '経済', 'スポーツ', '科学', '国際', '社会', '文化']
+    : ['news', 'politics', 'business', 'sports', 'technology', 'world', 'science', 'health'];
+  const n = Number(store.get('gen', '0')) || 0;
+  store.set('gen', String(n + 1));
+  const e = edition();
+  const q = topic => 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic + ' when:2d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
+  const sec = SECTIONS[n % SECTIONS.length];
+  return [
+    [q(topics[n % topics.length]), 'NEWS'],
+    [q(topics[(n + 3) % topics.length]), 'NEWS'],
+    [feedUrl(sec[0]), sec[1]],
+  ];
+}
+function seenKeys() {
+  try { return new Set(JSON.parse(store.get('seen', '[]'))); } catch (e) { return new Set(); }
+}
+function rememberKeys(keys) {
+  const prev = [...seenKeys()];
+  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 60)));
+}
+async function newsRows(rss, cat) {
+  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20&_=' + Date.now();
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url);
     if (res.status === 429 || res.status === 503) { await sleep(500 * (attempt + 1)); continue; }
@@ -3163,27 +3204,30 @@ async function collect(date) {
   }
   say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', plus posts from accounts @' + handle + ' follows' : '') + '…');
   progress(0.08);
-  const extra = SECTIONS.slice(1);
-  const plan = [['', 'NEWS'], extra[Math.floor(Math.random() * extra.length)]];
   const batches = [];
-  for (const [sec, cat] of plan) {
-    try { batches.push(await newsRows(sec, cat)); } catch (e) { console.warn(e); batches.push([]); }
+  for (const [rss, cat] of topicFeeds()) {
+    try { batches.push(await newsRows(rss, cat)); } catch (e) { console.warn(e); batches.push([]); }
   }
-  const seen = new Set();
+  const used = new Set();
   const rows = [];
   batches.flat().forEach(it => {
     const sp = splitHeadline(it.title);
     if (!sp.headline || GRAPHIC.test(sp.headline)) return;
     const key = sp.headline.toLowerCase().slice(0, 90);
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (used.has(key)) return;
+    used.add(key);
     rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: it.cat, source: sp.source });
   });
   let xrows = [];
   if (handle) { try { xrows = await followedPosts(handle); } catch (e) { console.warn(e); } }
-  const posts = shuffle(xrows).slice(0, 4);
-  const news = shuffle(rows).slice(0, 12 - posts.length);
+  const past = seenKeys();
+  const keyOf = r => r.headline.toLowerCase().slice(0, 90);
+  const fresh = rows.filter(r => !past.has(keyOf(r)));
+  const pool = fresh.length >= 8 ? fresh : rows;
+  const posts = shuffle(xrows.filter(r => !past.has(keyOf(r)))).slice(0, 3);
+  const news = shuffle(pool.length ? pool : rows).slice(0, 12 - posts.length);
   const chosen = shuffle([...posts, ...news]);
+  rememberKeys(chosen.map(r => r.headline.toLowerCase().slice(0, 90)));
   if (chosen.length < 4) throw new Error('Could not collect enough headlines. The sample keeps playing.');
   progress(0.45);
   const originals = chosen.map(r => r.headline);
@@ -3488,19 +3532,21 @@ window.NS = {
   initUI();
   try {
     await loadAssets();
-    await setScript(SAMPLE, true);
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
       await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true, export: true });
       window.NS.done = true;
-    } else if (Q.get('sample') !== '1') {
+    } else if (Q.get('sample') === '1') {
+      await setScript(SAMPLE, true);
+    } else {
       await runAll({ download: false, export: false });
-    } else if (!S.playing) {
-      say('Press Play to start the news video.');
     }
+    if (!S.script) await setScript(SAMPLE, true);
   } catch (e) {
-    console.error(e); say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
+    console.error(e);
+    if (!S.script) { try { await setScript(SAMPLE, true); } catch (err) {} }
+    say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
   }
 })();
 })();
