@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""index.html を画面なしのブラウザで開き、ニュース集め → 台本 → MP4 まで自動で行う。
+"""Open index.html in a headless browser and save the MP4 files.
 
     pip install playwright && python -m playwright install chromium
-    export XAI_API_KEY=...            # Grok を使うとき（X とウェブを検索）
-    export ANTHROPIC_API_KEY=...      # Claude を使うとき（ウェブを検索）
-    python run.py                     # 今日（日本時間）の動画を out/ に保存
-    python run.py --date 2026-11-14 --provider claude
-    python run.py --sample            # 見本の台本で書き出すだけ（APIを使わない）
-    python run.py --formats x         # X・スマホ用だけ（x / youtube / pc）
-
-APIへの通信はこのスクリプトが代わりに行うので、ブラウザの制限（CORS）を受けない。
+    python run.py                     # collect public headlines and save today's video in out/
+    python run.py --country JP --lang ja
+    python run.py --x-user name       # add public posts from that X account
+    python run.py --sample            # export the sample script
+    python run.py --formats x         # one format: x, youtube, or pc
 """
 import argparse
 import asyncio
@@ -46,25 +43,30 @@ async def main() -> int:
     from playwright.async_api import async_playwright
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", help="YYYY-MM-DD（日本時間）。省略すると今日")
-    ap.add_argument("--provider", choices=["grok", "claude"], default=None)
-    ap.add_argument("--model")
+    ap.add_argument("--date", help="YYYY-MM-DD in Japan time. Defaults to today")
+    ap.add_argument("--provider", choices=["grok", "claude"], default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--model", help=argparse.SUPPRESS)
     ap.add_argument("--out", default=str(ROOT / "out"))
-    ap.add_argument("--sample", action="store_true", help="見本の台本で書き出す")
-    ap.add_argument("--formats", default="x,youtube,pc", help="書き出す形式（x / youtube / pc をカンマ区切り）")
+    ap.add_argument("--sample", action="store_true", help="Export the sample script")
+    ap.add_argument("--formats", default="x,youtube,pc", help="Formats to export, comma-separated: x, youtube, or pc")
+    ap.add_argument("--country", default="", help="Country code: JP, US, GB, FR, DE, ES, BR, KR, TW, CN")
+    ap.add_argument("--lang", default="", help="Language code: ja, en, fr, de, es, pt, ko, zh-Hans, zh-Hant")
+    ap.add_argument("--x-user", default="", help="X username. Public posts from this account are added")
     a = ap.parse_args()
 
-    provider = a.provider or ("grok" if os.environ.get("XAI_API_KEY") else "claude")
-    if not a.sample and not os.environ.get("XAI_API_KEY" if provider == "grok" else "ANTHROPIC_API_KEY"):
-        print("APIキーがありません（XAI_API_KEY か ANTHROPIC_API_KEY）", file=sys.stderr)
-        return 2
-    q = f"auto=1&provider={provider}&formats={a.formats}"
+    q = f"auto=1&formats={a.formats}"
     if a.sample:
         q += "&sample=1"
     if a.date:
         q += f"&date={a.date}"
     if a.model:
         q += f"&model={a.model}"
+    if a.country:
+        q += f"&country={a.country}"
+    if a.lang:
+        q += f"&lang={a.lang}"
+    if a.x_user:
+        q += "&x=" + a.x_user.lstrip("@")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -86,7 +88,7 @@ async def main() -> int:
         err = await page.evaluate(
             "window.NS.error || (document.getElementById('status').classList.contains('err') ? document.getElementById('status').textContent : '')")
         if err:
-            print("失敗:", err, file=sys.stderr)
+            print("Failed:", err, file=sys.stderr)
             await browser.close()
             return 1
         want = len([f for f in a.formats.split(",") if f in ("x", "youtube", "pc")])
@@ -95,19 +97,19 @@ async def main() -> int:
                 break
             await asyncio.sleep(0.5)
         if not downloads:
-            print("失敗: 動画のファイルが出てきませんでした", file=sys.stderr)
+            print("Failed: no video file was produced", file=sys.stderr)
             await browser.close()
             return 1
         st = await page.evaluate("window.NS.state()")
         for d in downloads:
             path = out / d.suggested_filename
             await d.save_as(path)
-            print("保存:", path)
+            print("Saved:", path)
         stem = out / downloads[0].suggested_filename.split("_NewsShorts_")[0]
         base = f"{stem}_NewsShorts_{st['script']['date']}"
         Path(base + ".json").write_text(json.dumps(st["script"], ensure_ascii=False, indent=2), encoding="utf-8")
         Path(base + ".txt").write_text(st["sources"], encoding="utf-8")
-        print("台本・出典:", base + ".json / .txt")
+        print("Script and sources:", base + ".json / .txt")
         await browser.close()
     return 0
 
