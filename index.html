@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<title>News Shorts 自動生成</title>
+<title>News Shorts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@600;700;900&family=Tinos:wght@700&display=swap" rel="stylesheet">
@@ -24,12 +24,26 @@ header span { color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; marg
 main { display: grid; gap: 14px; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 980px; margin: 0 auto; }
 @media (min-width: 820px) { main { grid-template-columns: 400px 1fr; align-items: start; } main.wide { grid-template-columns: 1fr; } }
 .stage { position: sticky; top: 8px; }
-canvas#cv { display: block; width: 100%; max-width: 400px; aspect-ratio: 9 / 16; height: auto; margin: 0 auto; background: #000; border-radius: 10px; }
-canvas#cv.wide { max-width: 100%; aspect-ratio: 16 / 9; }
+.frame { position: relative; max-width: 400px; margin: 0 auto; }
+canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
+canvas#cv.wide { aspect-ratio: 16 / 9; }
 .fmt { display: flex; gap: 6px; max-width: 400px; margin: 0 auto 8px; }
 .fmt button { flex: 1; padding: 8px 4px; font-size: 13px; border-radius: 8px; }
 .fmt button.on { background: var(--ink); color: #111; border-color: var(--ink); }
-.stage.wide .fmt, .stage.wide .ctl { max-width: 100%; }
+.stage.wide .frame, .stage.wide .fmt, .stage.wide .ctl { max-width: 100%; }
+.caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
+.caption.err { color: #ff9b8a; }
+#unmute {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 24px);
+  background: rgba(13,13,15,.82); color: var(--ink); border: 1px solid var(--acc);
+  border-radius: 999px; padding: 8px 14px; font-size: 14px;
+}
+[hidden] { display: none !important; }
+@media (max-width: 819px) {
+  body.watching .frame { max-width: min(100%, 520px); }
+  body.watching .stage { position: static; }
+}
 #out { flex-wrap: wrap; }
 #out .btn { flex: 1 1 30%; font-size: 14px; }
 .ctl { display: flex; align-items: center; gap: 10px; max-width: 400px; margin: 8px auto 0; }
@@ -60,7 +74,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header>News Shorts<span>ニュース動画の自動生成</span></header>
+<header>News Shorts<span>ニュース動画</span></header>
 <main>
   <section class="stage" id="stage">
     <div class="fmt" id="fmt">
@@ -68,21 +82,26 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button data-f="youtube">YouTube</button>
       <button data-f="pc">PC</button>
     </div>
-    <canvas id="cv" width="1080" height="1920"></canvas>
+    <div class="frame">
+      <canvas id="cv" width="1080" height="1920"></canvas>
+      <button type="button" id="unmute" hidden>タップして音をつける</button>
+    </div>
     <div class="ctl">
       <button id="play" disabled>再生</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
+    <p id="caption" class="caption">ニュース動画を開いています…</p>
   </section>
 
   <section style="display:grid;gap:12px">
-    <div class="card">
+    <details id="makeBox">
+      <summary>新しい動画を作る</summary>
       <button id="go" class="primary">ニュースを集めて動画にする</button>
-      <div id="status">準備しています…</div>
+      <div id="status">ニュース動画を開いています…</div>
       <div id="prog"><i></i></div>
       <div id="out" class="row"></div>
-    </div>
+    </details>
 
     <details id="setBox">
       <summary>設定</summary>
@@ -2487,12 +2506,14 @@ const SAMPLE = {"date": "2026-11-14", "items": [{"kw": "RUGBY", "cat": "SPORTS",
 const E = window.NSEngine;
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
+const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const WATCH = Q.get('auto') !== '1' && Q.get('watch') !== '0' && !REDUCE;
 const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.' + k, v); } catch (e) {} },
 };
 const FORMATS = { x: 'X', youtube: 'YouTube', pc: 'PC' };
-const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false };
+const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
 const ctx = $('cv').getContext('2d');
 
 const PROVIDERS = {
@@ -2500,7 +2521,11 @@ const PROVIDERS = {
   claude: { model: 'claude-sonnet-5-5', url: 'https://api.anthropic.com/v1/messages' },
 };
 
-function say(msg, err) { $('status').textContent = msg; $('status').classList.toggle('err', !!err); console.log('[news-shorts]', msg); }
+function say(msg, err) {
+  $('status').textContent = msg; $('status').classList.toggle('err', !!err);
+  const c = $('caption'); if (c) { c.textContent = msg; c.classList.toggle('err', !!err); }
+  console.log('[news-shorts]', msg);
+}
 function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pad2 = n => String(n).padStart(2, '0');
@@ -2616,17 +2641,33 @@ function sourcesText(s) {
   const lines = s.items.map((it, i) => `${pad2(i + 1)} ${it.head.join(' ')} — ${it.src}${it.date ? ' (' + it.date + ')' : ''}${it.url ? '\n   ' + it.url : ''}`);
   return lines.join('\n') + '\n\nMusic: Holst “Jupiter” – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons, public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
 }
+function episodeLabel(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s && s.date) || '');
+  return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日のニュース動画` : 'ニュース動画';
+}
+function watchLine(sound) {
+  const name = episodeLabel(S.script);
+  return sound ? `${name}を再生しています` : `${name}を再生しています。画面をタップすると音がつきます`;
+}
 async function setScript(raw, quiet) {
   stop();
   const s = normalize(raw);
-  await loadFonts(s);
   S.script = s; S.show = E.prepare(s, S.format);
   sizeCanvas();
   $('json').value = JSON.stringify(s, null, 2);
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
   $('seek').value = 0; draw(0);
+  const sub = document.querySelector('header span');
+  if (sub) sub.textContent = episodeLabel(s);
   if (!quiet) say(`台本を読み込みました（${S.show.total}本・${S.show.duration.toFixed(1)}秒）`);
+  if (WATCH && !S.busy) startWatch();
+  await loadFonts(s);
+  if (S.script !== s || !S.show) return S.show;
+  const T = S.playing ? Math.max(0, Math.min(currentT(), S.show.duration)) : 0;
+  S.show = E.prepare(s, S.format);
+  sizeCanvas();
+  draw(S.playing ? Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)) : 0);
   return S.show;
 }
 
@@ -2640,9 +2681,16 @@ function sizeCanvas() {
 }
 function setFormat(f) {
   if (!FORMATS[f]) return;
+  const was = S.playing;
+  const ratio = S.show && S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
   stop(); S.format = f; store.set('format', f);
-  if (S.script) { S.show = E.prepare(S.script, f); sizeCanvas(); draw(+$('seek').value / 1000 * S.show.duration); }
-  else sizeCanvas();
+  if (S.script) {
+    S.show = E.prepare(S.script, f); sizeCanvas();
+    const T = ratio * S.show.duration;
+    $('seek').value = String(Math.round(ratio * 1000));
+    draw(T);
+    if (was) beginPlayback(T);
+  } else sizeCanvas();
 }
 function chosenFormats() { return [...document.querySelectorAll('.fx')].filter(x => x.checked).map(x => x.value); }
 
@@ -2658,28 +2706,115 @@ async function audioCtx() {
   if (!S.abuf) S.abuf = await new Promise((ok, ng) => S.ac.decodeAudioData(S.music.slice(0).buffer, ok, ng));
   return S.ac;
 }
+function currentT() {
+  if (!S.show) return 0;
+  if (S.playing && S.audioOn && S.ac && S.t0 != null) return S.ac.currentTime - S.t0;
+  if (S.playing) return S.origin + (performance.now() - S.t0perf) / 1000;
+  return (+$('seek').value / 1000) * (S.show.duration || 0);
+}
+function userUnlock() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return Promise.resolve(false);
+  try {
+    if (!S.ac) S.ac = new AC();
+    if (S.ac.state === 'running') return Promise.resolve(true);
+    return Promise.resolve(S.ac.resume()).then(() => S.ac.state === 'running').catch(() => false);
+  } catch (e) { return Promise.resolve(false); }
+}
+function beginPlayback(T0) {
+  S.origin = T0;
+  S.t0perf = performance.now();
+  S.playing = true;
+  $('play').disabled = false;
+  $('play').textContent = '停止';
+  document.body.classList.add('watching');
+  const u = $('unmute');
+  if (u) u.hidden = !!S.audioOn;
+  if (!S.raf) S.raf = requestAnimationFrame(tick);
+}
+function tick() {
+  S.raf = 0;
+  if (!S.playing || !S.show) return;
+  try {
+    let T = currentT();
+    if (S.show.duration > 0 && T >= S.show.duration) {
+      const over = T % S.show.duration;
+      restartLoop(over);
+      T = over;
+    }
+    const shown = Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS));
+    draw(shown);
+    $('seek').value = String(Math.round(Math.min(Math.max(0, T), S.show.duration) / S.show.duration * 1000));
+  } catch (e) {
+    console.error(e); stop(); say(e.message || String(e), true); return;
+  }
+  if (S.playing) S.raf = requestAnimationFrame(tick);
+}
+function restartLoop(over) {
+  S.origin = over;
+  S.t0perf = performance.now();
+  if (!(S.audioOn && S.ac && S.abuf)) return;
+  try { if (S.src) S.src.stop(); } catch (e) {}
+  const src = S.ac.createBufferSource();
+  src.buffer = S.abuf;
+  const g = S.ac.createGain(); src.connect(g); g.connect(S.ac.destination);
+  try { src.start(0, musicOffset(S.show.duration) + over); }
+  catch (e) { S.audioOn = false; S.src = null; return; }
+  S.src = src;
+  S.t0 = S.ac.currentTime - over;
+}
+function startWatch() {
+  if (!WATCH || !S.show || S.busy || S.playing) return;
+  $('seek').value = '0';
+  beginPlayback(0);
+  say(watchLine(false));
+}
+async function attachAudioFrom() {
+  if (S.audioFailed || !S.playing || S.audioOn || S.audioPending || !S.ac || S.ac.state !== 'running') return;
+  S.audioPending = true;
+  const gen = ++S.audioGen;
+  try {
+    if (!S.abuf) S.abuf = await new Promise((ok, ng) => S.ac.decodeAudioData(S.music.slice(0).buffer, ok, ng));
+    if (gen !== S.audioGen || !S.playing || S.audioOn || S.ac.state !== 'running') return;
+    const startAt = Math.max(0, Math.min(currentT(), Math.max(0, S.show.duration - 0.05)));
+    const src = S.ac.createBufferSource();
+    src.buffer = S.abuf;
+    const g = S.ac.createGain(); src.connect(g); g.connect(S.ac.destination);
+    src.start(0, musicOffset(S.show.duration) + startAt);
+    if (gen !== S.audioGen || !S.playing) { try { src.stop(); } catch (e) {} return; }
+    S.src = src;
+    S.t0 = S.ac.currentTime - startAt;
+    S.audioOn = true;
+    const u = $('unmute'); if (u) u.hidden = true;
+    say(watchLine(true));
+  } catch (e) {
+    console.warn('audio', e);
+    S.audioFailed = true;
+    const u = $('unmute');
+    if (u) { u.hidden = false; u.textContent = '音を出せません。映像は再生しています'; }
+  } finally { S.audioPending = false; }
+}
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); return; }
-  const ac = await audioCtx();
+  if (S.playing) { stop(); say('停止しました。再生を押すと続きます。'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
-  const src = ac.createBufferSource(); src.buffer = S.abuf;
-  const g = ac.createGain(); src.connect(g); g.connect(ac.destination);
-  src.start(0, musicOffset(S.show.duration) + T0);
-  S.src = src; S.t0 = ac.currentTime - T0; S.playing = true; $('play').textContent = '停止';
-  const tick = () => {
-    if (!S.playing) return;
-    const T = S.ac.currentTime - S.t0;
-    if (T >= S.show.duration) { stop(); $('seek').value = 0; draw(0); return; }
-    draw(T); $('seek').value = Math.round(T / S.show.duration * 1000);
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  beginPlayback(T0);
+  say(watchLine(false));
 }
 function stop() {
+  if (S.show && S.playing && S.show.duration) {
+    const T = Math.max(0, Math.min(currentT(), S.show.duration));
+    $('seek').value = String(Math.round(T / S.show.duration * 1000));
+    draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
+  }
+  S.audioGen++;
   if (S.src) { try { S.src.stop(); } catch (e) {} S.src = null; }
-  S.playing = false; $('play').textContent = '再生';
+  S.audioOn = false;
+  S.playing = false;
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+  $('play').textContent = '再生';
+  const u = $('unmute'); if (u) u.hidden = true;
 }
 
 /* ---------- AI ---------- */
@@ -2956,20 +3091,55 @@ function initUI() {
   $('model').onchange = () => store.set('model.' + $('provider').value, $('model').value.trim());
   $('autoExport').checked = store.get('autoExport', '1') === '1';
   $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
-  if (!$('key').value) $('setBox').open = true;
 
-  $('go').onclick = () => runAll({ download: false }).catch(() => {});
+  $('go').onclick = () => {
+    if (!$('key').value.trim() && !window.nsRelay) { $('makeBox').open = true; $('setBox').open = true; }
+    runAll({ download: false }).catch(() => {});
+  };
   $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
   $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('JSONを読めません：' + e.message, true); } };
   $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('書き出しに失敗しました：' + e.message, true); });
-  document.querySelectorAll('#fmt button').forEach(b => b.onclick = () => setFormat(b.dataset.f));
+  document.querySelectorAll('#fmt button').forEach(b => b.onclick = () => {
+    const unlocking = userUnlock();
+    setFormat(b.dataset.f);
+    unlocking.then(ok => { if (ok && S.playing && !S.audioOn && !S.audioFailed) attachAudioFrom(); });
+  });
   S.format = FORMATS[Q.get('format')] ? Q.get('format') : (FORMATS[store.get('format', 'x')] ? store.get('format', 'x') : 'x');
   const fq = (Q.get('formats') || '').split(',').filter(f => FORMATS[f]);
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
-  $('play').onclick = () => play().catch(e => say(e.message, true));
-  $('seek').oninput = () => { if (S.playing) stop(); if (S.show) draw(+$('seek').value / 1000 * S.show.duration); };
+  $('play').onclick = () => {
+    const unlocking = userUnlock();
+    play().catch(e => say(e.message, true));
+    unlocking.then(ok => { if (ok && S.playing && !S.audioOn && !S.audioFailed) attachAudioFrom(); });
+  };
+  const tapSound = () => {
+    if (S.audioFailed) return;
+    const unlocking = userUnlock();
+    if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * (S.show.duration || 0));
+    unlocking.then(ok => { if (ok && S.playing && !S.audioOn) attachAudioFrom(); });
+  };
+  $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
+  $('cv').addEventListener('pointerdown', () => { if (!S.audioOn && !S.audioFailed) tapSound(); });
+  $('seek').oninput = () => {
+    if (!S.show) return;
+    const T = +$('seek').value / 1000 * S.show.duration;
+    if (!S.playing) { draw(T); return; }
+    S.origin = T;
+    S.t0perf = performance.now();
+    if (S.audioOn && S.ac && S.abuf) {
+      try { if (S.src) S.src.stop(); } catch (e) {}
+      const src = S.ac.createBufferSource();
+      src.buffer = S.abuf;
+      const g = S.ac.createGain(); src.connect(g); g.connect(S.ac.destination);
+      try { src.start(0, musicOffset(S.show.duration) + T); }
+      catch (e) { S.src = null; S.audioOn = false; draw(T); return; }
+      S.src = src;
+      S.t0 = S.ac.currentTime - T;
+    }
+    draw(T);
+  };
   $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('出典をコピーしました'));
 }
 
@@ -2984,12 +3154,13 @@ window.NS = {
   try {
     await loadAssets();
     await setScript(SAMPLE, true);
-    say('準備ができました。「ニュースを集めて動画にする」を押すと、集めて書き出すまで自動で進みます。');
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
       await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true });
       window.NS.done = true;
+    } else if (!S.playing) {
+      say('再生を押すと、ニュース動画が始まります。');
     }
   } catch (e) {
     console.error(e); say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
