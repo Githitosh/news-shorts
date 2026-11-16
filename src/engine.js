@@ -1,14 +1,14 @@
-/* News Shorts — 描画エンジン（X・スマホ／YouTube 1080×1920、PC 1920×1080、30fps、1本3.2秒） */
+/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story. */
 (function (global) {
 'use strict';
 
 const FPS = 30, DUR = 3.2;
 const INK = '#F5F1E9';
-const F_SERIF = '"Noto Serif JP","Noto Serif KR","Noto Serif SC","Noto Serif TC","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
+const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
-const F_SANS = '"Noto Sans JP","Noto Sans KR","Noto Sans SC","Noto Sans TC","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
 
-/* 位置と大きさ（元の動画から測った値）。youtube：11/14 の動画、x：11/14 の X 版、pc：横長（自作） */
+/* Positions measured from the original videos. youtube: the Nov 14 video. x: the Nov 14 X cut. pc: the wide layout. */
 const PRESETS = {
   youtube: {
     name: 'youtube', W: 1080, H: 1920, layout: 'stack', wrap: false,
@@ -93,7 +93,7 @@ function ink(text, f) {
 const smooth = (a, b, t) => { const x = Math.min(1, Math.max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
 const pad2 = n => String(n).padStart(2, '0');
 
-/* 小さく出す語（台本で小文字にした語） */
+/* Words that stay small in a headline. */
 function tokens(line) {
   return line.split(/(\s+)/).filter(s => s.length).map(s => ({ t: /^\s+$/.test(s) ? ' ' : s, small: /^[a-z][a-z'’.-]*$/.test(s) }));
 }
@@ -106,7 +106,7 @@ function subWidth(line, size) {
   return w * P.sub.sx;
 }
 
-/* 日本語の行：「／」か改行で区切る。長すぎる行は文節で折り返す */
+/* News lines break on a slash or a newline. A line that is still too long breaks on a phrase. */
 function jpWidth(t) { return adv(t, font(P.jp.w, P.jp.size, F_SERIF)) * P.jp.sx; }
 const NO_START = '、。，．・：；？！ー）」』】〕”’ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〜…‥%％';
 const NO_END = '（「『【〔“‘';
@@ -152,7 +152,7 @@ function splitBalanced(s) {
   return best.wb > P.jp.maxW ? [best.a, ...splitBalanced(best.b)] : [best.a, best.b];
 }
 
-/* 単語を n 行に分け、いちばん長い行が短くなる分け方 */
+/* Split words into n lines so the longest line stays short. */
 function splitWords(words, n, widthFn) {
   if (n <= 1 || words.length <= 1) return [words.join(' ')];
   n = Math.min(n, words.length);
@@ -169,7 +169,7 @@ function splitWords(words, n, widthFn) {
   rec(0, n, []);
   return best.lines;
 }
-/* 副見出し：to / and などの小さな語は行末に置かない（次の行の頭へ） */
+/* A subhead does not end on a small word such as to or and. That word starts the next line. */
 function splitSub(words, n) {
   const ok = [];
   const lines = splitWords(words, n, subW);
@@ -191,7 +191,7 @@ function splitSub(words, n) {
 const headW = l => adv(l, font(900, 100, F_SERIF)) * P.head.sx / 100;
 const subW = l => subWidth(l, 100) / 100;
 
-/* 見出し・副見出し・日本語を縦に並べる（youtube・x） */
+/* Stack the headline, subhead, and news lines (YouTube and X). */
 function stackPlan(head, sub, jp, sh0, ss0) {
   return function place(f) {
     const Sh = sh0 * f, Ss = ss0 * Math.pow(f, P.sub.fexp || 1);
@@ -215,7 +215,7 @@ function stackPlan(head, sub, jp, sh0, ss0) {
     return L;
   };
 }
-/* 左に見出しと副見出し、右に日本語（pc） */
+/* Headline and subhead on the left, news lines on the right (PC). */
 function columnPlan(head, sub, jp, sh0, ss0) {
   return function place(f) {
     const Sh = sh0 * f, Ss = ss0 * Math.pow(f, P.sub.fexp || 1);
@@ -257,13 +257,13 @@ function layout(it) {
     const ss0 = Math.min(P.sub.max, sub.length ? P.sub.maxW / Math.max(...sub.map(subW)) : P.sub.max, P.sub.ratio ? P.sub.ratio * sh0 : 1e9);
     L = fitPlan(plan(head, sub, jp, sh0, ss0));
   } else {
-    /* 見出しは1行で十分大きければ1行、足りなければ2行に */
+    /* One headline line when it is large enough, otherwise two. */
     const hw = head.join(' ').split(/\s+/).filter(Boolean);
     let hl = [hw.join(' ')];
     if (hw.length > 1 && hSize(hl) < P.head.oneLine) hl = splitWords(hw, 2, headW);
     if (hw.length > 2 && hSize(hl) < P.head.oneLine * 0.6) hl = splitWords(hw, 3, headW);
     const sh0 = hSize(hl);
-    /* 副見出しは、見出しと合わせていちばん大きく出せる行数に */
+    /* Choose the subhead line count that keeps the headline large. */
     const sw = sub.join(' ').split(/\s+/).filter(Boolean);
     let best = null;
     for (let m = 1; m <= Math.max(1, Math.min(P.sub.lines || 3, sw.length)); m++) {
@@ -275,7 +275,7 @@ function layout(it) {
     }
     L = best.L; head = hl;
   }
-  /* 縦の位置をそろえる */
+  /* Align the block vertically. */
   const off = Math.max(P.box.top, P.box.center - L.bottom / 2);
   L.head.forEach(l => l.base += off); L.sub.forEach(l => l.base += off);
   L.rule += off; L.bottom += off;
@@ -291,7 +291,7 @@ function layout(it) {
     L.cxHead = P.cx; L.ruleX = [P.left, P.right]; L.cxJp = P.cx;
   }
 
-  /* キーワード */
+  /* Keyword. */
   const kw = String(it.kw || head[0]).toUpperCase();
   const k = ink(kw, font(900, 1000, F_SERIF));
   let ksize = P.kw.w * 1000 / (P.kw.sx * (k.l + k.r)), ksx = P.kw.sx;
@@ -306,7 +306,7 @@ function layout(it) {
   return L;
 }
 
-/* 台本 → 描画用の並び */
+/* Script to the drawing sequence. */
 function prepare(script, preset) {
   use(preset || 'youtube');
   const d = new Date((script.date || '') + 'T12:00:00+09:00');
@@ -327,11 +327,11 @@ function prepare(script, preset) {
   });
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1]} ${da}, ${y}${script.market ? ' · ' + script.market : ''}`,
+    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
   };
 }
 
-/* 横に縮めた文字 */
+/* Condensed type. */
 function textX(ctx, t, x, y, sx, align) {
   ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1); ctx.textAlign = align || 'center'; ctx.fillText(t, 0, 0); ctx.restore();
 }
@@ -367,7 +367,7 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.textBaseline = 'alphabetic';
   drawBg(ctx, bgs[it.bg], t, it.bg);
   ctx.fillStyle = INK;
-  /* いつも出ている行 */
+  /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
   ctx.font = font(P.header.w, P.header.size, F_SERIF);
   textX(ctx, show.header, P.header.cx, P.header.base, P.header.sx, 'center');
@@ -383,7 +383,7 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.fillStyle = INK;
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
-  /* キーワード */
+  /* Keyword. */
   if (a1 < 1) {
     ctx.globalAlpha = 1 - a1;
     ctx.font = font(900, L.kw.size, F_SERIF);
@@ -441,7 +441,7 @@ function allText(script) {
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
     s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.tags || []), it.src, it.date);
   });
-  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts January February March April May June July August September October November December | / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
+  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');
 }
 

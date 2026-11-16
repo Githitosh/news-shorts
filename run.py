@@ -3,7 +3,7 @@
 
     pip install playwright && python -m playwright install chromium
     python run.py                     # collect public headlines and save today's video in out/
-    python run.py --country JP --lang ja
+    python run.py --country JP --lang both
     python run.py --x-user name       # add public posts from that X account
     python run.py --sample            # export the sample script
     python run.py --formats x         # one format: x, youtube, or pc
@@ -49,8 +49,8 @@ async def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "out"))
     ap.add_argument("--sample", action="store_true", help="Export the sample script")
     ap.add_argument("--formats", default="x,youtube,pc", help="Formats to export, comma-separated: x, youtube, or pc")
-    ap.add_argument("--country", default="", help="Country code: JP, US, GB, FR, DE, ES, BR, KR, TW, CN")
-    ap.add_argument("--lang", default="", help="Language code: ja, en, fr, de, es, pt, ko, zh-Hans, zh-Hant")
+    ap.add_argument("--country", default="", help="Country code: JP or US")
+    ap.add_argument("--lang", default="", help="Language: en, ja, or both")
     ap.add_argument("--x-user", default="", help="X username. Public posts from this account are added")
     a = ap.parse_args()
 

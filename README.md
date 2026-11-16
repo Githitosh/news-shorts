@@ -1,6 +1,6 @@
 # News Shorts
 
-Open the page and the news video plays. Today's headlines are collected with no API key, then the video switches to them. The layout follows the device. Four public-domain recordings can be selected under the picture. Settings are behind the * button: layout, country, language (including Japanese), and an X account.
+Open the page and the news video plays. Today's headlines are collected with no API key, in a new order each time. Pull down at the top to collect again and shuffle the order. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button.
 
 | Device | Picture | When it is chosen |
 |---|---|---|
@@ -16,8 +16,8 @@ GitHub Pages serves the root of `main`. The picture starts on its own. Safari bl
 * opens Settings. The device name (Phone, X, YouTube, or PC) is there, with the country, the language, and the X account.
 
 - **Layout** follows the device until you choose Phone, X, YouTube, or PC.
-- **Country** chooses the headlines. **Language** is the language of the lines under the English headline, and Japanese is one of the choices. Changing the country sets its usual language.
-- **X account**, for example `@name`, adds that account's public posts. When this browser is signed in to X and X allows the page to read it, posts and replies from that session are used. No API key.
+- **Country** is Japan or the United States. **Language** is English, Japanese, or both. Changing the country sets Japan to both and the United States to English.
+- **X account**, for example `@name`, adds recent posts and replies from accounts that account follows. No API key. Opening the page from that account on X fills the name in, and the next visit collects again.
 - Choices stay in this browser. The next visit collects again.
 
 ```bash

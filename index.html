@@ -18,9 +18,10 @@
 <style>
 :root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; touch-action: pan-x; }
 header .title { font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
+header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 #gear { width: 42px; height: 36px; padding: 0; font-size: 22px; line-height: 1; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
@@ -39,6 +40,7 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
 .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
+#storyLink { color: var(--acc); }
 .caption.err { color: #ff9b8a; }
 #unmute {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -82,7 +84,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><span class="title">News Shorts</span><button type="button" id="gear" aria-label="Settings">*</button></header>
+<header><div><span class="title">News Shorts</span><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
 <main>
   <section class="stage" id="stage">
     <div class="frame">
@@ -97,6 +99,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
     <p id="caption" class="caption">Opening the news video…</p>
+    <p class="caption"><a id="storyLink" href="" target="_blank" rel="noopener" hidden>Open this story</a></p>
   </section>
 
   <div id="studio" class="studio" hidden>
@@ -113,10 +116,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="country"></select>
       <label for="lang">Language</label>
       <select id="lang"></select>
-      <p class="note">News lines use this language. Japanese is included. Headlines stay in English.</p>
+      <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label for="xUser">X account</label>
       <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
-      <p class="note">Public posts and replies from this account are added to the country's headlines. A signed-in X session in this browser is used when X allows the page to read it.</p>
+      <p class="note">Posts and replies from accounts this user follows are added to the video. Opening this page from that account on X fills the name in.</p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -2054,17 +2057,17 @@ If you want to offset all timestamps of a track such that the first one is zero,
 })();
 if (typeof module === "object" && typeof module.exports === "object") Object.assign(module.exports, Mp4Muxer)
 </script>
-<script>/* News Shorts — 描画エンジン（X・スマホ／YouTube 1080×1920、PC 1920×1080、30fps、1本3.2秒） */
+<script>/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story. */
 (function (global) {
 'use strict';
 
 const FPS = 30, DUR = 3.2;
 const INK = '#F5F1E9';
-const F_SERIF = '"Noto Serif JP","Noto Serif KR","Noto Serif SC","Noto Serif TC","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
+const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
-const F_SANS = '"Noto Sans JP","Noto Sans KR","Noto Sans SC","Noto Sans TC","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
 
-/* 位置と大きさ（元の動画から測った値）。youtube：11/14 の動画、x：11/14 の X 版、pc：横長（自作） */
+/* Positions measured from the original videos. youtube: the Nov 14 video. x: the Nov 14 X cut. pc: the wide layout. */
 const PRESETS = {
   youtube: {
     name: 'youtube', W: 1080, H: 1920, layout: 'stack', wrap: false,
@@ -2149,7 +2152,7 @@ function ink(text, f) {
 const smooth = (a, b, t) => { const x = Math.min(1, Math.max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
 const pad2 = n => String(n).padStart(2, '0');
 
-/* 小さく出す語（台本で小文字にした語） */
+/* Words that stay small in a headline. */
 function tokens(line) {
   return line.split(/(\s+)/).filter(s => s.length).map(s => ({ t: /^\s+$/.test(s) ? ' ' : s, small: /^[a-z][a-z'’.-]*$/.test(s) }));
 }
@@ -2162,7 +2165,7 @@ function subWidth(line, size) {
   return w * P.sub.sx;
 }
 
-/* 日本語の行：「／」か改行で区切る。長すぎる行は文節で折り返す */
+/* News lines break on a slash or a newline. A line that is still too long breaks on a phrase. */
 function jpWidth(t) { return adv(t, font(P.jp.w, P.jp.size, F_SERIF)) * P.jp.sx; }
 const NO_START = '、。，．・：；？！ー）」』】〕”’ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〜…‥%％';
 const NO_END = '（「『【〔“‘';
@@ -2208,7 +2211,7 @@ function splitBalanced(s) {
   return best.wb > P.jp.maxW ? [best.a, ...splitBalanced(best.b)] : [best.a, best.b];
 }
 
-/* 単語を n 行に分け、いちばん長い行が短くなる分け方 */
+/* Split words into n lines so the longest line stays short. */
 function splitWords(words, n, widthFn) {
   if (n <= 1 || words.length <= 1) return [words.join(' ')];
   n = Math.min(n, words.length);
@@ -2225,7 +2228,7 @@ function splitWords(words, n, widthFn) {
   rec(0, n, []);
   return best.lines;
 }
-/* 副見出し：to / and などの小さな語は行末に置かない（次の行の頭へ） */
+/* A subhead does not end on a small word such as to or and. That word starts the next line. */
 function splitSub(words, n) {
   const ok = [];
   const lines = splitWords(words, n, subW);
@@ -2247,7 +2250,7 @@ function splitSub(words, n) {
 const headW = l => adv(l, font(900, 100, F_SERIF)) * P.head.sx / 100;
 const subW = l => subWidth(l, 100) / 100;
 
-/* 見出し・副見出し・日本語を縦に並べる（youtube・x） */
+/* Stack the headline, subhead, and news lines (YouTube and X). */
 function stackPlan(head, sub, jp, sh0, ss0) {
   return function place(f) {
     const Sh = sh0 * f, Ss = ss0 * Math.pow(f, P.sub.fexp || 1);
@@ -2271,7 +2274,7 @@ function stackPlan(head, sub, jp, sh0, ss0) {
     return L;
   };
 }
-/* 左に見出しと副見出し、右に日本語（pc） */
+/* Headline and subhead on the left, news lines on the right (PC). */
 function columnPlan(head, sub, jp, sh0, ss0) {
   return function place(f) {
     const Sh = sh0 * f, Ss = ss0 * Math.pow(f, P.sub.fexp || 1);
@@ -2313,13 +2316,13 @@ function layout(it) {
     const ss0 = Math.min(P.sub.max, sub.length ? P.sub.maxW / Math.max(...sub.map(subW)) : P.sub.max, P.sub.ratio ? P.sub.ratio * sh0 : 1e9);
     L = fitPlan(plan(head, sub, jp, sh0, ss0));
   } else {
-    /* 見出しは1行で十分大きければ1行、足りなければ2行に */
+    /* One headline line when it is large enough, otherwise two. */
     const hw = head.join(' ').split(/\s+/).filter(Boolean);
     let hl = [hw.join(' ')];
     if (hw.length > 1 && hSize(hl) < P.head.oneLine) hl = splitWords(hw, 2, headW);
     if (hw.length > 2 && hSize(hl) < P.head.oneLine * 0.6) hl = splitWords(hw, 3, headW);
     const sh0 = hSize(hl);
-    /* 副見出しは、見出しと合わせていちばん大きく出せる行数に */
+    /* Choose the subhead line count that keeps the headline large. */
     const sw = sub.join(' ').split(/\s+/).filter(Boolean);
     let best = null;
     for (let m = 1; m <= Math.max(1, Math.min(P.sub.lines || 3, sw.length)); m++) {
@@ -2331,7 +2334,7 @@ function layout(it) {
     }
     L = best.L; head = hl;
   }
-  /* 縦の位置をそろえる */
+  /* Align the block vertically. */
   const off = Math.max(P.box.top, P.box.center - L.bottom / 2);
   L.head.forEach(l => l.base += off); L.sub.forEach(l => l.base += off);
   L.rule += off; L.bottom += off;
@@ -2347,7 +2350,7 @@ function layout(it) {
     L.cxHead = P.cx; L.ruleX = [P.left, P.right]; L.cxJp = P.cx;
   }
 
-  /* キーワード */
+  /* Keyword. */
   const kw = String(it.kw || head[0]).toUpperCase();
   const k = ink(kw, font(900, 1000, F_SERIF));
   let ksize = P.kw.w * 1000 / (P.kw.sx * (k.l + k.r)), ksx = P.kw.sx;
@@ -2362,7 +2365,7 @@ function layout(it) {
   return L;
 }
 
-/* 台本 → 描画用の並び */
+/* Script to the drawing sequence. */
 function prepare(script, preset) {
   use(preset || 'youtube');
   const d = new Date((script.date || '') + 'T12:00:00+09:00');
@@ -2383,11 +2386,11 @@ function prepare(script, preset) {
   });
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1]} ${da}, ${y}${script.market ? ' · ' + script.market : ''}`,
+    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
   };
 }
 
-/* 横に縮めた文字 */
+/* Condensed type. */
 function textX(ctx, t, x, y, sx, align) {
   ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1); ctx.textAlign = align || 'center'; ctx.fillText(t, 0, 0); ctx.restore();
 }
@@ -2423,7 +2426,7 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.textBaseline = 'alphabetic';
   drawBg(ctx, bgs[it.bg], t, it.bg);
   ctx.fillStyle = INK;
-  /* いつも出ている行 */
+  /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
   ctx.font = font(P.header.w, P.header.size, F_SERIF);
   textX(ctx, show.header, P.header.cx, P.header.base, P.header.sx, 'center');
@@ -2439,7 +2442,7 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.fillStyle = INK;
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
-  /* キーワード */
+  /* Keyword. */
   if (a1 < 1) {
     ctx.globalAlpha = 1 - a1;
     ctx.font = font(900, L.kw.size, F_SERIF);
@@ -2497,7 +2500,7 @@ function allText(script) {
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
     s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.tags || []), it.src, it.date);
   });
-  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts January February March April May June July August September October November December | / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
+  s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');
 }
 
@@ -2522,38 +2525,18 @@ const store = {
 };
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
 const COUNTRIES = [
-  { id: 'JP', name: 'Japan', lang: 'ja' },
+  { id: 'JP', name: 'Japan', lang: 'both' },
   { id: 'US', name: 'United States', lang: 'en' },
-  { id: 'GB', name: 'United Kingdom', lang: 'en' },
-  { id: 'FR', name: 'France', lang: 'fr' },
-  { id: 'DE', name: 'Germany', lang: 'de' },
-  { id: 'ES', name: 'Spain', lang: 'es' },
-  { id: 'BR', name: 'Brazil', lang: 'pt' },
-  { id: 'KR', name: 'South Korea', lang: 'ko' },
-  { id: 'TW', name: 'Taiwan', lang: 'zh-Hant' },
-  { id: 'CN', name: 'China', lang: 'zh-Hans' },
 ];
 const LANGS = [
-  { id: 'ja', name: 'Japanese' },
   { id: 'en', name: 'English' },
-  { id: 'fr', name: 'French' },
-  { id: 'de', name: 'German' },
-  { id: 'es', name: 'Spanish' },
-  { id: 'pt', name: 'Portuguese' },
-  { id: 'ko', name: 'Korean' },
-  { id: 'zh-Hans', name: 'Chinese (Simplified)' },
-  { id: 'zh-Hant', name: 'Chinese (Traditional)' },
+  { id: 'ja', name: 'Japanese' },
+  { id: 'both', name: 'Both' },
 ];
 const COFFEE_FALLBACK = {
-  ja: ['ひと息ついて、今日のニュースを振り返る'],
-  en: ['A pause between the headlines'],
-  fr: ['Une pause entre les titres'],
-  de: ['Eine Pause zwischen den Schlagzeilen'],
-  es: ['Una pausa entre los titulares'],
-  pt: ['Uma pausa entre as manchetes'],
-  ko: ['헤드라인 사이의 한숨'],
-  'zh-Hans': ['在标题之间停一下'],
-  'zh-Hant': ['在標題之間停一下'],
+  ja: ['ひと息ついて', '今日のニュースを振り返る'],
+  en: ['A pause between', 'the headlines'],
+  both: ['A pause between headlines', 'ひと息ついて振り返る'],
 };
 const TRACKS = [
   { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
@@ -2577,7 +2560,7 @@ function jstNow() { return new Date(Date.now() + 9 * 3600e3); }
 function todayJST() { const d = jstNow(); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
 function addDays(iso, n) { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
-/* ---------- 素材 ---------- */
+/* ---------- assets ---------- */
 function b64bytes(b64) { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
 async function loadAssets() {
   await Promise.all('ABCDE'.split('').map(async g => {
@@ -2637,7 +2620,7 @@ function useTrack(id) {
   }
 }
 
-/* m4a（AAC）を読み、音のフレームをそのまま取り出す */
+/* Read an m4a file and keep its AAC frames. */
 function parseM4A(u8) {
   const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const str = (p, n) => String.fromCharCode(...u8.subarray(p, p + n));
@@ -2701,7 +2684,7 @@ async function loadFonts(script) {
   ]);
 }
 
-/* ---------- 台本 ---------- */
+/* ---------- script ---------- */
 const SMALL = new Set(['to', 'and', 'of', 'on', 'for', 'from', 'in', 'at', 'by', 'with', 'the', 'a', 'an', 'into', 'vs']);
 const arr = v => Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : (v ? String(v).split(/\n/).map(s => s.trim()).filter(Boolean) : []);
 const up = s => String(s || '').trim().toUpperCase();
@@ -2764,7 +2747,7 @@ async function setScript(raw, quiet) {
   return S.show;
 }
 
-/* ---------- 形式 ---------- */
+/* ---------- layout ---------- */
 function sizeCanvas() {
   const cv = $('cv'), wide = S.show && S.show.W > S.show.H;
   if (S.show && (cv.width !== S.show.W || cv.height !== S.show.H)) { cv.width = S.show.W; cv.height = S.show.H; }
@@ -2786,11 +2769,27 @@ function setFormat(f) {
 }
 function chosenFormats() { return [...document.querySelectorAll('.fx')].filter(x => x.checked).map(x => x.value); }
 
-/* ---------- 再生 ---------- */
+/* ---------- playback ---------- */
+function safeUrl(u) {
+  try {
+    const x = new URL(String(u || ''), location.href);
+    return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : '';
+  } catch (e) { return ''; }
+}
 function draw(T) {
   if (!S.show) return;
-  E.drawFrame(ctx, S.show, Math.min(T, S.show.duration - 1 / E.FPS), S.bgs);
+  const shown = Math.min(T, S.show.duration - 1 / E.FPS);
+  E.drawFrame(ctx, S.show, shown, S.bgs);
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
+  const a = $('storyLink');
+  if (!a || !S.show.items.length) return;
+  const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / E.DUR)));
+  const it = S.show.items[i];
+  const url = it && it.kind !== 'coffee' ? safeUrl(it.url) : '';
+  if (!url) { a.hidden = true; return; }
+  a.hidden = false;
+  a.href = url;
+  a.textContent = (it.src || 'Source') + ' — open this story';
 }
 async function audioCtx() {
   if (!S.ac) S.ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -2931,8 +2930,9 @@ const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'k
 
 function edition() {
   const { country, lang } = market();
-  const hl = { ja: 'ja', en: 'en-US', fr: 'fr', de: 'de', es: 'es', pt: 'pt-BR', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' }[lang.id] || 'en-US';
-  const ceidLang = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt-419', ko: 'ko', 'zh-Hans': 'zh-Hans', 'zh-Hant': 'zh-Hant' }[lang.id] || 'en';
+  const feed = lang.id === 'both' ? (country.id === 'JP' ? 'ja' : 'en') : lang.id;
+  const hl = feed === 'ja' ? 'ja' : 'en-US';
+  const ceidLang = feed === 'ja' ? 'ja' : 'en';
   return { hl, gl: country.id, ceid: country.id + ':' + ceidLang, lang, country };
 }
 function feedUrl(section) {
@@ -2950,8 +2950,31 @@ function splitHeadline(title) {
   if (parts.length < 2) return { headline: String(title || '').trim(), source: 'News' };
   return { headline: parts.slice(0, -1).join(' - ').trim(), source: parts[parts.length - 1].trim() };
 }
-async function newsRows(section, cat) {
-  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl(section));
+function topicFeeds() {
+  const { country } = market();
+  const topics = country.id === 'JP'
+    ? ['日本', '政治', '経済', 'スポーツ', '科学', '国際', '社会', '文化']
+    : ['news', 'politics', 'business', 'sports', 'technology', 'world', 'science', 'health'];
+  const n = Number(store.get('gen', '0')) || 0;
+  store.set('gen', String(n + 1));
+  const e = edition();
+  const q = topic => 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic + ' when:2d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
+  const sec = SECTIONS[n % SECTIONS.length];
+  return [
+    [q(topics[n % topics.length]), 'NEWS'],
+    [q(topics[(n + 3) % topics.length]), 'NEWS'],
+    [feedUrl(sec[0]), sec[1]],
+  ];
+}
+function seenKeys() {
+  try { return new Set(JSON.parse(store.get('seen', '[]'))); } catch (e) { return new Set(); }
+}
+function rememberKeys(keys) {
+  const prev = [...seenKeys()];
+  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 60)));
+}
+async function newsRows(rss, cat) {
+  const url = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20&_=' + Date.now();
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url);
     if (res.status === 429 || res.status === 503) { await sleep(500 * (attempt + 1)); continue; }
@@ -2962,36 +2985,90 @@ async function newsRows(section, cat) {
   }
   return [];
 }
-function postsFromMarkdown(md, handle) {
-  if (!md || /onboarding\/web|redirect_after_login/.test(md)) return [];
-  const posts = [];
-  for (const chunk of md.split(/\n\*\s+/).slice(1)) {
-    const m = chunk.match(/\]\(https:\/\/x\.com\/[A-Za-z0-9_]+\)\s+([\s\S]+)/);
-    if (!m) continue;
-    const text = m[1].replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
-    if (text.length < 24) continue;
-    posts.push({ headline: text.slice(0, 280), link: 'https://x.com/' + handle, pubDate: '', cat: 'NEWS', source: 'X @' + handle, x: true });
+function handleFromReferrer() {
+  const ref = document.referrer || '';
+  const m = ref.match(/https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/i);
+  if (!m) return '';
+  const skip = new Set(['home', 'explore', 'search', 'i', 'intent', 'share', 'settings', 'messages', 'notifications', 'compose', 'login', 'signup', 'hashtag', 'tos', 'privacy']);
+  return skip.has(m[1].toLowerCase()) ? '' : m[1];
+}
+async function sessionHandle() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2000);
+  try {
+    const res = await fetch('https://x.com/home', { credentials: 'include', signal: ctrl.signal });
+    const text = await res.text();
+    const m = text.match(/"screen_name":"([A-Za-z0-9_]{1,15})"/);
+    if (!m) return '';
+    const skip = new Set(['home', 'explore', 'search', 'i', 'intent', 'share', 'settings']);
+    return skip.has(m[1].toLowerCase()) ? '' : m[1];
+  } catch (e) {
+    return '';
+  } finally {
+    clearTimeout(timer);
   }
-  return posts.slice(0, 6);
 }
-async function publicPosts(handle) {
-  return postsFromMarkdown(await getText('https://r.jina.ai/https://x.com/' + encodeURIComponent(handle)), handle);
+async function fxJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
 }
-async function sessionPosts(handle) {
-  const targets = [
-    'https://x.com/' + encodeURIComponent(handle) + '/with_replies',
-    'https://x.com/search?q=' + encodeURIComponent('(from:' + handle + ') OR (to:' + handle + ')') + '&src=typed_query&f=live',
-    'https://x.com/home',
-  ];
-  for (const url of targets) {
+async function followHandles(handle) {
+  const data = await fxJson('https://api.fxtwitter.com/2/profile/' + encodeURIComponent(handle) + '/following');
+  const names = [];
+  for (const row of (data && data.results) || []) {
+    const name = String(row.screen_name || '').replace(/^@+/, '');
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) continue;
+    if (name.toLowerCase() === handle.toLowerCase()) continue;
+    names.push(name);
+    if (names.length === 10) break;
+  }
+  return names;
+}
+function rowFromStatus(st) {
+  if (!st || (st.type && st.type !== 'status')) return null;
+  const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
+  const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!author || text.length < 12 || GRAPHIC.test(text)) return null;
+  const created = st.created_at ? new Date(st.created_at) : null;
+  return {
+    headline: text.slice(0, 220),
+    link: st.url || ('https://x.com/' + author),
+    pubDate: created && !Number.isNaN(created.getTime()) ? created.toISOString() : '',
+    cat: 'NEWS',
+    source: 'X @' + author,
+    x: true,
+    lang: String(st.lang || ''),
+  };
+}
+async function searchPosts(query) {
+  const data = await fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(query));
+  const out = [];
+  const seen = new Set();
+  for (const st of (data && data.results) || []) {
+    const row = rowFromStatus(st);
+    if (!row || seen.has(row.headline)) continue;
+    seen.add(row.headline);
+    out.push(row);
+  }
+  return out;
+}
+async function followedPosts(handle) {
+  const names = await followHandles(handle);
+  if (!names.length) return [];
+  const q = '(' + names.map(n => 'from:' + n).join(' OR ') + ')';
+  let rows = [];
+  try { rows = await searchPosts(q + ' filter:replies'); } catch (e) { console.warn(e); }
+  if (rows.length < 4) {
     try {
-      const res = await fetch(url, { credentials: 'include' });
-      const text = await res.text();
-      const posts = postsFromMarkdown(text, handle);
-      if (posts.length) return posts;
-    } catch (e) { /* This page cannot read a signed-in X tab when X blocks it. */ }
+      const more = await searchPosts(q);
+      const seen = new Set(rows.map(r => r.headline));
+      more.forEach(r => { if (!seen.has(r.headline)) rows.push(r); });
+    } catch (e) { console.warn(e); }
   }
-  return publicPosts(handle);
+  const want = { ja: 'ja', en: 'en' }[market().lang.id] || '';
+  const matched = rows.filter(r => !r.lang || !want || r.lang.toLowerCase().startsWith(want));
+  return (matched.length >= 4 ? matched : rows).slice(0, 6);
 }
 async function translateMany(texts, tl) {
   const sep = '\n###\n';
@@ -3029,16 +3106,60 @@ function linesOf(text, max, count, cjk) {
   if (cur && out.length < count) out.push(cur);
   return out;
 }
+function contentWords(text) {
+  return String(text || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').split(/\s+/).filter(w => w.length > 1 && !SMALL.has(w.toLowerCase()));
+}
+function packWords(words, limit, maxLines) {
+  const lines = [];
+  let used = 0;
+  let cur = '';
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const w = word.length <= limit + 3 ? word : word.slice(0, limit);
+    const next = cur ? cur + ' ' + w : w;
+    if (cur && next.length > limit + 3) {
+      lines.push(cur);
+      if (lines.length === maxLines) return { lines, used };
+      cur = w;
+      used = i + 1;
+    } else {
+      cur = next;
+      used = i + 1;
+    }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  return { lines, used };
+}
+function cutLines(text, limit, maxLines, cjk) {
+  const clean = String(text || '').replace(/\s+/g, cjk ? '' : ' ').trim();
+  if (!clean) return [];
+  if (cjk) {
+    const out = [];
+    for (let i = 0; i < clean.length && out.length < maxLines; i += limit) {
+      const line = clean.slice(i, i + limit).replace(/^[、。，．・\s]+/, '');
+      if (line) out.push(line);
+    }
+    return out;
+  }
+  return packWords(clean.split(' ').filter(Boolean), limit, maxLines).lines;
+}
 function storyFrom(raw, english, local, langId) {
   const en = String(english || raw.headline || '').replace(/\s+/g, ' ').trim();
-  const loc = String(local || raw.headline || '').replace(/\s+/g, ' ').trim();
-  const cjk = cjkLang(langId);
-  const headSrc = en.toUpperCase();
-  const words = headSrc.split(' ').filter(w => w.length > 2 && !SMALL.has(w.toLowerCase()));
-  const kw = ((words[0] || headSrc.split(' ')[0] || 'NEWS').replace(/[^A-Z0-9]/g, '').slice(0, 12)) || 'NEWS';
-  const head = linesOf(headSrc, 32, 2, false);
-  const sub = linesOf('FROM ' + (raw.source || 'NEWS'), 34, 2, false);
-  const jp = linesOf(loc, cjk ? 18 : 42, 3, cjk);
+  const loc = String(local || '').replace(/\s+/g, ' ').replace(/^[、。，．\s]+/, '').trim();
+  const skip = new Set(['ONE', 'TWO', 'NEW', 'SAYS', 'SAID', 'AFTER', 'AMID', 'OVER', 'INTO', 'ITS', 'HIS', 'HER']);
+  const all = contentWords(en);
+  const words = all.filter(w => !skip.has(w));
+  const picked = words.length ? words : all;
+  const rawKw = (picked[0] || 'NEWS').replace(/[^A-Z0-9]/g, '') || 'NEWS';
+  const kw = rawKw.length > 16 ? rawKw.slice(0, 16) : rawKw;
+  const headPack = packWords(picked.slice(0, 3), 16, 2);
+  const subPack = packWords(picked.slice(headPack.used), 18, 2);
+  const head = headPack.lines;
+  const sub = subPack.lines;
+  let jp;
+  if (langId === 'both') jp = [...cutLines(en, 28, 1, false), ...cutLines(loc, 14, 2, true)];
+  else if (langId === 'ja') jp = cutLines(loc || en, 14, 3, true);
+  else jp = cutLines(en, 28, 3, false);
   let md = '';
   if (raw.pubDate) {
     const stamp = String(raw.pubDate);
@@ -3048,13 +3169,21 @@ function storyFrom(raw, english, local, langId) {
   return {
     kw, cat: raw.cat || 'NEWS', topic: kw,
     head: head.length ? head : [kw],
-    sub: sub.length ? sub : ['FROM THE WIRE'],
-    jp: jp.length ? jp : [(loc || en).slice(0, cjk ? 18 : 42)],
+    sub: sub.length ? sub : ['LATEST REPORT'],
+    jp: jp.length ? jp : [kw],
     tags: [raw.cat || 'NEWS', kw].slice(0, 3),
-    src: raw.x ? (raw.source || 'X') : ('WEB ' + (raw.source || 'News')),
+    src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 24),
     date: md,
     url: raw.link || '',
   };
+}
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
 }
 function mixRows(rows) {
   const by = {};
@@ -3066,41 +3195,60 @@ function mixRows(rows) {
 }
 async function collect(date) {
   const { country, lang } = market();
-  const handle = xHandle();
-  say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', including @' + handle + ' on X' : '') + '…');
+  let handle = xHandle() || handleFromReferrer();
+  if (!handle) handle = await sessionHandle();
+  if (handle && handle !== xHandle()) {
+    S.xUser = handle;
+    store.set('xUser', handle);
+    if ($('xUser')) $('xUser').value = '@' + handle;
+  }
+  say('Collecting ' + country.name + ' news in ' + lang.name + (handle ? ', plus posts from accounts @' + handle + ' follows' : '') + '…');
   progress(0.08);
   const batches = [];
-  for (const [sec, cat] of SECTIONS) {
-    try { batches.push(await newsRows(sec, cat)); } catch (e) { console.warn(e); batches.push([]); }
-    if (batches.reduce((n, list) => n + list.length, 0) >= 16) break;
+  for (const [rss, cat] of topicFeeds()) {
+    try { batches.push(await newsRows(rss, cat)); } catch (e) { console.warn(e); batches.push([]); }
   }
-  const seen = new Set();
+  const used = new Set();
   const rows = [];
   batches.flat().forEach(it => {
     const sp = splitHeadline(it.title);
     if (!sp.headline || GRAPHIC.test(sp.headline)) return;
     const key = sp.headline.toLowerCase().slice(0, 90);
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (used.has(key)) return;
+    used.add(key);
     rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: it.cat, source: sp.source });
   });
   let xrows = [];
-  if (handle) { try { xrows = await sessionPosts(handle); } catch (e) { console.warn(e); } }
-  const chosen = [...xrows, ...mixRows(rows)].slice(0, 12);
+  if (handle) { try { xrows = await followedPosts(handle); } catch (e) { console.warn(e); } }
+  const past = seenKeys();
+  const keyOf = r => r.headline.toLowerCase().slice(0, 90);
+  const fresh = rows.filter(r => !past.has(keyOf(r)));
+  const pool = fresh.length >= 8 ? fresh : rows;
+  const posts = shuffle(xrows.filter(r => !past.has(keyOf(r)))).slice(0, 3);
+  const news = shuffle(pool.length ? pool : rows).slice(0, 12 - posts.length);
+  const chosen = shuffle([...posts, ...news]);
+  rememberKeys(chosen.map(r => r.headline.toLowerCase().slice(0, 90)));
   if (chosen.length < 4) throw new Error('Could not collect enough headlines. The sample keeps playing.');
   progress(0.45);
   const originals = chosen.map(r => r.headline);
-  let english = lang.id === 'en' ? originals.slice() : await translateMany(originals, 'en');
-  let local = lang.id === 'en' ? english.slice() : originals.slice();
-  const xIdx = chosen.map((r, i) => (r.x ? i : -1)).filter(i => i >= 0);
-  if (xIdx.length) {
-    const enX = await translateMany(xIdx.map(i => chosen[i].headline), 'en');
-    xIdx.forEach((i, k) => { english[i] = enX[k]; });
-    if (lang.id === 'en') xIdx.forEach((i, k) => { local[i] = enX[k]; });
+  let english = originals.slice();
+  let local = originals.slice();
+  try {
+    english = await translateMany(originals, 'en');
+    if (lang.id === 'en') local = english.slice();
     else {
-      const locX = await translateMany(xIdx.map(i => chosen[i].headline), GTX[lang.id] || 'en');
-      xIdx.forEach((i, k) => { local[i] = locX[k]; });
+      local = originals.map(src => /[\u3040-\u30ff\u4e00-\u9fff]/.test(src) ? src : '');
+      const need = [];
+      local.forEach((v, i) => { if (!v) need.push(i); });
+      if (need.length) {
+        const got = await translateMany(need.map(i => originals[i]), 'ja');
+        need.forEach((i, k) => { local[i] = got[k]; });
+      }
     }
+  } catch (e) {
+    console.warn(e);
+    english = originals.slice();
+    local = originals.slice();
   }
   return {
     date,
@@ -3110,7 +3258,7 @@ async function collect(date) {
   };
 }
 
-/* ---------- 書き出し ---------- */
+/* ---------- export ---------- */
 function fileName(date, fmt) {
   const d = new Date(), h = d.getHours();
   const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${h < 12 ? 'am' : 'pm'}${pad2(h)}${pad2(d.getMinutes())}`;
@@ -3194,7 +3342,7 @@ async function exportMP4(formats) {
     return names;
   } finally { S.busy = false; setBusy(false); }
 }
-/* WebCodecs がないブラウザでは、再生しながら録画する */
+/* Browsers without WebCodecs record the playing picture. */
 async function recordRealtime() {
   if (typeof MediaRecorder === 'undefined' || !$('cv').captureStream) throw new Error('This browser cannot export video.');
   const ac = await audioCtx();
@@ -3253,7 +3401,7 @@ function refreshMarket() {
   runAll({ download: false, export: false }).catch(() => {});
 }
 
-/* ---------- 画面 ---------- */
+/* ---------- page ---------- */
 function initUI() {
   $('date').value = Q.get('date') || todayJST();
   $('autoExport').checked = store.get('autoExport', '0') === '1';
@@ -3296,9 +3444,7 @@ function initUI() {
   COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
   LANGS.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; langBox.appendChild(o); });
   const nav = (navigator.language || 'en').toLowerCase();
-  const navCountry = { ja: 'JP', 'en-gb': 'GB', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', 'zh-tw': 'TW', 'zh-hk': 'TW', 'zh-cn': 'CN', zh: 'CN' }[nav]
-    || { ja: 'JP', en: 'US', fr: 'FR', de: 'DE', es: 'ES', pt: 'BR', ko: 'KR', zh: 'CN' }[nav.split('-')[0]]
-    || 'US';
+  const navCountry = nav.startsWith('ja') ? 'JP' : 'US';
   const pickedCountry = COUNTRIES.some(c => c.id === (Q.get('country') || '')) ? Q.get('country')
     : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
   countryBox.value = pickedCountry;
@@ -3306,7 +3452,7 @@ function initUI() {
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
   langBox.value = pickedLang;
-  S.xUser = (Q.get('x') || store.get('xUser', '')).replace(/^@+/, '');
+  S.xUser = (Q.get('x') || store.get('xUser', '') || handleFromReferrer()).replace(/^@+/, '');
   $('xUser').value = S.xUser ? '@' + S.xUser : '';
   const saveMarket = () => { store.set('country', countryBox.value); store.set('lang', langBox.value); };
   countryBox.onchange = () => {
@@ -3340,6 +3486,21 @@ function initUI() {
   };
   $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn && !S.audioFailed) tapSound(); });
+  let pull = null;
+  window.addEventListener('pointerdown', e => {
+    if (e.clientY > 120) return;
+    if (e.target.closest && e.target.closest('button, a, input, select, textarea, summary, label')) return;
+    pull = { y: e.clientY, id: e.pointerId };
+  });
+  window.addEventListener('pointerup', e => {
+    if (!pull || pull.id !== e.pointerId) return;
+    const dy = e.clientY - pull.y;
+    pull = null;
+    if (dy < 70) return;
+    say('Refreshing. The stories and their order change.');
+    runAll({ download: false, export: false }).catch(() => {});
+  });
+  window.addEventListener('pointercancel', () => { pull = null; });
   $('seek').oninput = () => {
     if (!S.show) return;
     const T = +$('seek').value / 1000 * S.show.duration;
@@ -3371,19 +3532,21 @@ window.NS = {
   initUI();
   try {
     await loadAssets();
-    await setScript(SAMPLE, true);
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
       await runAll({ sample: Q.get('sample') === '1', date: Q.get('date') || undefined, download: true, export: true });
       window.NS.done = true;
-    } else if (Q.get('sample') !== '1') {
+    } else if (Q.get('sample') === '1') {
+      await setScript(SAMPLE, true);
+    } else {
       await runAll({ download: false, export: false });
-    } else if (!S.playing) {
-      say('Press Play to start the news video.');
     }
+    if (!S.script) await setScript(SAMPLE, true);
   } catch (e) {
-    console.error(e); say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
+    console.error(e);
+    if (!S.script) { try { await setScript(SAMPLE, true); } catch (err) {} }
+    say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
   }
 })();
 })();
