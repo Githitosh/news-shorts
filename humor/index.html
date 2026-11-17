@@ -2979,7 +2979,6 @@ const COUNTRIES = [
 const LANGS = [
   { id: 'en', name: 'English' },
   { id: 'ja', name: 'Japanese' },
-  { id: 'both', name: 'Both' },
 ];
 const WALLS = [
   { id: 'morning', name: 'Morning' },
@@ -3023,15 +3022,9 @@ const SOURCES = [
   { id: 'bbc', name: 'BBC', group: 'International' },
   { id: 'cnn', name: 'CNN', group: 'International' },
   { id: 'nyt', name: 'The New York Times', group: 'International' },
-  { id: 'nhk', name: 'NHK', group: 'Japanese media' },
   { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
-  { id: 'asahi', name: 'Asahi Shimbun', group: 'Japanese media' },
-  { id: 'yomiuri', name: 'Yomiuri Shimbun', group: 'Japanese media' },
 ];
 const RSS = {
-  nhk: 'https://www.nhk.or.jp/rss/news/cat0.xml',
-  asahi: 'https://www.asahi.com/rss/asahi/newsheadlines.rdf',
-  yomiuri: 'https://assets.wor.jp/rss/rdf/yomiuri/latestnews.rdf',
   nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
   bbc: 'https://feeds.bbci.co.uk/news/rss.xml',
   abc: 'https://feeds.abcnews.com/abcnews/topstories',
@@ -3043,9 +3036,9 @@ const RSS = {
   cnn: 'http://rss.cnn.com/rss/edition.rss',
   nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
 };
-const SOURCE_LABEL = { nhk: 'NHK', nikkei: 'Nikkei', asahi: 'Asahi', yomiuri: 'Yomiuri', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times', abc: 'ABC' };
+const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times', abc: 'ABC' };
 /* Feeds for an empty lineup, by country. */
-const HOME_FEEDS = { JP: ['nhk', 'nikkei', 'asahi', 'yomiuri'], US: ['nyt', 'bbc', 'cnn', 'abc'] };
+const HOME_FEEDS = { JP: ['nikkei'], US: ['nyt', 'bbc', 'cnn', 'abc'] };
 const HOME_TOPICS = {
   JP: ['話題', '日本', '政治', '経済', 'スポーツ', '科学', '国際', '社会', '文化', '芸能', 'グルメ', '動物'],
   US: ['news', 'politics', 'business', 'sports', 'technology', 'world', 'science', 'entertainment', 'odd news', 'animals', 'food', 'travel'],
@@ -3226,7 +3219,10 @@ function genreChoices() {
     return { ...g, on: box ? box.checked : rec.on !== false, place: (place && place.value) || rec.place || g.place };
   });
 }
+/* NHK, Asahi and Yomiuri were taken out of the settings: never read, and their stories are skipped. */
+const GONE = new Set(['nhk', 'asahi', 'yomiuri']);
 function sourceOn(id) {
+  if (GONE.has(id)) return false;
   const box = document.querySelector('.srcf[value="' + id + '"]');
   if (box) return box.checked;
   return savedJson('sourcesOn')[id] !== false;
@@ -3521,7 +3517,6 @@ function classifyRequest(text) {
   }
   if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
-  if (/^nhk$|ＮＨＫ/.test(low)) return { type: 'rss', rss: RSS.nhk, cat: 'NHK', source: 'NHK', label: name };
   if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: '食文化 OR food', cat: 'FOOD', source: 'The New York Times', label: name };
   if (/レストラン|^restaurant$/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: 'レストラン OR restaurant', cat: 'RESTAURANT', source: 'The New York Times', label: name };
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
@@ -3540,7 +3535,7 @@ function requestForGenre(g) {
   if (g.id === 'food') return { type: 'rss', rss: RSS.food, gdelt: q, cat: 'FOOD', source: 'The New York Times', label: name };
   if (g.id === 'restaurant') return { type: 'rss', rss: RSS.food, gdelt: q, cat: 'RESTAURANT', source: 'The New York Times', label: name };
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: q, cat: 'SPACE', source: 'BBC', label: name };
-  if (g.id === 'local') return { type: 'rss', rss: country.id === 'JP' ? RSS.nhk : RSS.nyt, gdelt: q, cat: 'LOCAL', source: country.id === 'JP' ? 'NHK' : 'The New York Times', label: name };
+  if (g.id === 'local') return country.id === 'JP' ? { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name } : { type: 'rss', rss: RSS.nyt, gdelt: q, cat: 'LOCAL', source: 'The New York Times', label: name };
   if (g.id === 'romance') return { type: 'romance', cat: 'ROMANCE', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q, cat: name.toUpperCase(), source: 'News', label: name };
