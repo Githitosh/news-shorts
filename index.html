@@ -2600,6 +2600,72 @@ function say(msg, err) {
   const c = $('caption'); if (c) { c.textContent = msg; c.classList.toggle('err', !!err); }
   console.log('[news-shorts]', msg);
 }
+function wrapCanvas(text, x, y, width, lineH, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  const push = s => { if (s && lines.length < maxLines) lines.push(s); };
+  if (!words.length || /[\u3040-\u30ff\u4e00-\u9fff]/.test(text) && words.length < 3) {
+    const raw = String(text || '');
+    for (let i = 0; i < raw.length && lines.length < maxLines; i += 18) push(raw.slice(i, i + 18));
+  } else {
+    words.forEach(w => {
+      const next = cur ? cur + ' ' + w : w;
+      if (cur && ctx.measureText(next).width > width) { push(cur); cur = w; }
+      else cur = next;
+    });
+    push(cur);
+  }
+  lines.forEach(line => { ctx.fillText(line, x, y); y += lineH; });
+  return y;
+}
+function showWaiting(title, lines) {
+  const cv = $('cv');
+  if (!cv) return;
+  if (!cv.width) { cv.width = 1080; cv.height = 1920; }
+  const W = cv.width, H = cv.height, wide = W > H;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const img = S.bgs && (S.bgs.A || S.bgs.B || S.bgs.C || S.bgs.D);
+  const wall = store.get('wall', 'morning');
+  const filter = { evening: 'brightness(0.72) saturate(1.35) sepia(0.45)', night: 'brightness(0.38) saturate(0.5)', pop: 'brightness(1.65) saturate(1.85) contrast(1.04)' }[wall] || 'none';
+  if (img) {
+    ctx.save();
+    ctx.filter = filter;
+    const k = Math.max(W / img.width, H / img.height);
+    ctx.drawImage(img, (W - img.width * k) / 2, (H - img.height * k) / 2, img.width * k, img.height * k);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(8,10,16,0.5)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#2a3548');
+    g.addColorStop(1, '#10141c');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  const pad = wide ? 90 : 78;
+  let y = wide ? 110 : 170;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#e8c27a';
+  ctx.font = `700 ${wide ? 48 : 64}px "Noto Serif JP", Georgia, serif`;
+  ctx.fillText('SEARCHING', pad, y);
+  y += wide ? 78 : 96;
+  ctx.fillStyle = '#f5f1e9';
+  ctx.font = `700 ${wide ? 40 : 52}px "Noto Sans JP", sans-serif`;
+  String(title || 'News').split('\n').slice(0, 8).forEach(part => {
+    if (y > H * 0.42) return;
+    y = wrapCanvas(part.trim(), pad, y, W - pad * 2, wide ? 52 : 66, 2);
+  });
+  y += wide ? 24 : 36;
+  ctx.font = `400 ${wide ? 30 : 38}px "Noto Sans JP", sans-serif`;
+  (lines || []).slice(-8).forEach(line => {
+    if (y > H - 90) return;
+    ctx.fillStyle = '#f7f3ea';
+    y = wrapCanvas(String(line || ''), pad, y, W - pad * 2, wide ? 40 : 50, 2);
+    y += wide ? 12 : 18;
+  });
+}
 function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pad2 = n => String(n).padStart(2, '0');
@@ -3280,6 +3346,49 @@ async function searchPosts(query) {
   }
   return out;
 }
+function readableLine(text) {
+  const line = String(text || '').replace(/\s+/g, ' ').trim();
+  return /[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? line : '';
+}
+async function userPosts(handle) {
+  const name = String(handle || '').replace(/^@+/, '');
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
+  let text = '';
+  try {
+    const res = await Promise.race([
+      fetch('https://r.jina.ai/https://x.com/' + encodeURIComponent(name)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000)),
+    ]);
+    if (!res.ok) return [];
+    text = await res.text();
+  } catch (e) {
+    console.warn(e);
+    return [];
+  }
+  const rows = [];
+  const seen = new Set();
+  const re = /\*\s+\[\]\(https:\/\/x\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\)([\s\S]*?)(?=\n\*\s+\[\]\(https:\/\/x\.com\/|$)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const author = m[1];
+    const id = m[2];
+    if (author.toLowerCase() !== name.toLowerCase() || seen.has(id)) continue;
+    seen.add(id);
+    const tm = m[3].match(/\[\d+\s*[smhdw]\]\(https:\/\/x\.com\/[^)]+\)\s+([^[\n]+)/i);
+    const headline = readableLine(tm && tm[1]);
+    if (!headline || headline.length < 4) continue;
+    rows.push({
+      headline: headline.slice(0, 220),
+      link: 'https://x.com/' + author + '/status/' + id,
+      pubDate: '',
+      cat: 'X',
+      source: 'X @' + author,
+      x: true,
+    });
+    if (rows.length >= 8) break;
+  }
+  return rows;
+}
 async function followedPosts(handle) {
   const names = await followHandles(handle);
   if (!names.length) return [];
@@ -3577,9 +3686,13 @@ async function rowsForSlot(slot) {
   let rows = [];
   try {
     if (slot.type === 'x') {
-      rows = slot.who ? await searchPosts(slot.q) : await searchPosts(slot.q);
-      if (slot.who) rows = rows.filter(r => String(r.source || '').toLowerCase() === 'x @' + slot.who);
-      rows = rows.map(r => ({ ...r, cat: slot.cat || 'X' }));
+      if (slot.who) rows = await userPosts(slot.who);
+      if (rows.length < need) {
+        const more = await searchPosts(slot.q);
+        const mine = slot.who ? more.filter(r => String(r.source || '').toLowerCase() === 'x @' + String(slot.who).toLowerCase()) : more;
+        rows = mergeRows(rows, mine);
+      }
+      rows = rows.map(r => ({ ...r, cat: slot.cat || 'X', x: true }));
     } else if (slot.type === 'rss' && slot.rss) {
       rows = rowsFromItems(await cachedNews(slot.rss), slot.source, slot.cat);
       if (slot.hint) rows = rows.filter(r => slot.hint.test(r.headline));
@@ -3589,19 +3702,28 @@ async function rowsForSlot(slot) {
     }
     if (slot.type !== 'x') rows = mergeRows(await countryRows(slot.cat), rows);
   } catch (e) { console.warn(e); }
-  return rows.filter(r => r.headline && !blocked(r.headline) && sourceOn(sourceId(r)));
+  return rows.filter(r => r.headline && !blocked(r.headline) && (slot.type === 'x' || sourceOn(sourceId(r))));
 }
 async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
-  say('Creating the news video…');
+  const found = [];
+  const note = label => {
+    showWaiting(label, found.map(r => (r.x ? 'X  ' : '') + r.headline));
+    say('Searching ' + label);
+  };
+  note(slots.map(s => s.label || s.cat || 'News').filter(Boolean).join('\n'));
   progress(0.08);
   let sequence = [];
   const used = new Set();
   let guard = 0;
   for (const slot of slots) {
     if (guard >= 24) break;
+    const label = slot.label || slot.cat || 'News';
+    note(label);
     if (slot.type === 'coffee') {
       for (let i = 0; i < slot.count && guard < 24; i++) { sequence.push({ coffee: true }); guard++; }
+      found.push({ headline: 'Coffee break' });
+      note(label);
       continue;
     }
     const rows = await rowsForSlot(slot);
@@ -3613,8 +3735,10 @@ async function collectSlots(date, slots, reorder) {
       if (guard >= 24) return;
       used.add(keyOf(r));
       sequence.push({ ...r, place: slot.place || r.place || 'middle' });
+      found.push(r);
       guard++;
     });
+    note(label);
     await sleep(150);
   }
   if (reorder) sequence = orderStories(sequence.filter(r => !r.coffee), 12);
@@ -3684,7 +3808,6 @@ async function collect(date) {
       if ($('xUser')) $('xUser').value = '@' + handle;
     }
   }
-  say('Creating the news video…');
   progress(0.08);
   const batches = [];
   const order = RSS_ORDER[country.id] || RSS_ORDER.US;
@@ -3693,10 +3816,17 @@ async function collect(date) {
   store.set('gen', String(n + 1));
   const picks = [];
   for (let i = 0; i < list.length && picks.length < 2; i++) picks.push(list[(n + i) % list.length]);
+  const lines = [];
   for (const id of picks) {
+    const name = SOURCE_LABEL[id] || id;
+    showWaiting(name, lines);
+    say('Searching ' + name);
     try {
       const items = await newsRows(RSS[id], 'NEWS');
-      batches.push(items.map(it => ({ ...it, source: it.source || SOURCE_LABEL[id] || id })));
+      const tagged = items.map(it => ({ ...it, source: it.source || name }));
+      batches.push(tagged);
+      rowsFromItems(tagged, name, 'NEWS').slice(0, 4).forEach(r => lines.push(r.headline));
+      showWaiting(name, lines);
     } catch (e) { console.warn(e); }
     await sleep(200);
   }
@@ -3906,7 +4036,13 @@ async function runAll(opts) {
   opts = opts || {};
   if (S.busy) { S.again = opts; return; }
   S.busy = true; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
-  if (!opts.sample) { stop(); say('Creating the news video…'); }
+  if (!opts.sample) {
+    stop();
+    const preview = parseLineup(lineupText());
+    const label = preview.length ? preview.map(s => s.label || 'News').join('\n') : "Today's headlines";
+    showWaiting(label, []);
+    say(preview.length ? 'Searching ' + (preview[0].label || 'the lineup') : "Searching today's headlines");
+  }
   try {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
@@ -4241,8 +4377,16 @@ window.NS = {
 (async () => {
   initUI();
   try {
-    if (Q.get('sample') !== '1' && $('update')) { $('update').disabled = true; $('update').textContent = 'Creating…'; say('Creating the news video…'); }
+    if (Q.get('sample') !== '1' && $('update')) {
+      $('update').disabled = true; $('update').textContent = 'Creating…';
+      showWaiting("Today's headlines", []);
+      say("Searching today's headlines");
+    }
     await loadAssets();
+    if (!S.script) {
+      const preview = parseLineup(lineupText());
+      showWaiting(preview.length ? preview.map(s => s.label || 'News').join('\n') : "Today's headlines", []);
+    }
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;
