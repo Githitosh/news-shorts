@@ -26,6 +26,7 @@ header .pull { display: block; color: var(--mute); font-size: 12px; letter-spaci
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
+body:has(#studio:not([hidden])) .stage { position: static; }
 .frame { position: relative; max-width: 400px; margin: 0 auto; }
 canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
 canvas#cv.wide { aspect-ratio: 16 / 9; }
@@ -125,6 +126,11 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
+      <p class="note">Press a name to add it. One request a line, then a count. The first line opens the video.</p>
+      <div id="genreChips" class="music"></div>
+      <label for="lineup">Lineup</label>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
+      <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent" checked> Hide violent crime</label>
       <label>Sources</label>
@@ -2391,8 +2397,10 @@ function prepare(script, preset) {
   const d = new Date((script.date || '') + 'T12:00:00+09:00');
   const ok = !isNaN(d);
   const y = ok ? d.getFullYear() : 2026, mo = ok ? d.getMonth() + 1 : 1, da = ok ? d.getDate() : 1;
-  const items = (script.items || []).map((it, i) => ({ ...it, kind: 'news', bg: it.bg || BG_ORDER[i % BG_ORDER.length] }));
-  if (script.coffee) items.push({ ...script.coffee, kind: 'coffee', bg: 'E', kw: script.coffee.kw || 'COFFEE BREAK', head: script.coffee.head || ['COFFEE', 'BREAK'] });
+  const items = (script.items || []).map((it, i) => it && it.coffee
+    ? { ...it, kind: 'coffee', bg: 'E', kw: it.kw || 'COFFEE BREAK', head: (it.head && it.head.length) ? it.head : ['COFFEE', 'BREAK'] }
+    : { ...it, kind: 'news', bg: it.bg || BG_ORDER[i % BG_ORDER.length] });
+  if (script.coffee && !items.some(it => it.kind === 'coffee')) items.push({ ...script.coffee, kind: 'coffee', bg: 'E', kw: script.coffee.kw || 'COFFEE BREAK', head: script.coffee.head || ['COFFEE', 'BREAK'] });
   const total = items.length;
   items.forEach((it, i) => {
     const no = pad2(i + 1);
@@ -2746,8 +2754,14 @@ function normItem(it) {
   };
 }
 function normalize(s) {
-  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 12).map(normItem), market: String(s.market || '').trim() };
-  if (s.coffee) {
+  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 24).map(it => {
+    if (!it || !it.coffee) return normItem(it);
+    const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], sub: it.sub, jp: it.jp, tags: it.tags });
+    c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK']; c.cat = 'COFFEE BREAK'; c.coffee = true;
+    if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
+    return c;
+  }), market: String(s.market || '').trim() };
+  if (s.coffee && !out.items.some(it => it.coffee)) {
     const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], ...s.coffee });
     c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK'];
     if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
@@ -3152,6 +3166,11 @@ const RSS = {
   asahi: 'https://www.asahi.com/rss/asahi/newsheadlines.rdf',
   yomiuri: 'https://assets.wor.jp/rss/rdf/yomiuri/latestnews.rdf',
   bbc: 'https://feeds.bbci.co.uk/news/rss.xml',
+  abc: 'https://feeds.abcnews.com/abcnews/topstories',
+  sport: 'https://feeds.bbci.co.uk/sport/rss.xml',
+  science: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
+  politics: 'https://feeds.bbci.co.uk/news/politics/rss.xml',
+  culture: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
   cnn: 'http://rss.cnn.com/rss/edition.rss',
   nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
 };
@@ -3223,7 +3242,7 @@ async function followHandles(handle) {
 function rowFromStatus(st) {
   if (!st || (st.type && st.type !== 'status')) return null;
   const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
-  const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!author || text.length < 12 || (violentHidden() && VIOLENT.test(text))) return null;
   const created = st.created_at ? new Date(st.created_at) : null;
   return {
@@ -3338,11 +3357,12 @@ function cutLines(text, limit, maxLines, cjk) {
   }
   return packWords(clean.split(' ').filter(Boolean), limit, maxLines).lines;
 }
-const STOP = new Set(['NEWS','REPORT','LATEST','SAYS','SAID','AFTER','AMID','OVER','INTO','ITS','HIS','HER','ONE','TWO','NEW','WORLD','UPDATE','LIVE','VIDEO','TODAY','YEAR','JAPAN','OFFICIALS','GOVERNMENT','PEOPLE','ABOUT','THEIR','THEY','BEEN','WERE','WAS','ARE','HAS','HAD','NOT','BUT','YOU','WHO','WHAT','WHEN','WHERE','WHICH','ALSO','MORE','THAN','JUST','MAY','CAN','NOW','WILL','HAVE','FROM','WITH','THAT','THIS','AND','THE','FOR','HEADLINE','BREAKING']);
+const STOP = new Set(['NEWS','REPORT','LATEST','SAYS','SAID','AFTER','AMID','OVER','INTO','ITS','HIS','HER','ONE','TWO','NEW','WORLD','UPDATE','LIVE','VIDEO','TODAY','YEAR','JAPAN','OFFICIALS','GOVERNMENT','PEOPLE','ABOUT','THEIR','THEY','BEEN','WERE','WAS','ARE','HAS','HAD','NOT','BUT','YOU','WHO','WHAT','WHEN','WHERE','WHICH','ALSO','MORE','THAN','JUST','MAY','CAN','NOW','WILL','HAVE','FROM','WITH','THAT','THIS','AND','THE','FOR','HEADLINE','BREAKING','HOW','VIEW','SEE','LOOK','HERE','COMING','SOON','LIKE','GET','GOT','OUT','OUR','YOUR','BACK','NEXT','FIRST','EVER','WATCH','SAYS']);
 function storyWord(english, local) {
   const genreNames = new Set(GENRES.map(g => g.name.toUpperCase().replace(/[^A-Z0-9]/g, '')));
   const words = contentWords(english).filter(w => !STOP.has(w) && !genreNames.has(w) && w !== 'NEWS');
-  const raw = (words[0] || '').replace(/[^A-Z0-9]/g, '');
+  const strong = words.filter(w => w.length >= 5);
+  const raw = ((strong[0] || words[0]) || '').replace(/[^A-Z0-9]/g, '');
   if (raw) return raw.length > 16 ? raw.slice(0, 16) : raw;
   const cjk = String(local || english || '').match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/);
   return cjk ? cjk[0].slice(0, 6) : 'UPDATE';
@@ -3394,7 +3414,180 @@ function mixRows(rows) {
   for (let n = 0; mixed.length < 16 && cats.some(c => by[c][n]); n++) cats.forEach(c => { if (by[c][n]) mixed.push(by[c][n]); });
   return mixed;
 }
+const CHIPS = [
+  { label: 'Space', line: 'Space, 1' },
+  { label: 'Politics', line: 'Politics, 2' },
+  { label: 'Science', line: 'Science, 1' },
+  { label: 'Culture', line: 'Culture, 1' },
+  { label: 'Local', line: 'Local, 1' },
+  { label: 'Entertainment', line: 'Entertainment, 1' },
+  { label: 'Public safety', line: 'Public safety, 1' },
+  { label: 'Sports', line: 'Sports, 2' },
+  { label: 'Food', line: 'Food, 2' },
+  { label: 'Restaurant', line: 'Restaurant, 1' },
+  { label: 'Musk X', line: 'Musk X, 3' },
+  { label: 'SpaceX', line: 'SpaceX, 1' },
+  { label: 'Nikkei', line: 'Nikkei, 2' },
+  { label: 'ABC', line: 'ABC, 1' },
+  { label: 'Coffee break', line: 'Coffee break, 1' },
+];
+function lineupText() {
+  const el = $('lineup');
+  if (el) return el.value;
+  return store.get('lineup', '');
+}
+function lineName(line) {
+  return String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0].trim().toLowerCase();
+}
+function parseLineup(text) {
+  const slots = [];
+  String(text || '').split(/\n/).forEach(raw => {
+    let s = raw.replace(/^\s*\d+\s*[\.\)、]\s*/, '').trim();
+    if (!s) return;
+    let count = 1;
+    const pair = s.match(/^(.*?)[,、]\s*(\d+)\s*(?:個|件|本)?\s*$/) || s.match(/^(.*?)\s+(\d+)\s*(?:個|件|本)?\s*$/);
+    if (pair) { s = pair[1].trim(); count = parseInt(pair[2], 10) || 0; }
+    else {
+      const tail = s.match(/(\d+)\s*(?:個|件|本)\s*$/);
+      if (tail) { count = parseInt(tail[1], 10) || 0; s = s.slice(0, tail.index).replace(/[,、]\s*$/, '').trim(); }
+    }
+    count = Math.max(0, Math.min(6, count));
+    if (!s || !count) return;
+    slots.push(Object.assign({ count }, classifyRequest(s)));
+  });
+  return slots.slice(0, 12);
+}
+function classifyRequest(text) {
+  const name = String(text || '').trim();
+  const low = name.toLowerCase();
+  if (/coffee|コーヒー/.test(low)) return { type: 'coffee', label: name };
+  if (/マスク|elon|\bmusk\b/.test(low)) return { type: 'x', q: 'from:elonmusk', who: 'elonmusk', cat: 'X', label: name };
+  if (/spacex|スペース\s*x|スペースｘ/.test(low)) return { type: 'x', q: 'from:SpaceX', who: 'spacex', cat: 'SPACEX', label: name };
+  if (/(?:^|\s)x\s*$|エックス\s*$|twitter\s*$/i.test(name)) {
+    const topic = name.replace(/\s*(?:on\s+)?(?:x|twitter|エックス)\s*$/i, '').trim();
+    return { type: 'x', q: topic || 'news', cat: 'X', label: name };
+  }
+  if (/日経|nikkei/.test(low)) return { type: 'gdelt', q: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
+  if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
+  if (/^nhk$|ＮＨＫ/.test(low)) return { type: 'rss', rss: RSS.nhk, cat: 'NHK', source: 'NHK', label: name };
+  if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'gdelt', q: '食文化 OR "food culture" OR food', cat: 'FOOD', source: 'News', label: name };
+  if (/レストラン|^restaurant$/.test(low)) return { type: 'gdelt', q: 'レストラン OR restaurant', cat: 'RESTAURANT', source: 'News', label: name };
+  const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
+  if (genre) {
+    if (genre.id === 'sports') return { type: 'rss', rss: RSS.sport, gdelt: 'sports OR スポーツ', cat: 'SPORTS', source: 'BBC', label: name };
+    if (genre.id === 'science') return { type: 'rss', rss: RSS.science, gdelt: 'science OR 科学', cat: 'SCIENCE', source: 'BBC', label: name };
+    if (genre.id === 'politics') return { type: 'rss', rss: RSS.politics, gdelt: 'politics OR 政治', cat: 'POLITICS', source: 'BBC', label: name };
+    if (genre.id === 'culture' || genre.id === 'entertainment') return { type: 'rss', rss: RSS.culture, gdelt: 'culture OR entertainment', cat: genre.name.toUpperCase(), source: 'BBC', label: name };
+    return { type: 'gdelt', q: genre.q.JP + ' OR ' + genre.q.US, cat: genre.name.toUpperCase(), source: 'News', label: name };
+  }
+  if (/スポーツ|^sports$/.test(low)) return { type: 'rss', rss: RSS.sport, gdelt: 'sports OR スポーツ', cat: 'SPORTS', source: 'BBC', label: name };
+  return { type: 'gdelt', q: name, cat: name.toUpperCase().slice(0, 16), source: 'News', label: name };
+}
+function rowsFromItems(items, source, cat) {
+  const rows = [];
+  items.forEach(it => {
+    const sp = splitHeadline(it.title);
+    if (!sp.headline) return;
+    if (!sp.source || sp.source === 'News') sp.source = source || it.source || 'News';
+    rows.push({ headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: cat || 'NEWS', source: sp.source });
+  });
+  return rows;
+}
+async function gdeltRows(query, cat, source) {
+  const url = 'https://api.gdeltproject.org/api/v2/doc/doc?query=' + encodeURIComponent(query) + '&mode=artlist&maxrecords=12&format=json&sort=datedesc&timespan=7d';
+  const res = await Promise.race([
+    fetch(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+  ]);
+  if (!res.ok) return [];
+  const j = await res.json();
+  return (j.articles || []).map(a => ({
+    headline: String(a.title || '').replace(/\s[-–—]\s[^-–—]+$/, '').trim(),
+    link: a.url || '',
+    pubDate: a.seendate || '',
+    cat: cat || 'NEWS',
+    source: source || a.domain || 'News',
+  })).filter(r => r.headline);
+}
+async function rowsForSlot(slot) {
+  const blocked = text => violentHidden() && VIOLENT.test(text);
+  let rows = [];
+  try {
+    if (slot.type === 'x') {
+      rows = await searchPosts(slot.q);
+      if (slot.who) rows = rows.filter(r => String(r.source || '').toLowerCase() === 'x @' + slot.who);
+      rows = rows.map(r => ({ ...r, cat: slot.cat || 'X' }));
+    } else if (slot.type === 'rss' && slot.rss) {
+      rows = rowsFromItems(await newsRows(slot.rss, slot.cat), slot.source, slot.cat);
+      if (!rows.length && slot.gdelt) rows = await gdeltRows(slot.gdelt, slot.cat, slot.source);
+    } else if (slot.type === 'gdelt') {
+      rows = await gdeltRows(slot.q, slot.cat, slot.source);
+    }
+  } catch (e) { console.warn(e); }
+  return rows.filter(r => r.headline && !blocked(r.headline));
+}
+async function collectSlots(date, slots) {
+  const { country, lang } = market();
+  say('Creating the news video…');
+  progress(0.08);
+  const sequence = [];
+  const used = new Set();
+  let guard = 0;
+  for (const slot of slots) {
+    if (guard >= 24) break;
+    if (slot.type === 'coffee') {
+      for (let i = 0; i < slot.count && guard < 24; i++) { sequence.push({ coffee: true }); guard++; }
+      continue;
+    }
+    const rows = await rowsForSlot(slot);
+    const past = seenKeys();
+    const keyOf = r => r.headline.toLowerCase().slice(0, 90);
+    const fresh = rows.filter(r => !used.has(keyOf(r)) && !past.has(keyOf(r)));
+    const pool = fresh.length >= slot.count ? fresh : rows.filter(r => !used.has(keyOf(r)));
+    pool.slice(0, slot.count).forEach(r => {
+      if (guard >= 24) return;
+      used.add(keyOf(r));
+      sequence.push(r);
+      guard++;
+    });
+    await sleep(150);
+  }
+  const news = sequence.filter(r => !r.coffee);
+  if (!news.length && !sequence.some(r => r.coffee)) throw new Error('Could not collect those requests. Press Update to try again.');
+  rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
+  progress(0.45);
+  const originals = news.map(r => r.headline);
+  let english = originals.slice();
+  let local = originals.slice();
+  try {
+    english = await translateMany(originals, 'en');
+    if (lang.id === 'en') local = english.slice();
+    else {
+      local = originals.map(src => /[\u3040-\u30ff\u4e00-\u9fff]/.test(src) ? src : '');
+      const need = [];
+      local.forEach((v, i) => { if (!v) need.push(i); });
+      if (need.length) {
+        const got = await translateMany(need.map(i => originals[i]), 'ja');
+        need.forEach((i, k) => { local[i] = got[k]; });
+      }
+    }
+  } catch (e) {
+    console.warn(e);
+    english = originals.slice();
+    local = originals.slice();
+  }
+  let n = 0;
+  const items = sequence.map(row => {
+    if (row.coffee) return { coffee: true, sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
+    const item = storyFrom(row, english[n], local[n], lang.id);
+    n++;
+    return item;
+  });
+  return { date, items, market: country.name + ' · ' + lang.name };
+}
 async function collect(date) {
+  const slots = parseLineup(lineupText());
+  if (slots.length) return collectSlots(date, slots);
   const { country, lang } = market();
   const genres = genreChoices();
   if (!genres.length) throw new Error('Choose at least one genre in Settings.');
@@ -3452,7 +3645,9 @@ async function collect(date) {
     if (used.has(key)) return;
     const named = matchedGenre(sp.headline, country.id);
     const selected = named && genres.find(g => g.id === named.id);
+    const broad = genres.length === GENRES.length;
     if (named && !selected) return;
+    if (!broad && !selected) return;
     const row = { headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: selected ? selected.name.toUpperCase() : it.cat, source: sp.source, place: selected ? selected.place : (it.place || 'middle') };
     if (!sourceOn(sourceId(row))) return;
     used.add(key);
@@ -3741,6 +3936,33 @@ function initUI() {
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
   $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
+  const lineup = $('lineup');
+  lineup.value = store.get('lineup', '');
+  const paintChips = () => {
+    const keys = new Set(lineup.value.split(/\n/).map(lineName).filter(Boolean));
+    document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
+  };
+  const chips = $('genreChips');
+  CHIPS.forEach(chip => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = chip.label;
+    b.dataset.line = chip.label.toLowerCase();
+    b.onclick = () => {
+      const lines = lineup.value.split(/\n/).map(s => s.trim()).filter(Boolean);
+      const key = chip.label.toLowerCase();
+      const idx = lines.findIndex(line => lineName(line) === key);
+      if (idx >= 0) lines.splice(idx, 1);
+      else lines.push(chip.line);
+      lineup.value = lines.join('\n');
+      store.set('lineup', lineup.value);
+      paintChips();
+      refreshMarket();
+    };
+    chips.appendChild(b);
+  });
+  paintChips();
+  $('applyLine').onclick = () => { store.set('lineup', lineup.value); paintChips(); refreshMarket(); };
   keepInitTail();
 }
 function saveFilters() {
