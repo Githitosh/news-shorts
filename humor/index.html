@@ -2149,7 +2149,7 @@ const JA = {
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
-  'Download': 'ダウンロード', 'Making MP4…': 'MP4を作成中…', 'Save': '保存',
+  'Download': 'ダウンロード', 'Saving…': '保存中…', 'Could not save the video.': '動画を保存できませんでした。', 'Making MP4…': 'MP4を作成中…', 'Save': '保存',
   'The MP4 is ready. Press Save to keep it.': 'MP4ができました。「保存」を押すと保存できます。',
   'Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.': '1話は3.2秒です。4.2秒と5.2秒は1〜2秒長くなります。',
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
@@ -2239,6 +2239,7 @@ const PATTERNS = [
   [/^Recording… (\d+)%$/, m => `録画中… ${m[1]}%`],
   [/^Exported: (.*)$/, m => `書き出しました：${m[1]}`],
   [/^Downloaded (.+)$/, m => `${m[1]}をダウンロードしました`],
+  [/^Saved to (.+)$/, m => `${m[1]}に保存しました`],
   [/^Could not load news \((\d+)\)\.$/, m => `ニュースを読み込めませんでした（${m[1]}）。`],
   [/^Could not load (.+?)\.?$/, m => `${tr(m[1])}を読み込めませんでした。`],
   [/^Script loaded \((\d+) stories, ([\d.]+)s\)\.$/, m => `スクリプトを読み込みました（${m[1]}本、${m[2]}秒）。`],
@@ -3046,7 +3047,6 @@ const TRACKS = [
   { id: 'jupiter', name: 'Jupiter', file: '', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
   { id: 'neptune', name: 'Neptune', file: 'neptune_1923.m4a', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
   { id: 'stripes', name: 'Stars and Stripes', file: 'stripes_1909.m4a', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
-  { id: 'sandman', name: 'Sandman', file: 'sandman_1920.m4a', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
 ];
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const GENRES = [
@@ -3119,7 +3119,7 @@ const CJK = /[぀-ヿ一-鿿]/;
 
 const S = {
   bgs: {}, music: null, show: null, script: null, format: 'x', playing: false, raf: 0, origin: 0, t0perf: 0,
-  audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false,
+  audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: true,
   vfull: false, fv: null, lastDraw: 0, tracks: {}, track: TRACKS[0], outs: [], jsonClean: '',
 };
 const TAP = ' Press Sound for music.';
@@ -4873,7 +4873,32 @@ function resetDownload() {
   delete b.dataset.ready;
   b.disabled = !S.show || !!S.busy;
 }
+/* In the Android app the MP4 goes to the phone's Movies folder through the app (window.AndroidApp). */
+async function saveToApp(out) {
+  const app = window.AndroidApp;
+  try {
+    say('Saving…');
+    const bytes = new Uint8Array(await out.blob.arrayBuffer());
+    if (!app.saveStart(out.name, out.blob.type || 'video/mp4')) throw new Error('Could not save the video.');
+    const CH = 384 * 1024;
+    for (let i = 0; i < bytes.length; i += CH) {
+      const part = bytes.subarray(i, i + CH);
+      let bin = '';
+      for (let j = 0; j < part.length; j += 0x8000) bin += String.fromCharCode.apply(null, part.subarray(j, j + 0x8000));
+      if (!app.saveChunk(btoa(bin))) throw new Error('Could not save the video.');
+      if (i % (CH * 8) === 0) await sleep(0);
+    }
+    const where = app.saveEnd();
+    if (!where) throw new Error('Could not save the video.');
+    say(`Saved to ${where}`);
+  } catch (e) {
+    console.error(e);
+    say(e.message || String(e), true);
+  }
+  resetDownload();
+}
 function saveOut(out) {
+  if (window.AndroidApp && window.AndroidApp.saveStart) { saveToApp(out); return; }
   const file = shareable(out);
   if (file) navigator.share({ files: [file], title: 'Humor' }).catch(() => {});
   else {
