@@ -23,6 +23,8 @@ const JA = {
   'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',
   'These settings are for Humor only. News keeps its own.': 'この設定はユーモア専用です。ニュースには別の設定があります。',
+  'Color': '色', 'White': '白', 'Beige': 'ベージュ', 'Pink': 'ピンク', 'Sky blue': '水色', 'Mint': 'ミント', 'Dark': 'ダーク',
+  'Travel': '観光', 'Searching famous places on X': 'Xで観光地の投稿を探しています',
   'Layout': 'レイアウト', 'Auto': '自動', 'Phone': 'スマホ', 'X': 'X', 'YouTube': 'YouTube', 'PC': 'PC',
   'Country': '国', 'Japan': '日本', 'United States': 'アメリカ',
   'Language': '言語', 'English': '英語', 'Japanese': '日本語', 'Both': '両方',
@@ -34,8 +36,8 @@ const JA = {
   'Genres': 'ジャンル', 'Lineup': 'ラインナップ', 'Apply lineup': 'ラインナップを反映',
   'One request on each line. The number of stories comes from Items under the video.':
     '1行に1つずつ書きます。本数は動画の下の「表示数」で決まります。',
-  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
-    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
+  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
+    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。「観光」は観光地での投稿を入れます（右上に「観光」と表示）。コメントは、まず短いひと言を出し、次にコメント全体と、何についての投稿かを出します。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
   'Space': '宇宙', 'Politics': '政治', 'Science': '科学', 'Culture': '文化', 'Local': '地域', 'Entertainment': 'エンタメ',
   'Public safety': '治安', 'Sports': 'スポーツ', 'Food': '食', 'Restaurant': 'レストラン', 'Romance': '恋愛',
   'Musk X': 'マスク氏のX', 'SpaceX': 'SpaceX', 'Nikkei': '日経', 'ABC': 'ABC', 'Jokes': 'ジョーク',
