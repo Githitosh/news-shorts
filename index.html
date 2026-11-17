@@ -3036,7 +3036,7 @@ function draw(T) {
   const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / pace)));
   const it = S.show.items[i];
   const url = it && it.kind !== 'coffee' ? safeUrl(it.url) : '';
-  if (!url) { a.hidden = true; a.removeAttribute('href'); return; }
+  if (!url) { a.hidden = true; a.removeAttribute('href'); a.textContent = ''; return; }
   a.hidden = false;
   a.href = url;
   a.textContent = url;
@@ -3418,13 +3418,13 @@ function rememberKeys(keys) {
 }
 function rssItems(xml) {
   const items = [];
-  const re = /<item>([\s\S]*?)<\/item>/g;
+  const re = /<item\b[^>]*>([\s\S]*?)<\/item>/g;
   let m;
   const decode = s => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
   while ((m = re.exec(xml))) {
     const block = m[1];
     const title = decode((block.match(/<title>([\s\S]*?)<\/title>/) || [])[1]);
-    const link = decode((block.match(/<link>([\s\S]*?)<\/link>/) || [])[1]);
+    const link = decode((block.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || (block.match(/<link\b[^>]*rdf:resource="([^"]+)"/) || [])[1]);
     const pubDate = decode((block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]);
     if (title) items.push({ title, link, pubDate });
   }
@@ -3447,27 +3447,38 @@ const RSS = {
 };
 const RSS_ORDER = { JP: ['nhk', 'asahi', 'yomiuri', 'bbc'], US: ['nyt', 'bbc', 'cnn', 'nhk'] };
 const SOURCE_LABEL = { nhk: 'NHK', asahi: 'Asahi', yomiuri: 'Yomiuri', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
+function feedItems(list, cat) {
+  return (list || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat, source: '' })).filter(it => it.title && it.title.length > 6);
+}
 async function newsRows(rss, cat) {
-  const read = async () => {
-    const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=15&_=' + Date.now());
-    if (res.status === 429 || res.status === 503) throw new Error(String(res.status));
-    if (!res.ok) return [];
-    const j = await res.json();
-    if (!j || j.status !== 'ok') return [];
-    return j.items || [];
-  };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const items = await Promise.race([
-        read(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-      ]);
-      return items.map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat, source: '' }));
-    } catch (e) {
-      console.warn(e);
-      if (attempt === 0) await sleep(1500);
+  const key = 'rows:' + rss;
+  if (feedMemo.has(key)) return feedMemo.get(key);
+  const job = loadNewsRows(rss, cat);
+  feedMemo.set(key, job);
+  return job;
+}
+async function loadNewsRows(rss, cat) {
+  try {
+    const res = await Promise.race([
+      fetch('https://r.jina.ai/' + rss, { headers: { 'X-Return-Format': 'text' } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000)),
+    ]);
+    if (res.ok) {
+      const xml = await res.text();
+      const parsed = feedItems(rssItems(xml), cat);
+      if (parsed.length) return parsed;
     }
-  }
+  } catch (e) { console.warn(e); }
+  try {
+    const res = await Promise.race([
+      fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=15'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+    ]);
+    if (res.ok) {
+      const j = await res.json();
+      if (j && j.status === 'ok') return feedItems(j.items, cat);
+    }
+  } catch (e) { console.warn(e); }
   return [];
 }
 function handleFromReferrer() {
@@ -3625,8 +3636,8 @@ function cachedUserPosts(name) {
 function saveUserPosts(name, rows) {
   try { sessionStorage.setItem('newsShorts.xposts.' + name.toLowerCase(), JSON.stringify(rows.slice(0, 8))); } catch (e) {}
 }
-async function accountRows() {
-  const names = xAccounts();
+async function accountRows(only) {
+  const names = (only || xAccounts()).map(cleanHandle).filter(validHandle);
   if (!names.length) return [];
   const lists = await Promise.all(names.map(async name => {
     try { return await userPosts(name, 3); } catch (e) { console.warn(e); return []; }
@@ -3772,13 +3783,10 @@ function storyWord(english, local) {
 function storyFrom(raw, english, local, langId) {
   const en = String(english || raw.headline || '').replace(/\s+/g, ' ').trim();
   const loc = String(local || '').replace(/\s+/g, ' ').replace(/^[、。，．\s]+/, '').trim();
-  const all = contentWords(en).filter(w => !STOP.has(w) && w !== 'NEWS');
-  const picked = all.length ? all : contentWords(en);
   const kw = storyWord(en, loc);
-  const headPack = packWords(picked.slice(0, 3), 16, 2);
-  const subPack = packWords(picked.slice(headPack.used), 18, 2);
-  const head = headPack.lines;
-  const sub = subPack.lines;
+  const words = (en || loc || kw).split(/\s+/).filter(Boolean);
+  const head = [words.slice(0, 12).join(' ') || kw];
+  const sub = words.length > 12 ? [words.slice(12, 22).join(' ')] : [];
   let jp;
   if (langId === 'en') jp = en ? [en] : [];
   else if (langId === 'ja') jp = [loc || en].filter(Boolean);
@@ -3796,10 +3804,10 @@ function storyFrom(raw, english, local, langId) {
   return {
     kw, cat: raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, topic: kw,
     head: head.length ? head : [kw],
-    sub: sub.length ? sub : ['LATEST REPORT'],
+    sub,
     jp: jp.length ? jp : [kw],
     tags: [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3),
-    src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 24),
+    src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
     date: md,
     url: raw.link || '',
   };
@@ -3964,6 +3972,22 @@ async function gdeltRows(query, cat, source) {
     return [];
   }
 }
+function linkFits(slot, row) {
+  const url = String((row && row.link) || '').toLowerCase();
+  if (slot.type === 'x' && slot.who) {
+    const who = String(slot.who).toLowerCase();
+    return url.includes('://x.com/' + who + '/') || url.includes('://twitter.com/' + who + '/') || url.includes('://www.x.com/' + who + '/');
+  }
+  if (slot.rss === RSS.nikkei) return url.includes('nikkei.com');
+  if (slot.rss === RSS.abc) return /abcnews\.com|abc\.go\.com|abc\.com/.test(url);
+  if (slot.rss === RSS.food) return url.includes('nytimes.com');
+  if (slot.rss === RSS.sport || slot.rss === RSS.bbc || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return /bbc\.co\.uk|bbc\.com/.test(url);
+  if (slot.rss === RSS.nhk) return url.includes('nhk.or.jp');
+  if (slot.rss === RSS.nyt) return url.includes('nytimes.com');
+  if (slot.rss === RSS.asahi) return url.includes('asahi.com');
+  if (slot.rss === RSS.yomiuri) return url.includes('yomiuri.co.jp');
+  return true;
+}
 async function rowsForSlot(slot) {
   const blocked = text => violentHidden() && VIOLENT.test(text);
   const need = slot.count || 1;
@@ -3984,9 +4008,15 @@ async function rowsForSlot(slot) {
     } else if (slot.type === 'gdelt') {
       rows = await gdeltRows(slot.q, slot.cat, slot.source);
     }
-    if (slot.type !== 'x') rows = mergeRows(await countryRows(slot.cat), rows);
+    const matched = rows.filter(r => linkFits(slot, r));
+    const rest = slot.type === 'x' && slot.who ? [] : rows.filter(r => !linkFits(slot, r));
+    rows = matched.concat(rest);
+    if (slot.cat === 'RESTAURANT') {
+      const hit = rows.filter(r => /restaurant|レストラン|bistro|café|cafe|dining/i.test(r.headline));
+      if (hit.length) rows = hit.concat(rows.filter(r => hit.indexOf(r) < 0));
+    }
   } catch (e) { console.warn(e); }
-  return rows.filter(r => r.headline && !blocked(r.headline) && (slot.type === 'x' || sourceOn(sourceId(r))));
+  return rows.filter(r => r.headline && !blocked(r.headline));
 }
 async function fillText(rows, lang) {
   const news = rows.filter(r => r && !r.coffee && r.headline);
@@ -4063,14 +4093,15 @@ async function collectSlots(date, slots, reorder) {
     showWaiting(label, lines);
     say('Searching ' + label);
   };
-  const names = xAccounts();
-  note(names.map(n => '@' + n).concat(slots.map(s => s.label || s.cat || 'News')).filter(Boolean).join('\n'));
+  const covered = new Set(slots.filter(s => s.who).map(s => String(s.who).toLowerCase()));
+  const extraNames = xAccounts().filter(n => !covered.has(n.toLowerCase()));
+  note(extraNames.map(n => '@' + n).concat(slots.map(s => s.label || s.cat || 'News')).filter(Boolean).join('\n'));
   progress(0.08);
   let sequence = [];
   const used = new Set();
   let guard = 0;
   const keyOf = r => String(r.headline || '').toLowerCase().slice(0, 90);
-  const fromAccounts = await accountRows();
+  const fromAccounts = extraNames.length ? await accountRows(extraNames) : [];
   fromAccounts.forEach(r => {
     if (guard >= 24) return;
     const key = keyOf(r);
