@@ -160,8 +160,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Food, 1&#10;Jokes, 10"></textarea>
-      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Leave the lineup empty for five reports and ten jokes.</p>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Romance, 3&#10;Jokes, 10"></textarea>
+      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 3 adds three couples' posts, each with a reply to it. Leave the lineup empty for the genres below.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -2835,6 +2835,7 @@ const GENRES = [
   { id: 'sports', name: 'Sports', place: 'middle', q: { JP: 'スポーツ', US: 'sports' } },
   { id: 'food', name: 'Food', place: 'bottom', q: { JP: '食べ物', US: 'food' } },
   { id: 'restaurant', name: 'Restaurant', place: 'bottom', q: { JP: 'レストラン', US: 'restaurant' } },
+  { id: 'romance', name: 'Romance', place: 'middle', q: { JP: '恋愛', US: 'dating relationship' } },
 ];
 const SOURCES = [
   { id: 'x', name: 'X', group: 'X and web' },
@@ -2882,6 +2883,7 @@ const CHIPS = [
   { label: 'Sports', line: 'Sports, 2' },
   { label: 'Food', line: 'Food, 2' },
   { label: 'Restaurant', line: 'Restaurant, 1' },
+  { label: 'Romance', line: 'Romance, 3' },
   { label: 'Musk X', line: 'Musk X, 3' },
   { label: 'SpaceX', line: 'SpaceX, 1' },
   { label: 'Nikkei', line: 'Nikkei, 2' },
@@ -3318,6 +3320,7 @@ function classifyRequest(text) {
   const name = String(text || '').trim();
   const low = name.toLowerCase();
   if (/joke|humou?r|funny|coffee|ジョーク|笑い|ユーモア|ネタ|コーヒー/.test(low)) return { type: 'jokes', label: name };
+  if (/romance|love|couple|dating|恋愛|カップル|恋人|夫婦/.test(low)) return { type: 'romance', cat: 'ROMANCE', label: name };
   if (/マスク|elon|\bmusk\b/.test(low)) return { type: 'x', q: 'from:elonmusk', who: 'elonmusk', topic: 'Elon Musk', cat: 'X', label: name };
   if (/spacex|スペース\s*x|スペースｘ/.test(low)) return { type: 'x', q: 'from:SpaceX', who: 'spacex', topic: 'SpaceX', cat: 'SPACEX', label: name };
   if (/(?:^|\s)x\s*$|エックス\s*$|twitter\s*$/i.test(name)) {
@@ -3346,6 +3349,7 @@ function requestForGenre(g) {
   if (g.id === 'restaurant') return { type: 'rss', rss: RSS.food, gdelt: q, cat: 'RESTAURANT', source: 'The New York Times', label: name };
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: q, cat: 'SPACE', source: 'BBC', label: name };
   if (g.id === 'local') return { type: 'rss', rss: country.id === 'JP' ? RSS.nhk : RSS.nyt, gdelt: q, cat: 'LOCAL', source: country.id === 'JP' ? 'NHK' : 'The New York Times', label: name };
+  if (g.id === 'romance') return { type: 'romance', cat: 'ROMANCE', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q, cat: name.toUpperCase(), source: 'News', label: name };
 }
@@ -3454,10 +3458,16 @@ function focusJoke(text, lang) {
   const slice = chars.slice(start, start + keep).join('').trim();
   return (start ? '…' : '') + slice + (start + keep < chars.length ? '…' : '');
 }
+/* Comments that never play: sexual content, minors, abuse. */
+const UNSAFE = /セックス|エッチ|えっち|ヤリモク|体位|下着|裸|おっぱい|ちんこ|まんこ|射精|中出し|風俗|パパ活|\bsex|nsfw|nude|porn|horny|onlyfans|18\+|xxx|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
+function postText(st) {
+  return String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
+}
 function replyOf(st, lang) {
   const author = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
   if (!author) return null;
-  let text = String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
+  let text = postText(st);
+  if (UNSAFE.test(text)) return null;
   if (violentHidden() && VIOLENT.test(text)) return null;
   if (lang === 'en') {
     if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{3,}/.test(text) || text.length < 12) return null;
@@ -3562,6 +3572,109 @@ async function collectJokes(topics, need, opts) {
   return pickFunny(rows, need);
 }
 
+/* ---------- romance: a couple's post and a reply to it ---------- */
+const ROMANCE_Q = {
+  ja: ['(彼氏 OR 彼女 OR 旦那 OR 嫁 OR 夫 OR 妻 OR 恋人) filter:replies', '(カップル OR 夫婦 OR 尊い OR 微笑ましい OR リア充 OR お幸せに OR ラブラブ) filter:replies'],
+  en: ['(boyfriend OR girlfriend OR husband OR wife OR "my partner") filter:replies', '(couple OR "relationship goals" OR adorable OR "get a room" OR wholesome) filter:replies'],
+};
+const ROMANCE_WORDS = {
+  ja: /彼氏|彼女|旦那|嫁|夫|妻|恋人|カップル|夫婦|デート|付き合|プロポーズ|結婚|尊い|リア充|イチャ|ラブラブ|微笑ましい|お幸せに|爆発しろ|好きすぎ/,
+  en: /boyfriend|girlfriend|husband|wife|partner|couple|\bdate\b|dating|married|marry|propos|crush|relationship|adorable|wholesome|get a room|\bbf\b|\bgf\b/i,
+};
+function romanceText(st, lang) {
+  const text = postText(st);
+  if (!text || UNSAFE.test(text) || VIOLENT.test(text)) return '';
+  if (lang === 'en') {
+    if ((text.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length > 2 || !/[A-Za-z]{3,}/.test(text) || text.length < 8) return '';
+  } else if ((text.match(/[\u3040-\u30ff]/g) || []).length < 1 || [...text].length < 4) return '';
+  if (/ご冥福|追悼|亡くな|お悔やみ|死去|\brip\b|passed away/i.test(text)) return '';
+  return text;
+}
+/* The post a reply answers. The fxtwitter API gives it as replying_to { screen_name, status } or replying_to_status. */
+function parentOf(st) {
+  const rt = st && st.replying_to;
+  const id = (rt && typeof rt === 'object' && (rt.status || rt.status_id || rt.id)) || (st && (st.replying_to_status || st.in_reply_to_status_id_str || st.in_reply_to_status_id)) || '';
+  const who = (rt && typeof rt === 'object' && (rt.screen_name || rt.username)) || (typeof rt === 'string' ? rt : '') || '';
+  return { id: /^\d+$/.test(String(id)) ? String(id) : '', who: String(who).replace(/^@+/, '') };
+}
+async function fetchStatus(id) {
+  try {
+    const d = await fxJson('https://api.fxtwitter.com/2/status/' + id);
+    if (d && (d.status || d.tweet)) return d.status || d.tweet;
+  } catch (e) { console.warn(e); }
+  try {
+    const d = await fxJson('https://api.fxtwitter.com/status/' + id);
+    if (d && d.tweet) return d.tweet;
+  } catch (e) { console.warn(e); }
+  return null;
+}
+function cutChars(text, n) { const c = [...String(text || '')]; return c.length <= n ? c.join('') : c.slice(0, n - 1).join('') + '…'; }
+async function collectRomance(need, place) {
+  if (!need || !sourceOn('x')) return [];
+  const lang = jokeLang();
+  const past = seenSet(SEEN_JOKES);
+  const now = playingKeys();
+  say('Searching couples on X');
+  const lists = await Promise.all(ROMANCE_Q[lang].map(q => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' lang:' + lang + xRange())).then(d => (d && d.results) || []).catch(() => [])));
+  const keys = new Set();
+  const cands = [];
+  lists.flat().forEach(st => {
+    const handle = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
+    const text = romanceText(st, lang);
+    if (!handle || !text) return;
+    const parent = parentOf(st);
+    const url = (st && st.url) || '';
+    const row = { romance: true, handle, text: cutChars(text, lang === 'en' ? 140 : 48), url, link: url, lang, place: place || 'middle', parent };
+    const ks = jokeKeys(row).concat(parent.id ? ['id:' + parent.id] : []);
+    if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
+    ks.forEach(k => keys.add(k));
+    row.keys = ks;
+    row.score = (ROMANCE_WORDS[lang].test(text) ? 4 : 0) + (isFunny(text, lang) ? 3 : 0) + (parent.id ? 3 : 0) + Math.random() * 2;
+    cands.push(row);
+  });
+  const ranked = cands.sort((a, b) => b.score - a.score).slice(0, need * 2);
+  /* Read the couple's post each reply answers. A reply whose post cannot be read plays alone. */
+  const parents = await Promise.all(ranked.map(r => (r.parent.id ? fetchStatus(r.parent.id) : Promise.resolve(null)).catch(() => null)));
+  const out = [];
+  ranked.forEach((r, i) => {
+    const pst = parents[i];
+    const ptext = pst ? romanceText(pst, lang) : '';
+    if (ptext) {
+      r.parentText = cutChars(ptext, lang === 'en' ? 100 : 36);
+      r.parentHandle = String((pst.author && pst.author.screen_name) || r.parent.who || '').replace(/^@+/, '');
+    }
+    if (!r.parentText && !ROMANCE_WORDS[lang].test(r.text)) return;
+    out.push(r);
+  });
+  out.sort((a, b) => (b.parentText ? 1 : 0) - (a.parentText ? 1 : 0));
+  return out.slice(0, need);
+}
+/* A romance card: the couple's post large, and the reply under it. */
+function romanceCard(r, langId) {
+  const lead = r.parentText || r.text;
+  const reply = r.parentText ? r.text : '';
+  const src = r.parentText && r.parentHandle ? `X @${r.parentHandle} → @${r.handle}` : 'X @' + r.handle;
+  let card;
+  if (CJK.test(lead) && langId !== 'en') {
+    const parts = largeJa(lead);
+    const kw = jaWord(lead);
+    const jp = [];
+    if (parts.rest) jp.push(parts.rest);
+    if (reply) jp.push('→ ' + reply);
+    card = { kw, cat: 'ROMANCE', topic: kw, head: parts.head, sub: [], jp, tags: [], src };
+  } else {
+    const words = lead.split(/\s+/).filter(Boolean);
+    const kw = storyWord(lead, '');
+    const jp = [];
+    if (words.length > 12) jp.push(words.slice(12).join(' '));
+    if (reply) jp.push('→ ' + reply);
+    card = { kw, cat: 'ROMANCE', topic: kw, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp, tags: [], src };
+  }
+  card.url = r.url || '';
+  card.key = r.keys || jokeKeys(r);
+  return card;
+}
+
 /* ---------- text for the picture ---------- */
 async function translateMany(texts, tl) {
   const sep = '\n###\n';
@@ -3646,11 +3759,13 @@ function storyFrom(raw, english, local, langId) {
 }
 /* Translate each row into the chosen language, then make the cards. */
 async function cardsFrom(rows, langId) {
-  const toJa = langId !== 'en' ? rows.filter(r => !CJK.test(r.headline)) : [];
-  const toEn = langId !== 'ja' ? rows.filter(r => CJK.test(r.headline)) : [];
+  const plain = rows.filter(r => !r.romance);
+  const toJa = langId !== 'en' ? plain.filter(r => !CJK.test(r.headline)) : [];
+  const toEn = langId !== 'ja' ? plain.filter(r => CJK.test(r.headline)) : [];
   if (toJa.length) (await translateMany(toJa.map(r => r.headline), 'ja')).forEach((t, i) => { toJa[i]._ja = t; });
   if (toEn.length) (await translateMany(toEn.map(r => r.headline), 'en')).forEach((t, i) => { toEn[i]._en = t; });
   return rows.map(r => {
+    if (r.romance) return romanceCard(r, langId);
     const cjk = CJK.test(r.headline);
     const en = cjk ? (r._en || '') : r.headline;
     const ja = cjk ? r.headline : (r._ja || '');
@@ -3674,16 +3789,21 @@ async function collect() {
   if (jokeSlot) jokeNeed = jokeSlot.count;
   let topicWords = [];
   const topicPlace = {};
+  /* Romance: a lineup line sets the count; otherwise the Romance genre adds four couples. */
+  const romanceSlot = slots.find(s => s.type === 'romance');
+  const romanceGenre = genreChoices().find(g => g.id === 'romance' && g.on);
+  const romanceNeed = romanceSlot ? romanceSlot.count : (!slots.some(s => s.type !== 'jokes' && s.type !== 'romance') && romanceGenre ? 4 : 0);
+  const romancePlace = romanceGenre ? romanceGenre.place : 'middle';
   if (mode === 'x') {
     /* X comments only: no reports. Funny replies about the lineup, the accounts,
        and today's news in each chosen genre, in the genres' Top, Middle, Bottom order. */
     say('Searching X');
     progress(0.1);
-    slots.filter(s => s.type !== 'jokes').forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
+    slots.filter(s => s.type !== 'jokes' && s.type !== 'romance').forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
     const sum = slots.reduce((n, s) => n + (s.count || 0), 0);
-    jokeNeed = Math.min(MAX_ITEMS, sum || 12);
+    jokeNeed = Math.max(0, Math.min(MAX_ITEMS, sum || 12) - romanceNeed);
     if (topicWords.length < 3) {
-      const chosen = shuffle(genreChoices().filter(g => g.on)).slice(0, 6);
+      const chosen = shuffle(genreChoices().filter(g => g.on && g.id !== 'romance')).slice(0, 6);
       const lists = await Promise.all(chosen.map(g => searchRows(g.q[country.id] || g.q.US, up(g.name)).then(rows => rows.filter(allowedRow)).catch(() => [])));
       chosen.forEach((g, i) => {
         lists[i].slice(0, 3).forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => { topicWords.push(w); topicPlace[w] = g.place; }));
@@ -3694,10 +3814,11 @@ async function collect() {
       news.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
     }
     jokeAt = 0;
-  } else if (slots.some(s => s.type !== 'jokes')) {
+  } else if (slots.some(s => s.type !== 'jokes' && s.type !== 'romance')) {
     for (const slot of slots) {
       if (S.again || sequence.length >= MAX_ITEMS) break;
       if (slot.type === 'jokes') { jokeAt = sequence.length; continue; }
+      if (slot.type === 'romance') { if (jokeAt < 0) jokeAt = sequence.length; continue; }
       say('Searching ' + (slot.label || slot.cat || 'news'));
       progress(0.08 + 0.4 * slots.indexOf(slot) / slots.length);
       let rows = freshRows(await rowsForSlot(slot), used);
@@ -3714,8 +3835,14 @@ async function collect() {
   say('Searching jokes');
   progress(0.55);
   const band = { top: 0, middle: 1, bottom: 2 };
-  const jokes = (await collectJokes(topicWords, Math.min(jokeNeed, MAX_ITEMS - sequence.length), { headlines }))
+  const room = MAX_ITEMS - sequence.length;
+  const [found, couples] = await Promise.all([
+    collectJokes(topicWords, Math.min(jokeNeed, Math.max(0, room - romanceNeed)), { headlines }),
+    collectRomance(Math.min(romanceNeed, room), romancePlace).catch(e => { console.warn(e); return []; }),
+  ]);
+  const jokes = found
     .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
+    .concat(couples.map(r => ({ ...r, headline: r.parentText || r.text, joke: true })))
     .sort((a, b) => band[a.place] - band[b.place]);
   if (S.again) return null;
   if (!sequence.length && !jokes.length) return { empty: true };
@@ -3725,7 +3852,7 @@ async function collect() {
   const items = await cardsFrom(rows, lang.id);
   return {
     date: chosenDate(), items, market: country.name + ' · ' + lang.name,
-    played: { news: sequence.flatMap(newsKeys), jokes: jokes.flatMap(jokeKeys) },
+    played: { news: sequence.flatMap(newsKeys), jokes: jokes.flatMap(j => j.keys || jokeKeys(j)) },
   };
 }
 function normItem(it) {
@@ -3850,9 +3977,9 @@ function toggleSound() {
 }
 function watchLine() {
   const items = (S.script && S.script.items) || [];
-  const jokes = items.filter(it => it.cat === 'HUMOR').length;
+  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE').length;
   const news = items.length - jokes;
-  const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'joke' : 'jokes'}` : (jokes ? `${jokes} ${jokes === 1 ? 'joke' : 'jokes'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
+  const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
   return 'Playing ' + what + '.' + (S.audioOn ? '' : TAP);
 }
 function stop() {
