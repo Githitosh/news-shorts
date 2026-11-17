@@ -40,6 +40,8 @@ main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100
 .land canvas#cv { aspect-ratio: 16 / 9; }
 canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: var(--frame); border-radius: 12px; }
 /* iPhone: a copy of the picture as a video, behind the canvas, for the system full-screen player. */
+/* A tap or click on the picture pauses and plays. */
+canvas#cv { cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 12px; background: var(--frame); }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen. */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
@@ -2207,7 +2209,8 @@ const JA = {
   'Reading the text': '文章を読み込んでいます', 'Reading genres, sources, and X accounts': 'ジャンル、情報源、Xアカウントを読み込んでいます',
   'Eight accounts is the limit': 'アカウントは8つまでです', 'Use an X account name, like @name': 'Xのアカウント名を入れてください（例：@name）',
   'Copied the sources.': '情報源をコピーしました。', 'Could not copy.': 'コピーできませんでした。', 'Select the text instead.': '文字を選んでコピーしてください。',
-  'Paused.': '一時停止中。', 'Press Play to continue.': '再生を押すと続きから流れます。', 'Playing.': '再生中。',
+  'Paused.': '一時停止中。', 'Press Play to continue.': '再生を押すと続きから流れます。',
+  'Tap the video or press Play to continue.': '動画をタップするか再生を押すと続きから流れます。', 'Playing.': '再生中。',
   'Ready.': '準備ができました。', 'Press Play.': '再生を押してください。',
   'Sound off.': '音を消しました。', 'Press Sound to hear the music.': '音を押すと音楽が流れます。', 'Press Sound for music.': '音を押すと音楽が流れます。',
   'Tap the picture for sound.': '画面をタップすると音が出ます。',
@@ -4374,7 +4377,8 @@ function draw(T) {
   const a = $('storyLink');
   const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / (E.DUR || 3.2))));
   const url = safeUrl(S.show.items[i] && S.show.items[i].url);
-  if (!url) { a.hidden = true; a.removeAttribute('href'); a.textContent = ''; return; }
+  /* The post's link shows while the video is paused. */
+  if (!url || S.playing) { a.hidden = true; a.removeAttribute('href'); a.textContent = ''; return; }
   a.hidden = false;
   a.href = url;
   a.textContent = url;
@@ -4442,7 +4446,7 @@ function toggleSound() {
 }
 function watchLine() {
   const items = (S.script && S.script.items) || [];
-  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE').length;
+  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE' || it.cat === 'TRAVEL').length;
   const news = items.length - jokes;
   const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
   return 'Playing ' + what + '.' + (S.audioOn ? '' : TAP);
@@ -4564,7 +4568,7 @@ function scheduleRefresh(delay) {
 }
 function toggle() {
   if (!S.show) return;
-  if (S.playing) { stop(); say('Paused. Press Play to continue.'); return; }
+  if (S.playing) { stop(); draw(currentT()); say('Paused. Tap the video or press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
@@ -5230,6 +5234,8 @@ function initUI() {
   $('applyLine').onclick = applyLineup;
   $('lineupGo').onclick = applyLineup;
   $('play').onclick = toggle;
+  /* A tap or click on the picture pauses and plays. A pull to refresh is not a tap. */
+  $('cv').addEventListener('click', () => { if (Date.now() - (S.pulledAt || 0) < 500) return; toggle(); });
   $('dl').onclick = () => download();
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
@@ -5273,6 +5279,7 @@ function initPull() {
   const end = go => {
     const p = pull;
     pull = null;
+    if (p && p.dy > 8) S.pulledAt = Date.now();
     show(0);
     if (go && p && !p.dead && p.dy > PULL_AT) refreshMarket();
   };
