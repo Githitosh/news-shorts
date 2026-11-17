@@ -63,6 +63,7 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 .ctl input[type=range] { flex: 1; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; font-size: 13px; }
 button, .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
+button.line-title { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin: 8px 0 4px; padding: 0; cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--acc); color: #1a1408; border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -133,13 +134,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Press a name or type a line. The video updates from these settings. The first line opens the video.</p>
+      <p class="note">Press a name or type a line. The video starts with the first stories and adds the rest while it plays.</p>
       <div id="genreChips" class="music"></div>
-      <label for="lineup">Lineup</label>
+      <button type="button" id="lineupGo" class="line-title">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
-      <label class="check"><input type="checkbox" id="hideViolent" checked> Hide violent crime</label>
+      <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X account</label>
@@ -221,7 +222,7 @@ const TRACKS = [
   { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
   { id: 'sandman', name: 'Sandman', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
 ];
-const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
+const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
 const ctx = $('cv').getContext('2d');
 
 function say(msg, err) {
@@ -507,6 +508,47 @@ async function setScript(raw, quiet) {
   draw(S.playing ? Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)) : 0);
   return S.show;
 }
+function growShow(raw) {
+  const s = normalize(raw);
+  const was = !!(S.playing && S.show);
+  const oldDur = was ? S.show.duration : 0;
+  let T = was ? currentT() : 0;
+  const holding = was && oldDur > 0 && T >= oldDur - 0.05;
+  S.script = s;
+  S.show = E.prepare(s, S.format);
+  sizeCanvas();
+  $('json').value = JSON.stringify(s, null, 2);
+  S.jsonClean = $('json').value;
+  $('sources').textContent = sourcesText(s);
+  $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
+  S.grew = true;
+  if (!was) {
+    $('seek').value = '0';
+    draw(0);
+    if (WATCH) {
+      beginPlayback(0);
+      playSound(0);
+      closeStudio();
+    }
+  } else if (holding) {
+    const at = Math.min(oldDur, Math.max(0, S.show.duration - 1 / E.FPS));
+    S.origin = at;
+    S.t0perf = performance.now();
+    if (S.audioOn && S.el && !S.el.paused) {
+      try { S.el.currentTime = soundOffset(at); } catch (e) {}
+    }
+    draw(at);
+  } else {
+    draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
+  }
+  loadFonts(s).then(() => {
+    if (S.script !== s || !S.show) return;
+    const now = S.playing ? Math.min(Math.max(0, currentT()), Math.max(0, S.show.duration - 1 / E.FPS)) : 0;
+    S.show = E.prepare(s, S.format);
+    sizeCanvas();
+    draw(now);
+  }).catch(() => {});
+}
 
 /* ---------- layout ---------- */
 function sizeCanvas() {
@@ -590,6 +632,12 @@ function tick() {
   try {
     let T = currentT();
     if (S.show.duration > 0 && T >= S.show.duration) {
+      if (S.busy) {
+        draw(Math.max(0, S.show.duration - 1 / E.FPS));
+        $('seek').value = '1000';
+        if (S.playing) S.raf = requestAnimationFrame(tick);
+        return;
+      }
       const over = T % S.show.duration;
       restartLoop(over);
       T = over;
@@ -802,7 +850,7 @@ function sourceId(row) {
 }
 function violentHidden() {
   const box = $('hideViolent');
-  return box ? box.checked : store.get('hideViolent', '1') !== '0';
+  return box ? box.checked : store.get('hideViolent', '0') === '1';
 }
 function searchFeed(query) {
   const e = edition();
@@ -881,6 +929,7 @@ const RSS = {
   culture: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
   cnn: 'http://rss.cnn.com/rss/edition.rss',
   nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
+  nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
 };
 const RSS_ORDER = { JP: ['nhk', 'asahi', 'yomiuri', 'bbc'], US: ['nyt', 'bbc', 'cnn', 'nhk'] };
 const SOURCE_LABEL = { nhk: 'NHK', asahi: 'Asahi', yomiuri: 'Yomiuri', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
@@ -947,11 +996,12 @@ async function followHandles(handle) {
   }
   return names;
 }
-function rowFromStatus(st) {
+function rowFromStatus(st, minLen) {
   if (!st || (st.type && st.type !== 'status')) return null;
   const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
   const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!author || text.length < 12 || (violentHidden() && VIOLENT.test(text))) return null;
+  const floor = minLen == null ? 12 : minLen;
+  if (!author || text.length < floor || (violentHidden() && VIOLENT.test(text))) return null;
   const created = st.created_at ? new Date(st.created_at) : null;
   return {
     headline: text.slice(0, 220),
@@ -963,12 +1013,12 @@ function rowFromStatus(st) {
     lang: String(st.lang || ''),
   };
 }
-async function searchPosts(query) {
+async function searchPosts(query, minLen) {
   const data = await fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(query));
   const out = [];
   const seen = new Set();
   for (const st of (data && data.results) || []) {
-    const row = rowFromStatus(st);
+    const row = rowFromStatus(st, minLen);
     if (!row || seen.has(row.headline)) continue;
     seen.add(row.headline);
     out.push(row);
@@ -979,44 +1029,90 @@ function readableLine(text) {
   const line = String(text || '').replace(/\s+/g, ' ').trim();
   return /[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? line : '';
 }
-async function userPosts(handle) {
-  const name = String(handle || '').replace(/^@+/, '');
-  if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
-  let text = '';
+async function readJina(url) {
+  const res = await Promise.race([
+    fetch(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 9000)),
+  ]);
+  if (!res.ok) return '';
+  return res.text();
+}
+function postsFromJina(text, name) {
+  const ui = /^(follow|following|followers|posts|replies|highlights|media|likes|home|explore|search|pinned)$/i;
+  const take = loose => {
+    const rows = [];
+    const seen = new Set();
+    const re = /https:\/\/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/gi;
+    let m;
+    while ((m = re.exec(text))) {
+      const author = m[1];
+      const id = m[2];
+      if (author.toLowerCase() !== name.toLowerCase() || seen.has(id)) continue;
+      seen.add(id);
+      const tail = text.slice(m.index, m.index + 700);
+      const timed = tail.match(/\[\d+\s*[smhdw]\]\([^)]*\)\s+([^\n\[]+)/i);
+      const tm = timed || (loose ? tail.match(/\n+([^\n#*\[\]()]{4,200})/) : null);
+      const headline = readableLine(tm && tm[1]);
+      if (!headline || headline.length < 4 || ui.test(headline) || (violentHidden() && VIOLENT.test(headline))) continue;
+      rows.push({
+        headline: headline.slice(0, 220),
+        link: 'https://x.com/' + author + '/status/' + id,
+        pubDate: '',
+        cat: 'X',
+        source: 'X @' + author,
+        x: true,
+      });
+      if (rows.length >= 8) break;
+    }
+    return rows;
+  };
+  const strict = take(false);
+  return strict.length ? strict : take(true);
+}
+async function jinaPosts(name) {
   try {
-    const res = await Promise.race([
-      fetch('https://r.jina.ai/https://x.com/' + encodeURIComponent(name)),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000)),
-    ]);
-    if (!res.ok) return [];
-    text = await res.text();
+    const text = await readJina('https://r.jina.ai/https://x.com/' + encodeURIComponent(name));
+    return postsFromJina(text, name);
   } catch (e) {
     console.warn(e);
     return [];
   }
-  const rows = [];
-  const seen = new Set();
-  const re = /\*\s+\[\]\(https:\/\/x\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d+)\)([\s\S]*?)(?=\n\*\s+\[\]\(https:\/\/x\.com\/|$)/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const author = m[1];
-    const id = m[2];
-    if (author.toLowerCase() !== name.toLowerCase() || seen.has(id)) continue;
-    seen.add(id);
-    const tm = m[3].match(/\[\d+\s*[smhdw]\]\(https:\/\/x\.com\/[^)]+\)\s+([^[\n]+)/i);
-    const headline = readableLine(tm && tm[1]);
-    if (!headline || headline.length < 4) continue;
-    rows.push({
-      headline: headline.slice(0, 220),
-      link: 'https://x.com/' + author + '/status/' + id,
-      pubDate: '',
-      cat: 'X',
-      source: 'X @' + author,
-      x: true,
-    });
-    if (rows.length >= 8) break;
+}
+async function jinaSearchPosts(name) {
+  try {
+    const text = await readJina('https://r.jina.ai/https://x.com/search?q=' + encodeURIComponent('from:' + name) + '&src=typed_query&f=live');
+    return postsFromJina(text, name);
+  } catch (e) {
+    console.warn(e);
+    return [];
   }
-  return rows;
+}
+async function authorSearch(name) {
+  const out = [];
+  for (const q of ['from:' + name, name]) {
+    try {
+      const more = await Promise.race([
+        searchPosts(q, 4),
+        new Promise(resolve => setTimeout(() => resolve([]), 7000)),
+      ]);
+      (more || []).filter(r => String(r.source || '').toLowerCase() === 'x @' + name.toLowerCase()).forEach(r => out.push(r));
+    } catch (e) { console.warn(e); }
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+async function userPosts(handle, need) {
+  const name = String(handle || '').replace(/^@+/, '');
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
+  const want = Math.max(1, need || 3);
+  const bag = { rows: [] };
+  let done = 0;
+  [jinaPosts(name), authorSearch(name), jinaSearchPosts(name)].forEach(p => p.then(rows => {
+    bag.rows = mergeRows(bag.rows, rows || []);
+  }).catch(e => console.warn(e)).finally(() => { done++; }));
+  const start = Date.now();
+  while (done < 3 && bag.rows.length < want && Date.now() - start < 10000) await sleep(180);
+  return bag.rows.slice(0, 8);
 }
 async function followedPosts(handle) {
   const names = await followHandles(handle);
@@ -1218,7 +1314,7 @@ function classifyRequest(text) {
     const topic = name.replace(/\s*(?:on\s+)?(?:x|twitter|エックス)\s*$/i, '').trim();
     return { type: 'x', q: topic || 'news', cat: 'X', label: name };
   }
-  if (/日経|nikkei/.test(low)) return { type: 'gdelt', q: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
+  if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
   if (/^nhk$|ＮＨＫ/.test(low)) return { type: 'rss', rss: RSS.nhk, cat: 'NHK', source: 'NHK', label: name };
   if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: '食文化 OR food', cat: 'FOOD', source: 'The New York Times', label: name };
@@ -1315,7 +1411,7 @@ async function rowsForSlot(slot) {
   let rows = [];
   try {
     if (slot.type === 'x') {
-      if (slot.who) rows = await userPosts(slot.who);
+      if (slot.who) rows = await userPosts(slot.who, need);
       if (rows.length < need) {
         const more = await searchPosts(slot.q);
         const mine = slot.who ? more.filter(r => String(r.source || '').toLowerCase() === 'x @' + String(slot.who).toLowerCase()) : more;
@@ -1333,11 +1429,57 @@ async function rowsForSlot(slot) {
   } catch (e) { console.warn(e); }
   return rows.filter(r => r.headline && !blocked(r.headline) && (slot.type === 'x' || sourceOn(sourceId(r))));
 }
+async function fillText(rows, lang) {
+  const news = rows.filter(r => r && !r.coffee && r.headline);
+  const missingEn = news.filter(r => !r._en);
+  if (missingEn.length) {
+    try {
+      const got = await translateMany(missingEn.map(r => r.headline), 'en');
+      missingEn.forEach((r, i) => { r._en = got[i] || r.headline; });
+    } catch (e) {
+      console.warn(e);
+      missingEn.forEach(r => { if (!r._en) r._en = r.headline; });
+    }
+  }
+  if (lang.id === 'en') {
+    news.forEach(r => { r._local = r._en || r.headline; });
+    return;
+  }
+  const need = news.filter(r => !r._local);
+  const pending = [];
+  need.forEach(r => {
+    if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(r.headline)) r._local = r.headline;
+    else pending.push(r);
+  });
+  if (!pending.length) return;
+  try {
+    const got = await translateMany(pending.map(r => r.headline), 'ja');
+    pending.forEach((r, i) => { r._local = got[i] || r.headline; });
+  } catch (e) {
+    console.warn(e);
+    pending.forEach(r => { if (!r._local) r._local = r.headline; });
+  }
+}
+function scriptFromSequence(date, sequence, lang, country) {
+  const items = sequence.map(row => {
+    if (row.coffee) return { coffee: true, sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
+    return storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id);
+  });
+  return { date, items, market: country.name + ' · ' + lang.name };
+}
+async function revealSequence(date, sequence) {
+  if (!sequence.some(r => r && r.headline)) return;
+  const { country, lang } = market();
+  await fillText(sequence, lang);
+  growShow(scriptFromSequence(date, sequence, lang, country));
+}
 async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
   const found = [];
   const note = label => {
-    showWaiting(label, found.map(r => (r.x ? 'X  ' : '') + r.headline));
+    const lines = found.map(r => (r.x ? 'X  ' : '') + r.headline);
+    if (S.playing) { say('Adding ' + label); return; }
+    showWaiting(label, lines);
     say('Searching ' + label);
   };
   note(slots.map(s => s.label || s.cat || 'News').filter(Boolean).join('\n'));
@@ -1352,6 +1494,7 @@ async function collectSlots(date, slots, reorder) {
     if (slot.type === 'coffee') {
       for (let i = 0; i < slot.count && guard < 24; i++) { sequence.push({ coffee: true }); guard++; }
       found.push({ headline: 'Coffee break' });
+      if (sequence.some(r => r.headline)) await revealSequence(date, sequence);
       note(label);
       continue;
     }
@@ -1360,49 +1503,26 @@ async function collectSlots(date, slots, reorder) {
     const keyOf = r => r.headline.toLowerCase().slice(0, 90);
     const fresh = rows.filter(r => !used.has(keyOf(r)) && !past.has(keyOf(r)));
     const pool = fresh.length >= slot.count ? fresh : rows.filter(r => !used.has(keyOf(r)));
+    let added = 0;
     pool.slice(0, slot.count).forEach(r => {
       if (guard >= 24) return;
       used.add(keyOf(r));
       sequence.push({ ...r, place: slot.place || r.place || 'middle' });
       found.push(r);
       guard++;
+      added++;
     });
+    if (added) await revealSequence(date, sequence);
     note(label);
-    await sleep(150);
+    await sleep(80);
   }
-  if (reorder) sequence = orderStories(sequence.filter(r => !r.coffee), 12);
+  if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => !r.coffee), 12);
   const news = sequence.filter(r => !r.coffee);
   if (!news.length && !sequence.some(r => r.coffee)) throw new Error('Could not collect those requests. Press Update to try again.');
   rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
   progress(0.45);
-  const originals = news.map(r => r.headline);
-  let english = originals.slice();
-  let local = originals.slice();
-  try {
-    english = await translateMany(originals, 'en');
-    if (lang.id === 'en') local = english.slice();
-    else {
-      local = originals.map(src => /[\u3040-\u30ff\u4e00-\u9fff]/.test(src) ? src : '');
-      const need = [];
-      local.forEach((v, i) => { if (!v) need.push(i); });
-      if (need.length) {
-        const got = await translateMany(need.map(i => originals[i]), 'ja');
-        need.forEach((i, k) => { local[i] = got[k]; });
-      }
-    }
-  } catch (e) {
-    console.warn(e);
-    english = originals.slice();
-    local = originals.slice();
-  }
-  let n = 0;
-  const items = sequence.map(row => {
-    if (row.coffee) return { coffee: true, sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
-    const item = storyFrom(row, english[n], local[n], lang.id);
-    n++;
-    return item;
-  });
-  return { date, items, market: country.name + ' · ' + lang.name };
+  await fillText(sequence, lang);
+  return scriptFromSequence(date, sequence, lang, country);
 }
 function countsFor(genres) {
   if (genres.length === 1) return [6];
@@ -1446,18 +1566,35 @@ async function collect(date) {
   const picks = [];
   for (let i = 0; i < list.length && picks.length < 2; i++) picks.push(list[(n + i) % list.length]);
   const lines = [];
+  let lead = [];
+  const blocked = text => violentHidden() && VIOLENT.test(text);
   for (const id of picks) {
     const name = SOURCE_LABEL[id] || id;
-    showWaiting(name, lines);
-    say('Searching ' + name);
+    if (S.playing) say('Adding ' + name);
+    else { showWaiting(name, lines); say('Searching ' + name); }
     try {
       const items = await newsRows(RSS[id], 'NEWS');
       const tagged = items.map(it => ({ ...it, source: it.source || name }));
       batches.push(tagged);
       rowsFromItems(tagged, name, 'NEWS').slice(0, 4).forEach(r => lines.push(r.headline));
-      showWaiting(name, lines);
+      if (!S.playing) showWaiting(name, lines);
+      if (!lead.length) {
+        const early = [];
+        const seen = new Set();
+        batches.flat().forEach(it => {
+          const sp = splitHeadline(it.title);
+          if (!sp.headline || blocked(sp.headline) || seen.has(sp.headline.toLowerCase().slice(0, 90))) return;
+          if (!sp.source || sp.source === 'News') sp.source = it.source || sp.source;
+          const row = { headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: 'NEWS', source: sp.source, place: 'middle' };
+          if (!sourceOn(sourceId(row))) return;
+          seen.add(sp.headline.toLowerCase().slice(0, 90));
+          early.push(row);
+        });
+        lead = early.slice(0, 4);
+        if (lead.length) await revealSequence(date, lead);
+      }
     } catch (e) { console.warn(e); }
-    await sleep(200);
+    await sleep(120);
   }
   try {
     const terms = genres.map(g => {
@@ -1477,7 +1614,6 @@ async function collect(date) {
   } catch (e) { console.warn(e); }
   const used = new Set();
   const rows = [];
-  const blocked = text => violentHidden() && VIOLENT.test(text);
   batches.flat().forEach(it => {
     const sp = splitHeadline(it.title);
     if (!sp.headline || blocked(sp.headline)) return;
@@ -1509,33 +1645,27 @@ async function collect(date) {
   const fresh = rows.filter(r => !past.has(keyOf(r)));
   const pool = fresh.length >= 8 ? fresh : rows;
   const posts = xrows.filter(r => !past.has(keyOf(r))).slice(0, 3);
-  const chosen = orderStories([...posts, ...pool], 12);
+  let chosen = orderStories([...posts, ...pool], 12);
+  if (lead.length) {
+    const byKey = new Map(chosen.map(r => [keyOf(r), r]));
+    lead.forEach(r => {
+      const hit = byKey.get(keyOf(r));
+      if (!hit) return;
+      r.cat = hit.cat || r.cat;
+      r.place = hit.place || r.place;
+      r.source = hit.source || r.source;
+    });
+    const keys = new Set(lead.map(keyOf));
+    const rest = chosen.filter(r => !keys.has(keyOf(r)));
+    chosen = lead.concat(rest).slice(0, 12);
+  }
   rememberKeys(chosen.map(r => r.headline.toLowerCase().slice(0, 90)));
   if (!chosen.length) throw new Error('Could not collect headlines. Press Update to try again.');
   progress(0.45);
-  const originals = chosen.map(r => r.headline);
-  let english = originals.slice();
-  let local = originals.slice();
-  try {
-    english = await translateMany(originals, 'en');
-    if (lang.id === 'en') local = english.slice();
-    else {
-      local = originals.map(src => /[\u3040-\u30ff\u4e00-\u9fff]/.test(src) ? src : '');
-      const need = [];
-      local.forEach((v, i) => { if (!v) need.push(i); });
-      if (need.length) {
-        const got = await translateMany(need.map(i => originals[i]), 'ja');
-        need.forEach((i, k) => { local[i] = got[k]; });
-      }
-    }
-  } catch (e) {
-    console.warn(e);
-    english = originals.slice();
-    local = originals.slice();
-  }
+  await fillText(chosen, lang);
   return {
     date,
-    items: chosen.map((r, i) => storyFrom(r, english[i], local[i], lang.id)),
+    items: chosen.map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id)),
     coffee: { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] },
     market: country.name + ' · ' + lang.name,
   };
@@ -1664,7 +1794,7 @@ function setBusy(b) {
 async function runAll(opts) {
   opts = opts || {};
   if (S.busy) { S.again = opts; return; }
-  S.busy = true; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
+  S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
     const preview = parseLineup(lineupText());
@@ -1676,7 +1806,8 @@ async function runAll(opts) {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
     progress(0.7);
-    await setScript(script, true);
+    if (!opts.sample && S.grew && S.playing && S.show) growShow(script);
+    else await setScript(script, true);
     say(watchLine(!!(S.ac && S.ac.state === 'running')));
   } catch (e) {
     console.error(e); say(e.message || String(e), true); progress(0);
@@ -1724,7 +1855,11 @@ function initUI() {
     $('studio').scrollTop = 0;
   };
   $('backVideo').onclick = closeStudio;
-  $('home').onclick = () => { closeStudio(); window.scrollTo(0, 0); };
+  $('home').onclick = () => {
+    closeStudio();
+    window.scrollTo(0, 0);
+    refreshMarket();
+  };
   if (Q.get('edit') === '1') $('studio').hidden = false;
   const forced = Q.get('format');
   const savedLayout = store.get('layout', 'auto');
@@ -1851,13 +1986,15 @@ function initUI() {
     $('applyLine').classList.remove('on');
     scheduleRefresh(800);
   });
-  $('applyLine').onclick = () => {
+  const applyLineup = () => {
     clearTimeout(refreshTimer);
     store.set('lineup', lineup.value);
     paintChips();
     arm('applyLine');
     refreshMarket();
   };
+  $('applyLine').onclick = applyLineup;
+  $('lineupGo').onclick = applyLineup;
   const markLine = () => { if (lineup.value.trim()) arm('applyLine'); };
   const oldRefresh = refreshMarket;
   refreshMarket = function () { markLine(); return oldRefresh(); };
@@ -1911,7 +2048,7 @@ function buildFilters() {
     row.append(lab, sel);
     box.appendChild(row);
   });
-  $('hideViolent').checked = store.get('hideViolent', '1') !== '0';
+  $('hideViolent').checked = store.get('hideViolent', '0') === '1';
   $('hideViolent').onchange = () => { saveFilters(); refreshMarket(); };
   const sbox = $('sourceFilters');
   SOURCES.forEach(s => {
