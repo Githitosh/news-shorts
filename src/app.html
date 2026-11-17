@@ -136,10 +136,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="play" disabled>Play</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
+      <button id="dl" type="button" disabled>Download</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
+    <p class="music-label">Items</p>
+    <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
     <div class="music" id="paces"></div>
     <p class="note pace-note">Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.</p>
@@ -176,7 +179,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1"></textarea>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X&#10;SpaceX&#10;Nikkei&#10;ABC&#10;Sports&#10;Food&#10;Restaurant"></textarea>
+      <p class="note">One request on each line. The number of stories comes from Items under the video.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -256,6 +260,24 @@ const WALLS = [
   { id: 'night', name: 'Night' },
   { id: 'pop', name: 'Pop' },
 ];
+/* Items: how many stories one video plays. Chosen under the video. */
+const COUNTS = [5, 10, 20];
+function total() {
+  const n = Number(store.get('count', '10'));
+  return COUNTS.includes(n) ? n : 10;
+}
+/* Split n stories over k lines: as even as possible, the first lines get the extra ones. */
+function shares(n, k) {
+  return Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0));
+}
+function withCounts(slots, n) {
+  const parts = shares(n, slots.length);
+  return slots.map((sl, i) => Object.assign(sl, { count: parts[i] })).filter(sl => sl.count > 0);
+}
+/* Lineup lines are names only; an old count after the name is dropped. */
+function noCount(line) {
+  return String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').replace(/\s*[,、]?\s*\d+\s*(?:個|件|本)?\s*$/, '').trim();
+}
 const PACES = [
   { sec: 3.2, name: '3.2s' },
   { sec: 4.2, name: '4.2s' },
@@ -589,6 +611,7 @@ async function setScript(raw, quiet) {
   S.jsonClean = $('json').value;
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
+  resetDownload();
   $('seek').value = 0; draw(0);
   if (!quiet) say(`Script loaded (${S.show.total} stories, ${S.show.duration.toFixed(1)}s).`);
   if (WATCH && !S.busy) startWatch();
@@ -614,6 +637,7 @@ function growShow(raw) {
   S.jsonClean = $('json').value;
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
+  resetDownload();
   S.grew = true;
   if (!was) {
     $('seek').value = '0';
@@ -1740,20 +1764,20 @@ function mixRows(rows) {
   return mixed;
 }
 const CHIPS = [
-  { label: 'Space', line: 'Space, 1' },
-  { label: 'Politics', line: 'Politics, 2' },
-  { label: 'Science', line: 'Science, 1' },
-  { label: 'Culture', line: 'Culture, 1' },
-  { label: 'Local', line: 'Local, 1' },
-  { label: 'Entertainment', line: 'Entertainment, 1' },
-  { label: 'Public safety', line: 'Public safety, 1' },
-  { label: 'Sports', line: 'Sports, 2' },
-  { label: 'Food', line: 'Food, 2' },
-  { label: 'Restaurant', line: 'Restaurant, 1' },
-  { label: 'Musk X', line: 'Musk X, 3' },
-  { label: 'SpaceX', line: 'SpaceX, 1' },
-  { label: 'Nikkei', line: 'Nikkei, 2' },
-  { label: 'ABC', line: 'ABC, 1' },
+  { label: 'Space', line: 'Space' },
+  { label: 'Politics', line: 'Politics' },
+  { label: 'Science', line: 'Science' },
+  { label: 'Culture', line: 'Culture' },
+  { label: 'Local', line: 'Local' },
+  { label: 'Entertainment', line: 'Entertainment' },
+  { label: 'Public safety', line: 'Public safety' },
+  { label: 'Sports', line: 'Sports' },
+  { label: 'Food', line: 'Food' },
+  { label: 'Restaurant', line: 'Restaurant' },
+  { label: 'Musk X', line: 'Musk X' },
+  { label: 'SpaceX', line: 'SpaceX' },
+  { label: 'Nikkei', line: 'Nikkei' },
+  { label: 'ABC', line: 'ABC' },
 ];
 function lineupText() {
   const el = $('lineup');
@@ -1763,23 +1787,14 @@ function lineupText() {
 function lineName(line) {
   return String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0].trim().toLowerCase();
 }
-function parseLineup(text) {
+function parseLineup(text, n) {
   const slots = [];
   String(text || '').split(/\n/).forEach(raw => {
-    let s = raw.replace(/^\s*\d+\s*[\.\)、]\s*/, '').trim();
+    const s = noCount(raw);
     if (!s) return;
-    let count = 1;
-    const pair = s.match(/^(.*?)[,、]\s*(\d+)\s*(?:個|件|本)?\s*$/) || s.match(/^(.*?)\s+(\d+)\s*(?:個|件|本)?\s*$/);
-    if (pair) { s = pair[1].trim(); count = parseInt(pair[2], 10) || 0; }
-    else {
-      const tail = s.match(/(\d+)\s*(?:個|件|本)\s*$/);
-      if (tail) { count = parseInt(tail[1], 10) || 0; s = s.slice(0, tail.index).replace(/[,、]\s*$/, '').trim(); }
-    }
-    count = Math.max(0, Math.min(6, count));
-    if (!s || !count) return;
-    slots.push(Object.assign({ count }, classifyRequest(s)));
+    slots.push(Object.assign({ count: 1 }, classifyRequest(s)));
   });
-  return slots.slice(0, 12);
+  return withCounts(slots.slice(0, 12), n || total());
 }
 /* A genre name shown in Japanese means the same genre as its English name. */
 function enName(text) {
@@ -1792,8 +1807,8 @@ function chipKey(line) {
   return enName(String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0]).toLowerCase();
 }
 function chipLine(chip) {
-  if (!window.UIJA || $('lang').value !== 'ja') return chip.line;
-  return UIJA.tr(chip.label) + ', ' + chip.line.split(',').pop().trim();
+  if (!window.UIJA || $('lang').value !== 'ja') return chip.label;
+  return UIJA.tr(chip.label);
 }
 function classifyRequest(text) {
   const name = enName(text);
@@ -2208,20 +2223,20 @@ async function collectSlots(date, slots, reorder) {
     note(label);
     await sleep(80);
   }
-  if (!reorder && !S.again) {
+  if (!reorder && !S.again && sequence.length < total()) {
     say('Reading genres, sources, and X accounts');
     const details = await loadDetails(slots, used);
     details.forEach(r => { if (r && r.headline) found.push(r); });
     sequence = insertDetails(sequence, details);
   }
-  if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
+  if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), total());
   const firstNews = sequence.find(r => r && r.headline && !r.coffee);
   sequence.forEach((r, i) => {
     if (!r || !r.coffee || (r.about && r.about.headline)) return;
     const prev = sequence.slice(0, i).reverse().find(x => x && x.headline && !x.coffee);
     r.about = prev || firstNews || null;
   });
-  const news = sequence.filter(r => r && !r.coffee && r.headline);
+  const news = sequence.filter(r => r && !r.coffee && r.headline).slice(0, total());
   if (!news.length) throw noNewError('No new stories for this lineup yet. Press Update again later.');
   S.pendingKeys = news.flatMap(storyKeys);
   progress(0.45);
@@ -2230,23 +2245,24 @@ async function collectSlots(date, slots, reorder) {
   return scriptFromSequence(date, news, lang, country, []);
 }
 function countsFor(genres) {
-  if (genres.length === 1) return [6];
-  const raw = genres.map(g => g.place === 'top' ? 2 : 1);
-  let sum = raw.reduce((n, c) => n + c, 0);
-  for (let i = raw.length - 1; i >= 0 && sum > 12; i--) {
-    if (raw[i] > 1) { raw[i]--; sum--; }
+  /* Items split over the genres; Top genres get a second story first. */
+  const n = total();
+  const out = genres.map(() => 0);
+  const order = genres.map((g, i) => i).sort((a, b) => (genres[b].place === 'top') - (genres[a].place === 'top'));
+  for (let left = n; left > 0;) {
+    for (const i of order) { if (left > 0) { out[i]++; left--; } }
   }
-  return raw;
+  return out;
 }
 async function collectGenres(date, genres) {
   const counts = countsFor(genres);
-  const slots = genres.map((g, i) => Object.assign(requestForGenre(g), { count: counts[i], place: g.place }));
+  const slots = genres.map((g, i) => Object.assign(requestForGenre(g), { count: counts[i], place: g.place })).filter(sl => sl.count > 0);
   return collectSlots(date, slots, true);
 }
 async function collectPosts(date) {
   beginCollect();
   const { country, lang } = market();
-  const slots = parseLineup(lineupText()).filter(s => s && s.type === 'x');
+  const slots = withCounts(parseLineup(lineupText()).filter(s => s && s.type === 'x'), total());
   progress(0.08);
   showWaiting('X posts', []);
   say('Searching X');
@@ -2271,8 +2287,9 @@ async function collectPosts(date) {
     say('Searching @' + names[0]);
     let got = [];
     try { got = await accountRows(names); } catch (e) { console.warn(e); }
-    pickFresh(got, used, Math.min(6, Math.max(3, names.length * 2))).forEach(r => rows.push(r));
+    pickFresh(got, used, total()).forEach(r => rows.push(r));
   }
+  rows.splice(total());
   if (!rows.length) throw noNewError('No new X posts yet. Press Update again later.');
   S.pendingKeys = rows.flatMap(storyKeys);
   progress(0.45);
@@ -2379,10 +2396,10 @@ async function collect(date) {
   const xpick = xrows.filter(r => !isSeen(r, past));
   const freshRows = () => rows.filter(r => !isSeen(r, past) && !xkeys.has(keyOf(r)));
   /* Not enough new stories: read the other papers, then topic searches, until there are enough. */
-  if (freshRows().length < 10) {
+  if (freshRows().length < total()) {
     const more = intlFeeds.concat(jpFeeds).filter(id => !picks.includes(id)).map(id => [feedOf(id), SOURCE_LABEL[id] || id]).concat(topicFeeds());
     for (const [url, label] of more) {
-      if (S.again || freshRows().length >= 10) break;
+      if (S.again || freshRows().length >= total()) break;
       if (S.playing) say('Adding ' + label);
       else { showWaiting('News', []); say('Searching ' + label); }
       try { addItems((await newsRows(url, 'NEWS')).map(it => ({ ...it, source: it.source || label }))); } catch (e) { console.warn(e); }
@@ -2390,12 +2407,15 @@ async function collect(date) {
   }
   const pool = freshRows();
   const jpSource = id => id === 'nikkei';
-  let chosen = ['intl', 'jp'].flatMap(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), 6)).slice(0, 12);
+  const N = total();
+  const groups = ['intl', 'jp'].map(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), N));
+  let chosen = groups[0].slice(0, Math.ceil(N / 2)).concat(groups[1].slice(0, Math.floor(N / 2)));
+  if (chosen.length < N) chosen = chosen.concat(groups.flat().filter(r => !chosen.includes(r))).slice(0, N);
   const leadNews = lead.filter(r => r && r.headline && !r.coffee);
   if (xrows.length) {
-    const head = xpick.slice(0, 8);
+    const head = xpick.slice(0, Math.min(8, N));
     const keys = new Set(head.map(keyOf));
-    chosen = head.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
+    chosen = head.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, N);
   } else if (leadNews.length) {
     const byKey = new Map(chosen.map(r => [keyOf(r), r]));
     leadNews.forEach(r => {
@@ -2406,7 +2426,7 @@ async function collect(date) {
       r.source = hit.source || r.source;
     });
     const keys = new Set(leadNews.map(keyOf));
-    chosen = leadNews.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
+    chosen = leadNews.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, N);
   }
   chosen = chosen.filter(r => r && r.headline && !isSeen(r, past));
   if (!chosen.length) throw noNewError();
@@ -2467,7 +2487,7 @@ async function encodeShow(show, label, p0, p1) {
 function addOut(fmt, blob) {
   const name = fileName(S.script.date, fmt).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
   const url = URL.createObjectURL(blob);
-  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url });
+  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script });
   const box = $('out'); box.innerHTML = '';
   const order = ['x', 'youtube', 'pc'];
   S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
@@ -2501,6 +2521,53 @@ async function exportMP4(formats) {
     return names;
   } finally { S.busy = false; setBusy(false); }
 }
+/* Download: the video on screen as an MP4 in the current layout.
+   Phones open the share sheet (Save Video); computers download the file. */
+const PHONE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+function shareable(out) {
+  if (!PHONE || !navigator.canShare) return null;
+  const file = new File([out.blob], out.name, { type: out.blob.type });
+  try { return navigator.canShare({ files: [file] }) ? file : null; } catch (e) { return null; }
+}
+function resetDownload() {
+  const b = $('dl');
+  if (!b) return;
+  b.textContent = 'Download';
+  delete b.dataset.ready;
+  b.disabled = !S.show || !!S.busy;
+}
+function saveOut(out) {
+  const file = shareable(out);
+  if (file) navigator.share({ files: [file], title: 'News Shorts' }).catch(() => {});
+  else {
+    const a = document.createElement('a');
+    a.href = out.url; a.download = out.name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    say(`Downloaded ${out.name}`);
+  }
+  resetDownload();
+}
+async function download() {
+  if (!S.script || S.busy) return;
+  const fmt = S.format;
+  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script);
+  if (mine()) { saveOut(mine()); return; }
+  const was = S.playing;
+  const b = $('dl');
+  b.textContent = 'Making MP4…';
+  try { await exportMP4([fmt]); }
+  catch (e) { console.error(e); resetDownload(); say(e.message || String(e), true); return; }
+  const out = mine();
+  resetDownload();
+  if (!out) return;
+  if (was && !S.playing) $('play').click();
+  if (shareable(out)) {
+    /* Making the MP4 took a while, so the share sheet needs one more tap. */
+    b.textContent = 'Save';
+    b.dataset.ready = '1';
+    say('The MP4 is ready. Press Save to keep it.');
+  } else saveOut(out);
+}
 /* Browsers without WebCodecs record the playing picture. */
 async function recordRealtime() {
   if (typeof MediaRecorder === 'undefined' || !$('cv').captureStream) throw new Error('This browser cannot export video.');
@@ -2529,7 +2596,7 @@ async function recordRealtime() {
 }
 
 function setBusy(b) {
-  ['go', 'apply', 'sample', 'exportBtn', 'play'].forEach(id => {
+  ['go', 'apply', 'sample', 'exportBtn', 'play', 'dl'].forEach(id => {
     const el = $(id);
     if (el) el.disabled = b || (id !== 'go' && id !== 'sample' && id !== 'apply' && !S.show);
   });
@@ -2543,7 +2610,7 @@ function previewLabel() {
   const preview = parseLineup(lineupText());
   const names = xAccounts();
   if (preview.length) {
-    const title = [frame].concat(preview.map(s => (s.label || 'News') + ', ' + (s.count || 1))).join('\n');
+    const title = [frame].concat(preview.map(s => s.label || 'News')).join('\n');
     return { title, say: 'Reading ' + frame };
   }
   const title = names.length ? frame + '\n' + names.map(n => '@' + n).join('\n') : frame;
@@ -2804,6 +2871,22 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     paceBox.appendChild(b);
   });
+  const countBox = $('counts');
+  const paintCounts = () => countBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === total()));
+  COUNTS.forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.n = String(n);
+    b.textContent = String(n);
+    b.onclick = () => {
+      if (total() === n) return;
+      store.set('count', String(n));
+      paintCounts();
+      scheduleRefresh(0);
+    };
+    countBox.appendChild(b);
+  });
+  paintCounts();
   const savedPace = Number(Q.get('pace') || store.get('pace', '3.2'));
   usePace(PACES.some(p => p.sec === savedPace) ? savedPace : 3.2);
   const countryBox = $('country');
@@ -2846,8 +2929,10 @@ function initUI() {
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
   $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
+  $('dl').onclick = () => download();
   const lineup = $('lineup');
-  lineup.value = store.get('lineup', '');
+  lineup.value = store.get('lineup', '').split(/\n/).map(noCount).filter(Boolean).join('\n');
+  store.set('lineup', lineup.value);
   const paintChips = () => {
     const keys = new Set(lineup.value.split(/\n/).map(chipKey).filter(Boolean));
     document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
