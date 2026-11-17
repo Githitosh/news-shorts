@@ -18,7 +18,7 @@ const JA = {
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
   // Wallpapers and music
   'Morning': '朝', 'Bright': '明るい', 'Day': '昼', 'Evening': '夕方', 'Night': '夜', 'Pop': 'ポップ',
-  'Jupiter': '木星', 'Neptune': '海王星', 'Stars and Stripes': '星条旗よ永遠なれ', 'Sandman': 'ジャパニーズ・サンドマン',
+  'Jupiter': '木星', 'Neptune': '海王星', 'Stars and Stripes': '星条旗よ永遠なれ',
   // Settings
   'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',

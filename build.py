@@ -39,7 +39,6 @@ def main() -> None:
         "jupiter": b64(ROOT / "assets" / "jupiter_1922.m4a"),
         "neptune": b64(ROOT / "assets" / "neptune_1923.m4a"),
         "stripes": b64(ROOT / "assets" / "stripes_1909.m4a"),
-        "sandman": b64(ROOT / "assets" / "sandman_1920.m4a"),
     }
     for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine), ("ui_ja.js", UI_JA)):
         if "</script" in code.lower():
