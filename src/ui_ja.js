@@ -12,7 +12,7 @@ const JA = {
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
-  'Download': 'ダウンロード', 'Saving…': '保存中…', 'Could not save the video.': '動画を保存できませんでした。', 'Making MP4…': 'MP4を作成中…', 'Save': '保存',
+  'Download': 'ダウンロード', 'Saving…': '保存中…', 'Could not save the video.': '動画を保存できませんでした。', 'Making MP4…': '作成中…', 'Save': '保存',
   'The MP4 is ready. Press Save to keep it.': 'MP4ができました。「保存」を押すと保存できます。',
   'Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.': '1話は3.2秒です。4.2秒と5.2秒は1〜2秒長くなります。',
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
