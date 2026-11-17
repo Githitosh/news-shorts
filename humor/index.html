@@ -182,7 +182,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <option value="x">X comments only</option>
         <option value="news">News, then comments</option>
       </select>
-      <p class="note">X comments only (the default) plays funny replies on X about today's news in the genres you choose, the lineup, and the accounts below. News, then comments plays the reports first. A comment or story that has played does not play again. Japanese text is shown large.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
@@ -5327,7 +5326,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '8a6e2322dd9c';
+  const BUILD = '09ce2d484367';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
