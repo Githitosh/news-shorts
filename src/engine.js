@@ -264,7 +264,30 @@ function fitPlan(place) {
   return L;
 }
 
-function layout(it) { return layoutAt(it, 1); }
+function layout(it) {
+  const replyLines = (it.replies || []).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 2);
+  const replySize = 40;
+  const replyStep = 52;
+  const replyBand = replyLines.length ? replyLines.length * replyStep + 24 : 0;
+  const savedBottom = P.box.bottom;
+  const savedCenter = P.box.center;
+  if (replyBand) {
+    P.box.bottom = savedBottom - replyBand;
+    P.box.center = (P.box.top + P.box.bottom) / 2;
+  }
+  let L;
+  try { L = layoutAt(it, 1); }
+  finally { P.box.bottom = savedBottom; P.box.center = savedCenter; }
+  if (replyLines.length) {
+    let y = savedBottom - replyBand + replySize;
+    L.replies = replyLines.map(t => {
+      const line = { t, base: y, size: replySize };
+      y += replyStep;
+      return line;
+    });
+  }
+  return L;
+}
 function layoutAt(it, scale) {
   jpScale = scale;
   const jp = [];
@@ -460,6 +483,16 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
+    (L.replies || []).forEach(l => {
+      ctx.save();
+      ctx.font = font(650, l.size, F_SANS);
+      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
+      ctx.shadowBlur = 8;
+      const w = ctx.measureText(l.t).width;
+      const sx = Math.min(P.jp.sx, (P.jp.maxW * 0.98) / Math.max(1, w));
+      textX(ctx, l.t, L.cxJp, l.base, sx, 'center');
+      ctx.restore();
+    });
   }
   if (a3 > 0 && it.tags.length) {
     ctx.globalAlpha = a3 * a1;
@@ -487,7 +520,7 @@ function fontSpecs() {
 function allText(script) {
   const s = [];
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
-    s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.tags || []), it.src, it.date);
+    s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.replies || []), ...(it.tags || []), it.src, it.date);
   });
   s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');

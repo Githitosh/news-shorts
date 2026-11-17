@@ -497,6 +497,7 @@ function normItem(it) {
     jp: arr(it.jp).slice(0, 8),
     tags: arr(it.tags).map(up).slice(0, 4),
     src: String(it.src || '').trim(), date: String(it.date || '').trim(), url: String(it.url || '').trim(),
+    replies: arr(it.replies).slice(0, 2),
   };
 }
 function normalize(s) {
@@ -1148,6 +1149,74 @@ async function searchPosts(query, minLen) {
   }
   return out;
 }
+function clipReply(text) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  const chars = [...s];
+  const cjk = (s.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+  const limit = cjk * 2 >= chars.length ? 28 : 46;
+  if (chars.length <= limit) return s;
+  return chars.slice(0, limit - 1).join('').replace(/\s+$/, '') + '…';
+}
+function replyLineFrom(st, handle) {
+  const author = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
+  if (!author || (handle && author.toLowerCase() === handle.toLowerCase())) return null;
+  const text = String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const letters = (text.match(/[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+  if (letters < 10 || (violentHidden() && VIOLENT.test(text))) return null;
+  return { line: clipReply('@' + author + '  ' + text), letters };
+}
+const handlePool = new Map();
+function poolFor(handle) {
+  const key = String(handle || '').toLowerCase();
+  if (!key) return Promise.resolve([]);
+  if (!handlePool.has(key)) {
+    handlePool.set(key, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent('to:' + handle + ' filter:replies')).then(data => {
+      const out = [];
+      const seen = new Set();
+      for (const st of (data && data.results) || []) {
+        const got = replyLineFrom(st, handle);
+        if (!got || seen.has(got.line.toLowerCase())) continue;
+        seen.add(got.line.toLowerCase());
+        out.push(got);
+      }
+      out.sort((a, b) => b.letters - a.letters);
+      return out.map(x => x.line);
+    }).catch(e => { console.warn(e); return []; }));
+  }
+  return handlePool.get(key);
+}
+const replyBatch = new Map();
+async function fillReplyBatch(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    const handle = String(r.source || '').replace(/^X\s*@/i, '').replace(/^@+/, '');
+    const key = handle.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { handle, rows: [] });
+    groups.get(key).rows.push(r);
+  });
+  await Promise.all([...groups.values()].map(async group => {
+    const pool = await poolFor(group.handle);
+    const pending = group.rows.filter(r => !(r.replies && r.replies.length));
+    pending.forEach((r, idx) => {
+      const out = [];
+      for (let k = 0; out.length < 2 && idx * 2 + k < pool.length; k++) out.push(pool[idx * 2 + k]);
+      if (out.length < 2) pool.forEach(line => { if (out.length < 2 && out.indexOf(line) < 0) out.push(line); });
+      r.replies = out;
+    });
+  }));
+}
+function attachReplies(rows) {
+  const list = (rows || []).filter(r => r && r.x && r.link);
+  if (!list.length) return Promise.resolve([]);
+  const key = list.map(r => r.link).join('|');
+  if (!replyBatch.has(key)) {
+    replyBatch.set(key, fillReplyBatch(list).catch(e => {
+      console.warn(e);
+      list.forEach(r => { if (!r.replies) r.replies = []; });
+    }));
+  }
+  return replyBatch.get(key);
+}
 function readableLine(text) {
   const line = String(text || '').replace(/\s+/g, ' ').trim();
   return /[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? line : '';
@@ -1408,6 +1477,7 @@ function storyFrom(raw, english, local, langId) {
     src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
     date: md,
     url: raw.link || '',
+    replies: arr(raw.replies).slice(0, 2),
   };
 }
 function shuffle(list) {
@@ -1647,19 +1717,55 @@ async function fillText(rows, lang) {
     pending.forEach(r => { if (!r._local) r._local = r.headline; });
   }
 }
+function topicBit(text) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  const piece = s.split(/[、。！？!?.,]/)[0].replace(/(ので|について)$/, '').trim();
+  if (!piece) return '';
+  if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(piece)) return [...piece].length <= 8 ? piece : '';
+  const words = piece.split(' ').filter(Boolean);
+  if (!words.length || words.length > 2 || piece.length > 18) return '';
+  if (/^(the|a|an|this|that|it|to|of|in|on|for|i|we|you)$/i.test(words[0])) return '';
+  return piece;
+}
+function storyKind(text) {
+  const t = String(text || '');
+  if (/restaurant|レストラン|bistro|café|cafe|diner|ダイニング/i.test(t)) return 'table';
+  if (/[0-9０-９]/.test(t) && /%|％|倍|円|ドル|万人|億|増|減|安|高|percent|billion|million/i.test(t)) return 'number';
+  if (/[「『"“]/.test(t) || /氏|首相|大統領|監督|発言|said|says|told|according/i.test(t)) return 'quote';
+  if (/出発|訪問|会談|会議|サミット|summit|visit|meet/i.test(t)) return 'visit';
+  if (/逮捕|死亡|事故|攻撃|衝突|被害|違反|killed|crash|attack/i.test(t)) return 'harm';
+  if (/発表|計画|開始|導入|発売|方針|plan|launch|announce/i.test(t)) return 'plan';
+  return 'note';
+}
 function commentCard(row, lang) {
   const local = String((row && (row._local || row.headline)) || '').replace(/\s+/g, ' ').trim();
   const en = String((row && (row._en || row.headline)) || '').replace(/\s+/g, ' ').trim();
-  const jaNote = 'ここで一度立ち止まり、このニュースを見直す。';
-  const enNote = 'Here, stop once and look at this news again.';
   const id = lang && lang.id;
-  if (id === 'en') {
-    const body = en || enNote;
-    return { coffee: true, sub: ['A NOTE ON', 'THIS STORY'], jp: body === enNote ? [enNote] : [body, enNote], tags: ['COFFEE BREAK'] };
-  }
-  const body = local || en || jaNote;
-  const jp = body ? [body] : [];
-  if (!jp.length || jp[jp.length - 1] !== jaNote) jp.push(jaNote);
+  const kind = storyKind((local + ' ' + en).trim());
+  const bitJa = topicBit(local || en);
+  const bitEn = topicBit(en || local);
+  const nameJa = bitJa ? '「' + bitJa + '」' : 'このニュース';
+  const nameEn = bitEn ? '"' + bitEn + '"' : 'This story';
+  const ja = {
+    table: [nameJa + 'で見るのは、店の評判より、誰がその席にたどり着けるのかです。', '話題の大きさだけでは、入れない人がいる理由は分かりません。'],
+    number: [nameJa + 'で先に見るのは、数字そのものより、いつの数字で何と比べているかです。', '増えたのか減ったのかは、基準が書かれて初めて意味を持ちます。'],
+    quote: [nameJa + 'では、誰の言葉と、確認された事実を分けて読みます。', '発言が同じ段落に並んでいても、どこまでがその人の主張なのかは別の問いです。'],
+    visit: [nameJa + 'で問うのは、日程ではなく、誰と何を確認するのかです。', '出発や開催の知らせだけでは、その場で何が決まるのかはまだ分かりません。'],
+    harm: [nameJa + 'は、起きたことと、原因として語られていることを分けて見ます。', '一つの出来事を、すぐに全体の傾向へ広げる前に、場所と時点を確認します。'],
+    plan: [nameJa + 'は、決まったことと、まだ予定のままのことを分けて読む話です。', '発表の文面より、いつから誰に届くのかが、このニュースの芯です。'],
+    note: [nameJa + 'で先に見るのは、結果の大きさではなく、誰が次に説明を求められるかです。', '見出しの出来事だけを受け取ると、まだ分かっていない部分が後ろに隠れます。'],
+  }[kind];
+  const eng = {
+    table: [nameEn + ' is about who gets through the door, not how famous the room is.', 'A crowd at the entrance does not explain who is turned away.'],
+    number: [nameEn + ' is a figure, and a figure only means something once the comparison is clear.', 'The useful question is when the number was taken, and what it is measured against.'],
+    quote: [nameEn + ' puts a claim next to a fact, and those are not the same thing.', 'The useful question is who is speaking, and how much of the claim has been shown.'],
+    visit: [nameEn + ' is a meeting on a calendar, and the calendar is not the decision.', 'What matters is who sits down, and what is actually confirmed.'],
+    harm: [nameEn + ' reports an event, and the cause being offered is a separate claim.', 'One event does not become a trend until the place and the time are clear.'],
+    plan: [nameEn + ' mixes what has been decided with what is still only a plan.', 'The useful question is when it starts, and who it actually reaches.'],
+    note: [nameEn + ' is an announcement, and the announcement is not the same as the reason.', 'What is still unexplained matters more than the size of the headline.'],
+  }[kind];
+  const jp = id === 'en' ? eng : (id === 'ja' ? ja : ja.concat(eng));
   return { coffee: true, sub: ['A NOTE ON', 'THIS STORY'], jp, tags: ['COFFEE BREAK'] };
 }
 function withCoffee(rows) {
@@ -1676,10 +1782,31 @@ function scriptFromSequence(date, sequence, lang, country) {
 }
 async function revealSequence(date, sequence) {
   if (S.again) return;
-  if (!sequence.some(r => r && r.headline)) return;
+  if (!sequence.some(r => r && (r.headline || r.coffee))) return;
   const { country, lang } = market();
-  await fillText(sequence, lang);
+  await Promise.all([
+    Promise.race([attachReplies(sequence), sleep(5000)]),
+    fillText(sequence, lang),
+  ]);
+  if (S.again) return;
   growShow(scriptFromSequence(date, sequence, lang, country));
+}
+function restaurantText(text) {
+  return /restaurant|レストラン|bistro|café|cafe|diner|ダイニング/i.test(text || '');
+}
+function orderPool(slot, pool, slots) {
+  if (slot.cat === 'RESTAURANT') {
+    const hit = pool.filter(r => restaurantText(r.headline));
+    return hit.length ? hit.concat(pool.filter(r => !restaurantText(r.headline))) : pool;
+  }
+  if (slot.cat !== 'FOOD') return pool;
+  const at = slots.indexOf(slot);
+  const later = slots.slice(at + 1).filter(s => s.cat === 'RESTAURANT').reduce((n, s) => n + (s.count || 0), 0);
+  if (!later) return pool;
+  const rest = pool.filter(r => restaurantText(r.headline));
+  const other = pool.filter(r => !restaurantText(r.headline));
+  const free = other.concat(rest.slice(later));
+  return free.length >= (slot.count || 1) ? free : free.concat(rest.slice(0, later));
 }
 async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
@@ -1691,53 +1818,29 @@ async function collectSlots(date, slots, reorder) {
     showWaiting(label, lines);
     say('Searching ' + label);
   };
-  const covered = new Set(slots.filter(s => s.who).map(s => String(s.who).toLowerCase()));
-  const extraNames = xAccounts().filter(n => !covered.has(n.toLowerCase()));
-  note(extraNames.map(n => '@' + n).concat(slots.map(s => s.label || s.cat || 'News')).filter(Boolean).join('\n'));
+  note(slots.map(s => (s.label || s.cat || 'News') + ', ' + (s.count || 1)).join('\n'));
   progress(0.08);
   let sequence = [];
   const used = new Set();
   let guard = 0;
   const keyOf = r => String(r.headline || '').toLowerCase().slice(0, 90);
-  const fromAccounts = extraNames.length ? await accountRows(extraNames) : [];
-  fromAccounts.forEach(r => {
-    if (guard >= 24) return;
-    const key = keyOf(r);
-    if (!key || used.has(key)) return;
-    used.add(key);
-    sequence.push(r);
-    found.push(r);
-    guard++;
-  });
-  let wantCoffee = slots.some(s => s.type === 'coffee');
-  let coffeePinned = false;
-  const pinCoffee = () => {
-    if (!wantCoffee || coffeePinned) return;
-    const first = sequence.findIndex(r => r && r.headline);
-    if (first < 0) return;
-    sequence.splice(first + 1, 0, { coffee: true, about: sequence[first] });
-    coffeePinned = true;
-  };
-  if (fromAccounts.length) {
-    pinCoffee();
-    await revealSequence(date, sequence);
-  }
   for (const slot of slots) {
     if (S.again || guard >= 24) break;
     const label = slot.label || slot.cat || 'News';
     note(label);
     if (slot.type === 'coffee') {
-      wantCoffee = true;
-      pinCoffee();
+      const about = [...sequence].reverse().find(r => r && r.headline && !r.coffee) || null;
+      for (let n = 0; n < (slot.count || 1) && guard < 24; n++) {
+        sequence.push({ coffee: true, about });
+        guard++;
+      }
       found.push({ headline: 'Coffee break' });
-      if (sequence.some(r => r.headline)) await revealSequence(date, sequence);
+      if (sequence.some(r => r && (r.headline || r.coffee))) await revealSequence(date, sequence);
       note(label);
       continue;
     }
     const rows = await rowsForSlot(slot);
-    const past = seenKeys();
-    const fresh = rows.filter(r => !used.has(keyOf(r)) && !past.has(keyOf(r)));
-    const pool = fresh.length >= slot.count ? fresh : rows.filter(r => !used.has(keyOf(r)));
+    const pool = orderPool(slot, rows.filter(r => !used.has(keyOf(r))), slots);
     let added = 0;
     pool.slice(0, slot.count).forEach(r => {
       if (guard >= 24) return;
@@ -1747,25 +1850,24 @@ async function collectSlots(date, slots, reorder) {
       guard++;
       added++;
     });
-    if (added) {
-      pinCoffee();
-      await revealSequence(date, sequence);
-    } else if (slot.type === 'x' && slot.who && !sequence.some(r => String(r.source || '').toLowerCase() === 'x @' + String(slot.who).toLowerCase())) say('No posts from @' + slot.who + ' yet');
+    if (added < (slot.count || 1)) console.warn('short lineup slot', label, added, slot.count || 1);
+    if (added) await revealSequence(date, sequence);
+    else if (slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
     note(label);
     await sleep(80);
   }
-  if (reorder && !S.playing) {
-    sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
-    coffeePinned = false;
-    pinCoffee();
-  }
-  if (wantCoffee) pinCoffee();
-  if (wantCoffee && !sequence.some(r => r && r.coffee)) sequence.unshift({ coffee: true });
-  const news = sequence.filter(r => !r.coffee);
-  if (!news.length && !sequence.some(r => r.coffee)) throw new Error('Could not collect those requests. Press Update to try again.');
+  if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
+  const firstNews = sequence.find(r => r && r.headline && !r.coffee);
+  sequence.forEach((r, i) => {
+    if (!r || !r.coffee || (r.about && r.about.headline)) return;
+    const prev = sequence.slice(0, i).reverse().find(x => x && x.headline && !x.coffee);
+    r.about = prev || firstNews || null;
+  });
+  const news = sequence.filter(r => r && !r.coffee && r.headline);
+  if (!news.length) throw new Error('Could not collect those requests. Press Update to try again.');
   rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
   progress(0.45);
-  await fillText(sequence, lang);
+  await Promise.all([attachReplies(sequence), fillText(sequence, lang)]);
   return scriptFromSequence(date, sequence, lang, country);
 }
 function countsFor(genres) {
@@ -1903,7 +2005,7 @@ async function collect(date) {
   rememberKeys(chosen.filter(r => r.headline).map(r => r.headline.toLowerCase().slice(0, 90)));
   if (!chosen.some(r => r.headline)) throw new Error('Could not collect headlines. Press Update to try again.');
   progress(0.45);
-  await fillText(chosen, lang);
+  await Promise.all([attachReplies(chosen), fillText(chosen, lang)]);
   return scriptFromSequence(date, chosen, lang, country);
 }
 
@@ -2030,11 +2132,12 @@ function setBusy(b) {
 function previewLabel() {
   const preview = parseLineup(lineupText());
   const names = xAccounts();
-  const accountLines = names.map(n => '@' + n);
-  if (!preview.length && names.length) return { title: accountLines.join('\n'), say: 'Searching @' + names[0] };
+  if (!preview.length && names.length) return { title: names.map(n => '@' + n).join('\n'), say: 'Searching @' + names[0] };
   if (!preview.length) return { title: "Today's headlines", say: "Searching today's headlines" };
-  const title = accountLines.concat(preview.map(s => s.label || 'News')).join('\n');
-  return { title, say: names.length ? ('Searching @' + names[0]) : ('Searching ' + (preview[0].label || 'the lineup')) };
+  const title = preview.map(s => (s.label || 'News') + ', ' + (s.count || 1)).join('\n');
+  const first = preview.find(s => s.type !== 'coffee') || preview[0];
+  const say = first && first.who ? ('Searching @' + first.who) : ('Searching ' + ((first && first.label) || 'the lineup'));
+  return { title, say };
 }
 async function runAll(opts) {
   opts = opts || {};
