@@ -19,10 +19,10 @@
 :root { --bg:#0d0d0f; --card:#17171b; --line:#2a2a31; --ink:#f5f1e9; --mute:#9a978f; --acc:#e8c27a; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; touch-action: pan-x; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
 header .title { font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
-#gear { width: 42px; height: 36px; padding: 0; font-size: 22px; line-height: 1; }
+#gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
@@ -65,6 +65,7 @@ button.primary { background: var(--acc); color: #1a1408; border-color: var(--acc
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 .studio { display: grid; gap: 12px; margin-top: 16px; }
+.studio:not([hidden]) { position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; top: var(--header-h, 64px); margin: 0; padding: 8px 16px 48px; overflow: auto; background: var(--bg); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 #status { min-height: 1.6em; color: var(--ink); font-size: 14px; margin-top: 10px; white-space: pre-wrap; }
 #status.err { color: #ff9b8a; }
@@ -1485,7 +1486,14 @@ function initUI() {
   $('date').value = Q.get('date') || todayJST();
   $('autoExport').checked = store.get('autoExport', '0') === '1';
   $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
-  $('gear').onclick = () => { $('studio').hidden = !$('studio').hidden; };
+  $('gear').onclick = () => {
+    const opening = $('studio').hidden;
+    $('studio').hidden = !opening;
+    if (opening) {
+      document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
+      $('studio').scrollTop = 0;
+    }
+  };
   if (Q.get('edit') === '1') $('studio').hidden = false;
   const forced = Q.get('format');
   const savedLayout = store.get('layout', 'auto');
@@ -1672,20 +1680,48 @@ function keepInitTail() {
   $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
   let pull = null;
-  window.addEventListener('pointerdown', e => {
-    if (e.clientY > 120) return;
-    if (e.target.closest && e.target.closest('button, a, input, select, textarea, summary, label')) return;
-    pull = { y: e.clientY, id: e.pointerId };
-  });
-  window.addEventListener('pointerup', e => {
-    if (!pull || pull.id !== e.pointerId) return;
-    const dy = e.clientY - pull.y;
+  const header = document.querySelector('header');
+  const pullLabel = () => document.querySelector('header .pull');
+  const canPull = e => {
+    if (e.target.closest && e.target.closest('#gear, button, a, input, select, textarea, summary')) return false;
+    if (header.contains(e.target)) return true;
+    return window.scrollY < 4 && e.clientY < header.offsetHeight + 90;
+  };
+  const markPull = dy => {
+    const label = pullLabel();
+    if (label) label.textContent = dy > 70 ? 'Release to refresh' : 'Pull down to refresh';
+  };
+  const finishPull = dy => {
     pull = null;
+    const label = pullLabel();
+    if (label) label.textContent = 'Pull down to refresh';
     if (dy < 70) return;
     say('Refreshing. The stories and their order change.');
     runAll({ download: false, export: false }).catch(() => {});
+  };
+  window.addEventListener('pointerdown', e => {
+    if (!canPull(e)) return;
+    pull = { y: e.clientY, id: e.pointerId };
   });
-  window.addEventListener('pointercancel', () => { pull = null; });
+  window.addEventListener('pointermove', e => {
+    if (!pull || pull.id !== e.pointerId) return;
+    markPull(e.clientY - pull.y);
+  });
+  window.addEventListener('touchmove', e => {
+    if (!pull) return;
+    const t = e.touches[0];
+    if (!t) return;
+    markPull(t.clientY - pull.y);
+    if (t.clientY - pull.y > 8 && e.cancelable) e.preventDefault();
+  }, { passive: false });
+  window.addEventListener('pointerup', e => {
+    if (!pull || pull.id !== e.pointerId) return;
+    finishPull(e.clientY - pull.y);
+  });
+  window.addEventListener('pointercancel', e => {
+    if (!pull || pull.id !== e.pointerId) return;
+    finishPull(e.clientY - pull.y);
+  });
   $('seek').oninput = () => {
     if (!S.show) return;
     const T = +$('seek').value / 1000 * S.show.duration;
