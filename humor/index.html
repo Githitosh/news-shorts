@@ -3459,7 +3459,7 @@ function focusJoke(text, lang) {
   return (start ? '…' : '') + slice + (start + keep < chars.length ? '…' : '');
 }
 /* Comments that never play: adult words, minors, abuse. */
-const UNSAFE = /セックス|エッチ|えっち|ｴｯﾁ|エロ|下ネタ|ヤリモク|ヤる|ヤれ|体位|下着|裸|おっぱい|乳首|ちんこ|ちんちん|まんこ|射精|中出し|勃起|ムラムラ|性欲|童貞|処女|ラブホ|風俗|パパ活|AV女優|アダルト|🍆|🍑|🔞|\bsex|nsfw|nude|naked|porn|horny|kinky|onlyfans|18\+|xxx|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
+const UNSAFE = /セックス|エッチ|えっち|ｴｯﾁ|エロ|下ネタ|ヤリモク|ヤる|ヤれ|体位|下着|裸|おっぱい|乳首|ちんこ|ちんちん|まんこ|射精|中出し|勃起|ムラムラ|性欲|童貞|処女|ラブホ|風俗|パパ活|AV女優|アダルト|\bsex|nsfw|nude|naked|porn|horny|kinky|onlyfans|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
 function postText(st) {
   return String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -3576,19 +3576,41 @@ async function collectJokes(topics, need, opts) {
 /* Searches for loving replies; each one is read with the post it answers. */
 const ROMANCE_Q = {
   ja: [
-    '(おやすみ OR おはよう OR おつかれ OR お疲れ OR ただいま OR おかえり) (😘 OR 🥰 OR ❤️ OR 💕 OR 💤 OR ☺️) filter:replies',
-    '(大好き OR 会いたい OR ぎゅー OR すき OR ありがとう) (😘 OR 🥰 OR ❤️ OR 💕) filter:replies',
-    '(彼氏 OR 彼女 OR 旦那 OR 嫁) (おやすみ OR おはよう OR ありがとう OR 気をつけて) filter:replies',
+    '(おやすみん OR おやすー OR ねんね OR すやぁ OR おやぴ OR おやすみなさいませ) filter:replies',
+    '(おはおは OR おはよーだよ OR おっはー OR おはよん OR おはよぉ OR おはよーん) filter:replies',
+    '(だいしゅき OR すきすき OR ぎゅーして OR ちゅー OR 会いたいよ OR なでなで OR ♡) filter:replies',
+    '(ただいまー OR おかえりー OR おつかれさま♡ OR おかえりなさい♡ OR がんばったね) filter:replies',
+    '(彼氏 OR 彼女 OR 旦那 OR 嫁) (すき OR ぎゅー OR だいすき OR ありがと) filter:replies',
   ],
   en: [
-    '("good night" OR goodnight OR "good morning" OR "sleep well" OR "home safe") (😘 OR 🥰 OR ❤️ OR 💤) filter:replies',
-    '("love you" OR "miss you" OR babe OR "my love") filter:replies',
+    '("night night" OR "nighty night" OR "sweet dreams" OR "sleep tight") filter:replies',
+    '("morning sunshine" OR "morning babe" OR "rise and shine" OR "good morning beautiful") filter:replies',
+    '("love you more" OR "miss you more" OR "love ya" OR "my love" OR babe) filter:replies',
   ],
 };
+/* Cute, loving ways of saying things are preferred to plain greetings. */
+const CUTE = {
+  ja: /おやすみん|おやすー|おやぴ|おやすみなさいませ|ねんね|すや|おはおは|おはよーだよ|おっはー|おはよん|おはよぉ|おはよーん|だいしゅき|しゅき|すきすき|大好きだよ|好きだよ|すきだよ|ぎゅー|ちゅ|なでなで|よしよし|がんばったね|会いたいよ|♡|❤|💕|💗|💖|🥰|😘|😚|だよ[〜ー♡❤]|ね[〜ー♡]|よ[〜ー♡]/,
+  en: /night night|nighty|sleep tight|sweet dreams|sunshine|rise and shine|love you more|miss you more|love ya|\bbabe\b|\bbaby\b|honey|cutie|xoxo|xxx|💕|🥰|😘|😚/i,
+};
+const PLAIN = {
+  ja: /^(?:おやすみ(?:なさい)?|おはよ(?:う|ー)?|ただいま|おかえり|おつかれ(?:さま)?|お疲れ(?:様)?)[。！!〜~ー]?\s*[\p{Extended_Pictographic}\u200d\ufe0f\s]*$/u,
+  en: /^(?:good ?night|good ?morning|night|morning|hi|hey)[.!]?\s*[\p{Extended_Pictographic}\u200d\ufe0f\s]*$/iu,
+};
+/* The kind of talk, so a video does not play two good-nights. */
+function talkKind(text) {
+  const t = String(text || '');
+  if (/おやす|ねんね|すや|寝|眠|night|sleep|dream|💤|😴/i.test(t)) return 'night';
+  if (/おは|朝|morning|rise and shine|sunshine|☀/i.test(t)) return 'morning';
+  if (/ただいま|おかえり|おつかれ|お疲れ|がんばった|home|welcome back/i.test(t)) return 'home';
+  if (/会いたい|あいたい|寂し|さみし|miss/i.test(t)) return 'miss';
+  if (/好き|すき|しゅき|愛|ぎゅ|ちゅ|なでなで|love|kiss|hug|♡|❤|💕/i.test(t)) return 'love';
+  return 'other';
+}
 /* Everyday couple talk: greetings, thanks, missing each other, and love. */
 const LOVE = {
-  ja: /大好き|だいすき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|かわいい|可愛い|かっこいい|おやすみ|おはよ|おつかれ|お疲れ|ただいま|おかえり|いってらっしゃ|いってきます|気をつけて|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😚|😍|🤗|💤|😴|☺/,
-  en: /love you|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|forever|good ?night|good ?morning|sleep well|sweet dreams|home safe|take care|thank you|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😚|😍|🤗|💤|😴/i,
+  ja: /大好き|だいすき|だいしゅき|しゅき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|なでなで|よしよし|かわいい|可愛い|かっこいい|おやす|ねんね|すや|おはよ|おはおは|おっはー|おつかれ|お疲れ|ただいま|おかえり|いってらっしゃ|いってきます|気をつけて|がんばったね|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|♡|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😚|😍|🤗|💤|😴|☺/,
+  en: /love you|love ya|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|xxx|forever|good ?night|night night|nighty|good ?morning|sunshine|rise and shine|sleep well|sleep tight|sweet dreams|home safe|take care|thank you|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😚|😍|🤗|💤|😴/i,
 };
 /* What onlookers say about a couple. */
 const CHEER = {
@@ -3656,7 +3678,9 @@ async function collectRomance(need, place) {
     if (!id || used.has(id) || used.has(tk) || past.has('id:' + id) || now.has('id:' + id) || past.has(tk) || now.has(tk) || past.has('id:' + parent.id) || now.has('id:' + parent.id)) return;
     used.add(id);
     used.add(tk);
-    cands.push({ b: { handle, text, url: st.url || '', id }, parent, score: (charLen(text) <= SHORT[lang] ? 4 : 0) + Math.random() * 3 });
+    const cute = CUTE[lang].test(text) ? 5 : 0;
+    const plain = PLAIN[lang].test(text) ? -5 : 0;
+    cands.push({ b: { handle, text, url: st.url || '', id }, parent, score: (charLen(text) <= SHORT[lang] ? 4 : 0) + cute + plain + Math.random() * 3 });
   });
   const ranked = cands.sort((x, y) => y.score - x.score).slice(0, need * 4);
   const parents = await Promise.all(ranked.map(c => fetchStatus(c.parent.id).catch(() => null)));
@@ -3667,8 +3691,13 @@ async function collectRomance(need, place) {
     const pst = parents[i];
     const back = pst ? parentOf(pst) : { who: '' };
     const mutual = !!back.who && back.who.toLowerCase() === c.b.handle.toLowerCase();
-    return { i, w: (mutual ? 6 : 0) + c.score };
+    const at = pst ? postText(pst) : '';
+    const both = (CUTE[lang].test(at) ? 4 : 0) + (PLAIN[lang].test(at) && PLAIN[lang].test(c.b.text) ? -6 : 0);
+    return { i, w: (mutual ? 6 : 0) + c.score + both };
   }).sort((x, y) => y.w - x.w).map(x => x.i);
+  /* One story of each kind per video (one good-night, one good-morning...), unless there are not enough. */
+  const kinds = new Set();
+  const spare = [];
   const mutualOf = i => { const back = parents[i] ? parentOf(parents[i]) : { who: '' }; return !!back.who && back.who.toLowerCase() === ranked[i].b.handle.toLowerCase(); };
   /* A famous account's post with a fan's reply is not a couple. */
   const famous = st => { const a = st && st.author; const n = a && (a.followers ?? a.followers_count); return typeof n === 'number' && n > 20000; };
@@ -3684,9 +3713,18 @@ async function collectRomance(need, place) {
     if (!LOVE[lang].test(aText) && !mutualOf(i) && charLen(aText) > (lang === 'en' ? 40 : 16)) return;
     const long = charLen(aText) > SHORT[lang] || charLen(c.b.text) > SHORT[lang];
     if (long && longs >= 1) return;
+    const kind = talkKind(aText + ' ' + c.b.text);
+    if (kinds.has(kind)) { spare.push({ c, i, aText, aHandle, atk, long }); return; }
+    kinds.add(kind);
     if (long) longs++;
     used.add(atk);
     stories.push({ a: { handle: aHandle, text: aText, url: pst.url || ('https://x.com/' + aHandle + '/status/' + c.parent.id), id: c.parent.id }, b: c.b, cheers: [] });
+  });
+  spare.forEach(x => {
+    if (stories.length >= need || (x.long && longs >= 1) || used.has(x.atk)) return;
+    if (x.long) longs++;
+    used.add(x.atk);
+    stories.push({ a: { handle: x.aHandle, text: x.aText, url: parents[x.i].url || ('https://x.com/' + x.aHandle + '/status/' + x.c.parent.id), id: x.c.parent.id }, b: x.c.b, cheers: [] });
   });
   /* What others said in the same conversation. */
   const cheerLists = await Promise.all(stories.map(st => searchX('conversation_id:' + st.a.id + ' filter:replies')));
