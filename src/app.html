@@ -149,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Press a name or type a line. The video plays after the stories are ready.</p>
+      <p class="note">Country, language, and the lineup come first. Genres, sources, and X accounts are added inside that plan. The video plays when the list is complete.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -1046,7 +1046,7 @@ const RSS = {
   nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
   nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
 };
-const RSS_ORDER = { JP: ['nhk', 'asahi', 'yomiuri', 'bbc'], US: ['nyt', 'bbc', 'cnn', 'nhk'] };
+const RSS_ORDER = { JP: ['bbc', 'cnn', 'nyt', 'nhk', 'nikkei', 'asahi', 'yomiuri'], US: ['nyt', 'bbc', 'cnn', 'nhk', 'nikkei', 'asahi', 'yomiuri'] };
 const SOURCE_LABEL = { nhk: 'NHK', asahi: 'Asahi', yomiuri: 'Yomiuri', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
 function feedItems(list, cat) {
   return (list || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat, source: '' })).filter(it => it.title && it.title.length > 6);
@@ -1785,6 +1785,77 @@ function scriptFromSequence(date, sequence, lang, country) {
 function restaurantText(text) {
   return /restaurant|レストラン|bistro|café|cafe|diner|ダイニング/i.test(text || '');
 }
+function slotSourceId(slot) {
+  if (!slot) return 'web';
+  if (slot.type === 'x') return 'x';
+  if (slot.rss === RSS.nhk) return 'nhk';
+  if (slot.rss === RSS.asahi) return 'asahi';
+  if (slot.rss === RSS.yomiuri) return 'yomiuri';
+  if (slot.rss === RSS.nikkei) return 'nikkei';
+  if (slot.rss === RSS.nyt || slot.rss === RSS.food) return 'nyt';
+  if (slot.rss === RSS.cnn) return 'cnn';
+  if (slot.rss === RSS.bbc || slot.rss === RSS.sport || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return 'bbc';
+  return 'web';
+}
+function lineupCovers(slots, g) {
+  const slot = requestForGenre(g);
+  const cat = String(slot.cat || '').toLowerCase();
+  return !!cat && slots.some(s => s && s.type !== 'coffee' && String(s.cat || '').toLowerCase() === cat);
+}
+function insertDetails(sequence, rows) {
+  const xRows = [];
+  const rest = [];
+  (rows || []).forEach(r => { if (r && r.x) xRows.push(r); else if (r) rest.push(r); });
+  const seq = sequence.slice();
+  if (xRows.length) {
+    let at = -1;
+    seq.forEach((r, i) => { if (r && r.x && !r.coffee) at = i; });
+    const chunk = xRows.slice(0, 2);
+    if (at >= 0) seq.splice(at + 1, 0, ...chunk);
+    else rest.unshift(...chunk);
+  }
+  const bands = { top: [], middle: [], bottom: [] };
+  rest.forEach(r => (bands[r.place] || bands.middle).push(r));
+  const ordered = [...bands.top, ...bands.middle, ...bands.bottom].slice(0, 6);
+  if (!ordered.length) return seq;
+  const last = seq[seq.length - 1];
+  if (last && last.coffee && seq.filter(r => r && r.coffee).length === 1) seq.splice(seq.length - 1, 0, ...ordered);
+  else seq.push(...ordered);
+  return seq;
+}
+async function loadDetails(slots, used) {
+  const rows = [];
+  const keyOf = r => String(r.headline || '').toLowerCase().slice(0, 90);
+  const take = (list, place, n) => {
+    let got = 0;
+    for (const r of list || []) {
+      if (got >= n || rows.length >= 8) return;
+      const key = keyOf(r);
+      if (!r || !key || used.has(key) || rows.some(x => keyOf(x) === key)) continue;
+      if (violentHidden() && VIOLENT.test(r.headline)) continue;
+      used.add(key);
+      rows.push({ ...r, place: place || r.place || 'middle' });
+      got++;
+    }
+  };
+  if (sourceOn('x')) {
+    const covered = new Set(slots.filter(s => s.who).map(s => String(s.who).toLowerCase()));
+    const names = xAccounts().filter(n => !covered.has(n.toLowerCase()));
+    if (names.length) {
+      say('Reading @' + names[0]);
+      try { take(await accountRows(names), 'top', 2); } catch (e) { console.warn(e); }
+    }
+  }
+  const genres = genreChoices().filter(g => !lineupCovers(slots, g)).slice(0, 4);
+  if (genres.length) say('Reading ' + genres.map(g => g.name).join(', '));
+  const lists = await Promise.all(genres.map(async g => {
+    const slot = Object.assign(requestForGenre(g), { count: 1 });
+    if (!sourceOn(slotSourceId(slot))) return [];
+    try { return await rowsForSlot(slot); } catch (e) { console.warn(e); return []; }
+  }));
+  genres.forEach((g, i) => take(lists[i], g.place, 1));
+  return rows;
+}
 function orderPool(slot, pool, slots) {
   if (slot.cat === 'RESTAURANT') {
     const hit = pool.filter(r => restaurantText(r.headline));
@@ -1809,7 +1880,8 @@ async function collectSlots(date, slots, reorder) {
     showWaiting(label, lines);
     say('Searching ' + label);
   };
-  note(slots.map(s => (s.label || s.cat || 'News') + ', ' + (s.count || 1)).join('\n'));
+  showWaiting(country.name + ' · ' + lang.name, slots.map(s => (s.label || s.cat || 'News') + ', ' + (s.count || 1)));
+  say('Reading ' + country.name + ', ' + lang.name);
   progress(0.08);
   let sequence = [];
   const used = new Set();
@@ -1844,6 +1916,13 @@ async function collectSlots(date, slots, reorder) {
     if (!added && slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
     note(label);
     await sleep(80);
+  }
+  if (!reorder && !S.again) {
+    say('Reading genres, sources, and X accounts');
+    const details = await loadDetails(slots, used);
+    details.forEach(r => { if (r && r.headline) found.push(r); });
+    sequence = insertDetails(sequence, details);
+    showWaiting('Genres, sources, and X accounts', found.map(r => (r.x ? 'X  ' : '') + r.headline));
   }
   if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
   const firstNews = sequence.find(r => r && r.headline && !r.coffee);
@@ -1892,12 +1971,13 @@ async function collect(date) {
     catch (e) { console.warn(e); }
   }
   const batches = [];
-  const order = RSS_ORDER[country.id] || RSS_ORDER.US;
-  const list = order.filter(id => RSS[id] && sourceOn(id));
   const n = Number(store.get('gen', '0')) || 0;
   store.set('gen', String(n + 1));
+  const intlFeeds = ['bbc', 'cnn', 'nyt'].filter(id => RSS[id] && sourceOn(id));
+  const jpFeeds = ['nhk', 'nikkei', 'asahi', 'yomiuri'].filter(id => RSS[id] && sourceOn(id));
   const picks = [];
-  for (let i = 0; i < list.length && picks.length < 2; i++) picks.push(list[(n + i) % list.length]);
+  if (intlFeeds.length) picks.push(intlFeeds[n % intlFeeds.length]);
+  if (jpFeeds.length) picks.push(jpFeeds[n % jpFeeds.length]);
   const lines = [];
   let lead = [];
   if (xrows.length) lead = withCoffee(xrows.slice(0, 4));
@@ -1968,7 +2048,8 @@ async function collect(date) {
   const xkeys = new Set(xrows.map(keyOf));
   const fresh = rows.filter(r => !past.has(keyOf(r)) && !xkeys.has(keyOf(r)));
   const pool = fresh.length >= 8 ? fresh : rows.filter(r => !xkeys.has(keyOf(r)));
-  let chosen = orderStories(pool, 12);
+  const jpSource = id => ['nhk', 'nikkei', 'asahi', 'yomiuri'].includes(id);
+  let chosen = ['intl', 'jp'].flatMap(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), 6)).slice(0, 12);
   const leadNews = lead.filter(r => r && r.headline && !r.coffee);
   if (xrows.length) {
     const head = xrows.slice(0, 8);
@@ -2115,14 +2196,16 @@ function setBusy(b) {
 }
 
 function previewLabel() {
+  const { country, lang } = market();
+  const frame = country.name + ' · ' + lang.name;
   const preview = parseLineup(lineupText());
   const names = xAccounts();
-  if (!preview.length && names.length) return { title: names.map(n => '@' + n).join('\n'), say: 'Searching @' + names[0] };
-  if (!preview.length) return { title: "Today's headlines", say: "Searching today's headlines" };
-  const title = preview.map(s => (s.label || 'News') + ', ' + (s.count || 1)).join('\n');
-  const first = preview.find(s => s.type !== 'coffee') || preview[0];
-  const say = first && first.who ? ('Searching @' + first.who) : ('Searching ' + ((first && first.label) || 'the lineup'));
-  return { title, say };
+  if (preview.length) {
+    const title = [frame].concat(preview.map(s => (s.label || 'News') + ', ' + (s.count || 1))).join('\n');
+    return { title, say: 'Reading ' + frame };
+  }
+  const title = names.length ? frame + '\n' + names.map(n => '@' + n).join('\n') : frame;
+  return { title, say: 'Reading ' + frame };
 }
 async function runAll(opts) {
   opts = opts || {};
