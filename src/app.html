@@ -65,6 +65,7 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
   body.watching .frame { max-width: min(100%, calc((100dvh - 300px) * 9 / 16)); }
 }
 #out { flex-wrap: wrap; }
+.set-title { margin: 0; font: 700 18px "Noto Serif JP",serif; color: var(--ink); }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen. */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; max-width: none; }
@@ -152,6 +153,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   <div id="studio" class="studio" hidden>
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
+      <p class="set-title">News settings</p>
+      <p class="note">These settings are for News only. Humor keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -264,6 +267,8 @@ const TRACKS = [
   { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
   { id: 'sandman', name: 'Sandman', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
 ];
+/* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
+const LOOK = { uniform: true, jp: 2 };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
@@ -393,7 +398,7 @@ function usePace(sec) {
   if (!S.script || !S.show) return;
   const ratio = S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
   const was = S.playing;
-  S.show = E.prepare(S.script, S.format);
+  S.show = E.prepare(S.script, S.format, LOOK);
   sizeCanvas();
   const T = ratio * S.show.duration;
   $('seek').value = String(Math.round(ratio * 1000));
@@ -578,7 +583,7 @@ function watchLine(sound) {
 async function setScript(raw, quiet) {
   stop();
   const s = normalize(raw);
-  S.script = s; S.show = E.prepare(s, S.format);
+  S.script = s; S.show = E.prepare(s, S.format, LOOK);
   sizeCanvas();
   $('json').value = JSON.stringify(s, null, 2);
   S.jsonClean = $('json').value;
@@ -590,7 +595,7 @@ async function setScript(raw, quiet) {
   await loadFonts(s);
   if (S.script !== s || !S.show) return S.show;
   const T = S.playing ? Math.max(0, Math.min(currentT(), S.show.duration)) : 0;
-  S.show = E.prepare(s, S.format);
+  S.show = E.prepare(s, S.format, LOOK);
   sizeCanvas();
   draw(S.playing ? Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)) : 0);
   return S.show;
@@ -603,7 +608,7 @@ function growShow(raw) {
   let T = was ? currentT() : 0;
   const holding = was && oldDur > 0 && T >= oldDur - 0.05;
   S.script = s;
-  S.show = E.prepare(s, S.format);
+  S.show = E.prepare(s, S.format, LOOK);
   sizeCanvas();
   $('json').value = JSON.stringify(s, null, 2);
   S.jsonClean = $('json').value;
@@ -632,7 +637,7 @@ function growShow(raw) {
   loadFonts(s).then(() => {
     if (S.script !== s || !S.show) return;
     const now = S.playing ? Math.min(Math.max(0, currentT()), Math.max(0, S.show.duration - 1 / E.FPS)) : 0;
-    S.show = E.prepare(s, S.format);
+    S.show = E.prepare(s, S.format, LOOK);
     sizeCanvas();
     draw(now);
   }).catch(() => {});
@@ -651,7 +656,7 @@ function setFormat(f) {
   const ratio = S.show && S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
   stop(); S.format = f;
   if (S.script) {
-    S.show = E.prepare(S.script, f); sizeCanvas();
+    S.show = E.prepare(S.script, f, LOOK); sizeCanvas();
     const T = ratio * S.show.duration;
     $('seek').value = String(Math.round(ratio * 1000));
     draw(T);
@@ -2482,13 +2487,13 @@ async function exportMP4(formats) {
   try {
     const names = [];
     for (let i = 0; i < formats.length; i++) {
-      const fmt = formats[i], show = E.prepare(S.script, fmt);
+      const fmt = formats[i], show = E.prepare(S.script, fmt, LOOK);
       const p0 = 0.3 + 0.68 * i / formats.length, p1 = 0.3 + 0.68 * (i + 1) / formats.length;
       let blob = await encodeShow(show, FORMATS[fmt], p0, p1);
       if (!blob) { setFormat(fmt); blob = await recordRealtime(); }
       names.push(addOut(fmt, blob));
     }
-    S.show = E.prepare(S.script, S.format); sizeCanvas(); draw(0);
+    S.show = E.prepare(S.script, S.format, LOOK); sizeCanvas(); draw(0);
     progress(1); say(`Exported: ${names.join(', ')}`);
     return names;
   } finally { S.busy = false; setBusy(false); }
