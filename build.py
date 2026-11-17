@@ -14,9 +14,13 @@ def b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
+UI_JA = (ROOT / "src" / "ui_ja.js").read_text(encoding="utf-8")
+
+
 def pack(html: str, engine: str, assets: dict, muxer: str = "", sample: str = "") -> str:
     return (
-        html.replace("/*__MUXER__*/", muxer)
+        html.replace("/*__UIJA__*/", UI_JA)
+        .replace("/*__MUXER__*/", muxer)
         .replace("/*__ENGINE__*/", engine)
         .replace("/*__ASSETS__*/", json.dumps(assets))
         .replace("/*__SAMPLE__*/", sample)
@@ -37,7 +41,7 @@ def main() -> None:
         "stripes": b64(ROOT / "assets" / "stripes_1909.m4a"),
         "sandman": b64(ROOT / "assets" / "sandman_1920.m4a"),
     }
-    for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine)):
+    for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine), ("ui_ja.js", UI_JA)):
         if "</script" in code.lower():
             raise SystemExit(f"{name} contains </script")
     license_note = "/* mp4-muxer 5.2.2 (MIT License, Copyright (c) 2023 Vanilagy) — lib/mp4-muxer.LICENSE */\n"

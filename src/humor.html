@@ -205,6 +205,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   </div>
 </main>
 <script>/*__MUXER__*/</script>
+<script>/*__UIJA__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>
 (() => {
@@ -754,8 +755,22 @@ function parseLineup(text) {
   });
   return slots.slice(0, 12);
 }
+/* A genre name shown in Japanese means the same genre as its English name. */
+function enName(text) {
+  const s = String(text || '').trim();
+  if (!window.UIJA) return s;
+  const hit = CHIPS.find(c => UIJA.tr(c.label) === s);
+  return hit ? hit.label : s;
+}
+function chipKey(line) {
+  return enName(String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0]).toLowerCase();
+}
+function chipLine(chip) {
+  if (!window.UIJA || $('lang').value !== 'ja') return chip.line;
+  return UIJA.tr(chip.label) + ', ' + chip.line.split(',').pop().trim();
+}
 function classifyRequest(text) {
-  const name = String(text || '').trim();
+  const name = enName(text);
   const low = name.toLowerCase();
   if (/joke|humou?r|funny|coffee|ジョーク|笑い|ユーモア|ネタ|コーヒー/.test(low)) return { type: 'jokes', label: name };
   if (/romance|love|couple|dating|恋愛|カップル|恋人|夫婦/.test(low)) return { type: 'romance', cat: 'ROMANCE', label: name };
@@ -2168,7 +2183,7 @@ function initUI() {
   const lineup = $('lineup');
   lineup.value = store.get('lineup', '');
   const paintChips = () => {
-    const keys = new Set(lineup.value.split(/\n/).map(lineName).filter(Boolean));
+    const keys = new Set(lineup.value.split(/\n/).map(chipKey).filter(Boolean));
     document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
     lineup.classList.toggle('live', !!lineup.value.trim());
   };
@@ -2180,9 +2195,9 @@ function initUI() {
     b.onclick = () => {
       const lines = lineup.value.split(/\n/).map(s => s.trim()).filter(Boolean);
       const key = chip.label.toLowerCase();
-      const idx = lines.findIndex(line => lineName(line) === key);
+      const idx = lines.findIndex(line => chipKey(line) === key);
       if (idx >= 0) lines.splice(idx, 1);
-      else lines.push(chip.line);
+      else lines.push(chipLine(chip));
       lineup.value = lines.join('\n');
       store.set('lineup', lineup.value);
       paintChips();
@@ -2293,6 +2308,11 @@ function initPull() {
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing, format: S.format }) };
 E.setMusicCredit(TRACKS[0].credit);
 initUI();
+/* Japanese for the page's own words when Language is Japanese. */
+if (window.UIJA) {
+  UIJA.start(() => $('lang').value);
+  ['lang', 'country'].forEach(id => $(id).addEventListener('change', () => UIJA.apply()));
+}
 loadAssets().then(() => {
   window.NS.ready = true;
   const requested = Q.get('music') || store.get('music', 'jupiter');
