@@ -147,9 +147,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="country"></select>
       <label for="lang">Language</label>
       <select id="lang"></select>
-      <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
+      <label for="feed">Feed</label>
+      <select id="feed">
+        <option value="news">News</option>
+        <option value="x">X posts</option>
+      </select>
+      <p class="note">News plays reports, then a coffee break of odd replies. X posts skips the news and plays posts from the lineup and the accounts below. Japanese text is shown large.</p>
       <label>Genres</label>
-      <p class="note">Update plays the next stories. Coffee break picks a few odd replies and shows each one large, like a report. Japanese, English, or a mix of both.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -805,6 +809,11 @@ function market() {
   const country = COUNTRIES.find(c => c.id === (($('country') && $('country').value) || '')) || COUNTRIES[0];
   const lang = LANGS.find(l => l.id === (($('lang') && $('lang').value) || '')) || LANGS.find(l => l.id === country.lang) || LANGS[0];
   return { country, lang };
+}
+function feedMode() {
+  const el = $('feed');
+  const v = (el && el.value) || store.get('feed', 'news');
+  return v === 'x' ? 'x' : 'news';
 }
 function cleanHandle(v) {
   const raw = String(v || '').trim();
@@ -1608,9 +1617,58 @@ function storyWord(english, local) {
   const cjk = String(local || english || '').match(/[\u3040-\u30ff\u4e00-\u9fff]{2,}/);
   return cjk ? cjk[0].slice(0, 6) : 'UPDATE';
 }
+function jaWord(text) {
+  const katas = String(text || '').match(/[\u30a0-\u30ff]{2,8}/g) || [];
+  if (katas.length) return katas.sort((a, b) => b.length - a.length)[0].slice(0, 8);
+  const kanji = String(text || '').match(/[\u4e00-\u9fff]{2,4}/);
+  if (kanji) return kanji[0];
+  const kana = String(text || '').match(/[\u3040-\u309f]{2,6}/);
+  return kana ? kana[0] : 'NEWS';
+}
+function largeJa(text) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  const chars = [...clean];
+  if (!chars.length) return { head: ['NEWS'], rest: '' };
+  const cap = Math.min(chars.length, 40);
+  const take = chars.slice(0, cap);
+  const rest = chars.slice(cap).join('').trim();
+  if (take.length <= 14) return { head: [take.join('')], rest };
+  let mid = Math.ceil(take.length / 2);
+  const breaks = [];
+  for (let i = 6; i <= take.length - 6; i++) {
+    if (take[i] === ' ' || /[、。！？とでをはがに]/.test(take[i - 1])) breaks.push(i);
+  }
+  if (breaks.length) mid = breaks.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+  return { head: [take.slice(0, mid).join('').trim(), take.slice(mid).join('').trim()].filter(Boolean), rest };
+}
 function storyFrom(raw, english, local, langId) {
   const en = String(english || raw.headline || '').replace(/\s+/g, ' ').trim();
   const loc = String(local || '').replace(/\s+/g, ' ').replace(/^[、。，．\s]+/, '').trim();
+  const jaText = loc || en;
+  const useJa = langId !== 'en' && /[\u3040-\u30ff\u4e00-\u9fff]/.test(jaText);
+  if (useJa) {
+    const parts = largeJa(jaText);
+    const kw = jaWord(jaText);
+    const body = [];
+    if (parts.rest) body.push(parts.rest);
+    if (langId === 'both' && en && en !== jaText) body.push(en);
+    let md = '';
+    if (raw.pubDate) {
+      const stamp = String(raw.pubDate);
+      const d = new Date(stamp.includes('T') ? stamp : stamp.replace(' ', 'T') + 'Z');
+      if (!Number.isNaN(d.getTime())) md = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+    }
+    return {
+      kw, cat: raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, topic: kw,
+      head: parts.head.length ? parts.head : [kw],
+      sub: [],
+      jp: body,
+      tags: [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3),
+      src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
+      date: md,
+      url: raw.link || '',
+    };
+  }
   const kw = storyWord(en, loc);
   const words = (en || loc || kw).split(/\s+/).filter(Boolean);
   const head = [words.slice(0, 12).join(' ') || kw];
@@ -2185,7 +2243,45 @@ async function collectGenres(date, genres) {
   const slots = genres.map((g, i) => Object.assign(requestForGenre(g), { count: counts[i], place: g.place }));
   return collectSlots(date, slots, true);
 }
+async function collectPosts(date) {
+  beginCollect();
+  const { country, lang } = market();
+  const slots = parseLineup(lineupText()).filter(s => s && s.type === 'x');
+  progress(0.08);
+  showWaiting('X posts', []);
+  say('Searching X');
+  const used = new Set();
+  const keyOf = r => String((r && r.headline) || '').toLowerCase().slice(0, 90);
+  const rows = [];
+  if (slots.length) {
+    for (const slot of slots) {
+      if (S.again) break;
+      const label = slot.label || slot.who || 'X';
+      say('Searching ' + label);
+      let got = [];
+      try { got = await rowsForSlot(slot); } catch (e) { console.warn(e); }
+      pickFresh(got, used, slot.count || 1, label).forEach(r => {
+        used.add(keyOf(r));
+        rows.push({ ...r, x: true, cat: slot.cat || r.cat || 'X', source: r.source || (slot.who ? ('X @' + slot.who) : 'X') });
+      });
+    }
+  } else {
+    const names = xAccounts();
+    if (!names.length) throw new Error('Add an X account in Settings.');
+    say('Searching @' + names[0]);
+    let got = [];
+    try { got = await accountRows(names); } catch (e) { console.warn(e); }
+    pickFresh(got, used, Math.min(6, Math.max(3, names.length * 2)), 'x').forEach(r => rows.push(r));
+  }
+  if (!rows.length) throw new Error('No X posts yet. Press Update to try again.');
+  rememberKeys(rows.map(r => keyOf(r)));
+  progress(0.45);
+  await fillText(rows, lang);
+  const items = rows.filter(r => r && r.headline).map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
+  return { date, items, market: country.name + ' · ' + lang.name };
+}
 async function collect(date) {
+  if (feedMode() === 'x') return collectPosts(date);
   beginCollect();
   const slots = parseLineup(lineupText());
   if (slots.length) return collectSlots(date, slots);
@@ -2459,15 +2555,15 @@ async function runAll(opts) {
   if (S.busy) {
     S.again = opts;
     stop();
-    showWaiting('Comments', []);
-    say('Searching comments');
+    showWaiting(feedMode() === 'x' ? 'X posts' : 'Comments', []);
+    say(feedMode() === 'x' ? 'Searching X' : 'Searching comments');
     return;
   }
   S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    showWaiting('Comments', []);
-    say('Searching comments');
+    showWaiting(feedMode() === 'x' ? 'X posts' : 'Comments', []);
+    say(feedMode() === 'x' ? 'Searching X' : 'Searching comments');
   }
   try {
     const date = opts.date || $('date').value || todayJST();
@@ -2612,6 +2708,11 @@ function initUI() {
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
   langBox.value = pickedLang;
+  const feedBox = $('feed');
+  if (feedBox) {
+    feedBox.value = store.get('feed', 'news') === 'x' ? 'x' : 'news';
+    feedBox.onchange = () => { store.set('feed', feedBox.value); refreshMarket(); };
+  }
   let savedAccounts = xAccounts();
   const seeded = cleanHandle(Q.get('x') || store.get('xUser', '') || handleFromReferrer());
   if (validHandle(seeded) && !savedAccounts.some(n => n.toLowerCase() === seeded.toLowerCase())) savedAccounts = [seeded, ...savedAccounts];
