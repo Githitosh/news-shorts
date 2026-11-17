@@ -3017,11 +3017,9 @@ const GENRES = [
 const SOURCES = [
   { id: 'x', name: 'X', group: 'X and web' },
   { id: 'web', name: 'Other web', group: 'X and web' },
-  { id: 'reuters', name: 'Reuters', group: 'International' },
-  { id: 'ap', name: 'Associated Press', group: 'International' },
   { id: 'bbc', name: 'BBC', group: 'International' },
-  { id: 'cnn', name: 'CNN', group: 'International' },
-  { id: 'nyt', name: 'The New York Times', group: 'International' },
+  { id: 'abc', name: 'ABC', group: 'International' },
+  { id: 'reuters', name: 'Reuters', group: 'International' },
   { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
 ];
 const RSS = {
@@ -3029,16 +3027,18 @@ const RSS = {
   bbc: 'https://feeds.bbci.co.uk/news/rss.xml',
   abc: 'https://feeds.abcnews.com/abcnews/topstories',
   sport: 'https://feeds.bbci.co.uk/sport/rss.xml',
-  food: 'https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml',
   science: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
   politics: 'https://feeds.bbci.co.uk/news/politics/rss.xml',
   culture: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
-  cnn: 'http://rss.cnn.com/rss/edition.rss',
-  nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
 };
-const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times', abc: 'ABC' };
+const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', abc: 'ABC', reuters: 'Reuters' };
+/* Reuters has no open feed: its stories come from a news search limited to reuters.com. */
+function feedOf(id) {
+  if (id !== 'reuters') return RSS[id];
+  return searchFeed('site:reuters.com').replace('(site%3Areuters.com)', 'site%3Areuters.com');
+}
 /* Feeds for an empty lineup, by country. */
-const HOME_FEEDS = { JP: ['nikkei'], US: ['nyt', 'bbc', 'cnn', 'abc'] };
+const HOME_FEEDS = { JP: ['nikkei'], US: ['bbc', 'abc', 'reuters'] };
 const HOME_TOPICS = {
   JP: ['話題', '日本', '政治', '経済', 'スポーツ', '科学', '国際', '社会', '文化', '芸能', 'グルメ', '動物'],
   US: ['news', 'politics', 'business', 'sports', 'technology', 'world', 'science', 'entertainment', 'odd news', 'animals', 'food', 'travel'],
@@ -3219,8 +3219,9 @@ function genreChoices() {
     return { ...g, on: box ? box.checked : rec.on !== false, place: (place && place.value) || rec.place || g.place };
   });
 }
-/* NHK, Asahi and Yomiuri were taken out of the settings: never read, and their stories are skipped. */
-const GONE = new Set(['nhk', 'asahi', 'yomiuri']);
+/* Sources taken out of the settings (NHK, Asahi, Yomiuri, AP, CNN, The New York Times):
+   never read, and their stories are skipped. Abroad means BBC, ABC and Reuters only. */
+const GONE = new Set(['nhk', 'asahi', 'yomiuri', 'ap', 'cnn', 'nyt']);
 function sourceOn(id) {
   if (GONE.has(id)) return false;
   const box = document.querySelector('.srcf[value="' + id + '"]');
@@ -3241,10 +3242,11 @@ function sourceId(row) {
   const s = String((row && row.source) || '') + ' ' + String((row && row.link) || '');
   if (row && (row.x || /^x\b/i.test(String(row.source || '')))) return 'x';
   if (/nhk/i.test(s)) return 'nhk';
-  if (/reuters/i.test(s)) return 'reuters';
+  if (/reuters|ロイター/i.test(s)) return 'reuters';
   if (/associated press|\bap news\b|apnews\.com/i.test(s)) return 'ap';
   if (/nikkei|日経/i.test(s)) return 'nikkei';
   if (/\bbbc\b|bbc\.co/i.test(s)) return 'bbc';
+  if (/\babc\b|abcnews|abc\.go\.com/i.test(s)) return 'abc';
   if (/\bcnn\b|cnn\.com/i.test(s)) return 'cnn';
   if (/new york times|\bnyt\b|nytimes\.com/i.test(s)) return 'nyt';
   if (/asahi|朝日/i.test(s)) return 'asahi';
@@ -3517,8 +3519,8 @@ function classifyRequest(text) {
   }
   if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
-  if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: '食文化 OR food', cat: 'FOOD', source: 'The New York Times', label: name };
-  if (/レストラン|^restaurant$/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: 'レストラン OR restaurant', cat: 'RESTAURANT', source: 'The New York Times', label: name };
+  if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? '食べ物' : 'food', cat: 'FOOD', source: 'News', label: name };
+  if (/レストラン|^restaurant$/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? 'レストラン' : 'restaurant', cat: 'RESTAURANT', source: 'News', label: name };
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
   if (genre) return Object.assign(requestForGenre(genre), { label: name });
   if (/スポーツ|^sports$/.test(low)) return requestForGenre(GENRES.find(g => g.id === 'sports'));
@@ -3532,10 +3534,10 @@ function requestForGenre(g) {
   if (g.id === 'science') return { type: 'rss', rss: RSS.science, gdelt: country.id === 'JP' ? '科学' : 'science', cat: 'SCIENCE', source: 'BBC', label: name };
   if (g.id === 'politics') return { type: 'rss', rss: RSS.politics, gdelt: country.id === 'JP' ? '政治' : 'politics', cat: 'POLITICS', source: 'BBC', label: name };
   if (g.id === 'culture' || g.id === 'entertainment') return { type: 'rss', rss: RSS.culture, gdelt: q, cat: name.toUpperCase(), source: 'BBC', label: name };
-  if (g.id === 'food') return { type: 'rss', rss: RSS.food, gdelt: q, cat: 'FOOD', source: 'The New York Times', label: name };
-  if (g.id === 'restaurant') return { type: 'rss', rss: RSS.food, gdelt: q, cat: 'RESTAURANT', source: 'The New York Times', label: name };
+  if (g.id === 'food') return { type: 'gdelt', q, cat: 'FOOD', source: 'News', label: name };
+  if (g.id === 'restaurant') return { type: 'gdelt', q, cat: 'RESTAURANT', source: 'News', label: name };
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: q, cat: 'SPACE', source: 'BBC', label: name };
-  if (g.id === 'local') return country.id === 'JP' ? { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name } : { type: 'rss', rss: RSS.nyt, gdelt: q, cat: 'LOCAL', source: 'The New York Times', label: name };
+  if (g.id === 'local') return { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name };
   if (g.id === 'romance') return { type: 'romance', cat: 'ROMANCE', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q, cat: name.toUpperCase(), source: 'News', label: name };
@@ -3607,10 +3609,10 @@ async function homeNews(used, need) {
     for (let i = 0; i < order.length; i++) {
       if (S.again) break;
       const id = order[i];
-      if (!sourceOn(id === 'abc' ? 'web' : id)) continue;
+      if (!sourceOn(id)) continue;
       say('Searching ' + SOURCE_LABEL[id]);
       progress(0.06 + 0.05 * i);
-      pool = mergeRows(pool, shape(rowsFromItems(await cachedNews(RSS[id]), SOURCE_LABEL[id], 'NEWS').filter(allowedRow)));
+      pool = mergeRows(pool, shape(rowsFromItems(await cachedNews(feedOf(id)), id === 'reuters' ? '' : SOURCE_LABEL[id], 'NEWS').filter(allowedRow)));
     }
   }
   let fresh = shuffle(freshRows(pool, used));

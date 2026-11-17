@@ -3673,11 +3673,9 @@ const GENRES = [
 const SOURCES = [
   { id: 'x', name: 'X', group: 'X and web' },
   { id: 'web', name: 'Other web', group: 'X and web' },
-  { id: 'reuters', name: 'Reuters', group: 'International' },
-  { id: 'ap', name: 'Associated Press', group: 'International' },
   { id: 'bbc', name: 'BBC', group: 'International' },
-  { id: 'cnn', name: 'CNN', group: 'International' },
-  { id: 'nyt', name: 'The New York Times', group: 'International' },
+  { id: 'abc', name: 'ABC', group: 'International' },
+  { id: 'reuters', name: 'Reuters', group: 'International' },
   { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
 ];
 const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
@@ -3724,8 +3722,9 @@ function genreChoices() {
     };
   }).filter(g => g.on);
 }
-/* NHK, Asahi and Yomiuri were taken out of the settings: never read, and their stories are skipped. */
-const GONE = new Set(['nhk', 'asahi', 'yomiuri']);
+/* Sources taken out of the settings (NHK, Asahi, Yomiuri, AP, CNN, The New York Times):
+   never read, and their stories are skipped. Abroad means BBC, ABC and Reuters only. */
+const GONE = new Set(['nhk', 'asahi', 'yomiuri', 'ap', 'cnn', 'nyt']);
 function sourceOn(id) {
   if (GONE.has(id)) return false;
   const box = document.querySelector('.srcf[value="' + id + '"]');
@@ -3746,12 +3745,13 @@ function sourceId(row) {
   const s = String((row && row.source) || '');
   if (row && (row.x || /^x\b/i.test(s))) return 'x';
   if (/nhk/i.test(s)) return 'nhk';
-  if (/reuters/i.test(s)) return 'reuters';
-  if (/associated press|\bap news\b/i.test(s)) return 'ap';
+  if (/reuters|ロイター/i.test(s)) return 'reuters';
+  if (/associated press|\bap news\b|apnews\.com/i.test(s)) return 'ap';
   if (/nikkei|日経/i.test(s)) return 'nikkei';
   if (/\bbbc\b/i.test(s)) return 'bbc';
+  if (/\babc\b|abcnews|abc\.go\.com/i.test(s)) return 'abc';
   if (/\bcnn\b/i.test(s)) return 'cnn';
-  if (/new york times|\bnyt\b/i.test(s)) return 'nyt';
+  if (/new york times|\bnyt\b|nytimes\.com/i.test(s)) return 'nyt';
   if (/asahi|朝日/i.test(s)) return 'asahi';
   if (/yomiuri|読売/i.test(s)) return 'yomiuri';
   return 'web';
@@ -3849,15 +3849,17 @@ const RSS = {
   bbc: 'https://feeds.bbci.co.uk/news/rss.xml',
   abc: 'https://feeds.abcnews.com/abcnews/topstories',
   sport: 'https://feeds.bbci.co.uk/sport/rss.xml',
-  food: 'https://rss.nytimes.com/services/xml/rss/nyt/DiningandWine.xml',
   science: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
   politics: 'https://feeds.bbci.co.uk/news/politics/rss.xml',
   culture: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
-  cnn: 'http://rss.cnn.com/rss/edition.rss',
-  nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
   nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
 };
-const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
+const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', abc: 'ABC', reuters: 'Reuters' };
+/* Reuters has no open feed: its stories come from a news search limited to reuters.com. */
+function feedOf(id) {
+  if (id !== 'reuters') return RSS[id];
+  return searchFeed('site:reuters.com').replace('(site%3Areuters.com)', 'site%3Areuters.com');
+}
 function feedItems(list, cat) {
   return (list || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat, source: '' })).filter(it => it.title && it.title.length > 6);
 }
@@ -4544,8 +4546,8 @@ function classifyRequest(text) {
   }
   if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
-  if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: '食文化 OR food', cat: 'FOOD', source: 'The New York Times', label: name };
-  if (/レストラン|^restaurant$/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: 'レストラン OR restaurant', cat: 'RESTAURANT', source: 'The New York Times', label: name };
+  if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? '食べ物' : 'food', cat: 'FOOD', source: 'News', label: name };
+  if (/レストラン|^restaurant$/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? 'レストラン' : 'restaurant', cat: 'RESTAURANT', source: 'News', label: name };
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
   if (genre) return Object.assign(requestForGenre(genre), { label: name });
   if (/スポーツ|^sports$/.test(low)) return requestForGenre(GENRES.find(g => g.id === 'sports'));
@@ -4559,10 +4561,10 @@ function requestForGenre(g) {
   if (g.id === 'science') return { type: 'rss', rss: RSS.science, gdelt: 'science OR 科学', cat: 'SCIENCE', source: 'BBC', label: name };
   if (g.id === 'politics') return { type: 'rss', rss: RSS.politics, gdelt: 'politics OR 政治', cat: 'POLITICS', source: 'BBC', label: name };
   if (g.id === 'culture' || g.id === 'entertainment') return { type: 'rss', rss: RSS.culture, gdelt: 'culture OR entertainment', cat: name.toUpperCase(), source: 'BBC', label: name };
-  if (g.id === 'food') return { type: 'rss', rss: RSS.food, gdelt: 'food OR 食べ物', cat: 'FOOD', source: 'The New York Times', label: name };
-  if (g.id === 'restaurant') return { type: 'rss', rss: RSS.food, gdelt: 'restaurant OR レストラン', cat: 'RESTAURANT', source: 'The New York Times', label: name };
+  if (g.id === 'food') return { type: 'gdelt', q, cat: 'FOOD', source: 'News', label: name };
+  if (g.id === 'restaurant') return { type: 'gdelt', q, cat: 'RESTAURANT', source: 'News', label: name };
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: 'space OR NASA OR 宇宙', cat: 'SPACE', source: 'BBC', label: name };
-  if (g.id === 'local') return country.id === 'JP' ? { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name } : { type: 'rss', rss: RSS.nyt, gdelt: q, cat: 'LOCAL', source: 'The New York Times', label: name };
+  if (g.id === 'local') return { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q: q, cat: name.toUpperCase(), source: 'News', label: name };
 }
@@ -4640,9 +4642,7 @@ function linkFits(slot, row) {
   }
   if (slot.rss === RSS.nikkei) return url.includes('nikkei.com');
   if (slot.rss === RSS.abc) return /abcnews\.com|abc\.go\.com|abc\.com/.test(url);
-  if (slot.rss === RSS.food) return url.includes('nytimes.com');
   if (slot.rss === RSS.sport || slot.rss === RSS.bbc || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return /bbc\.co\.uk|bbc\.com/.test(url);
-  if (slot.rss === RSS.nyt) return url.includes('nytimes.com');
   return true;
 }
 async function rowsForSlot(slot) {
@@ -4663,7 +4663,8 @@ async function rowsForSlot(slot) {
       if (slot.hint) rows = rows.filter(r => slot.hint.test(r.headline));
       if (rows.length < need && slot.gdelt) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
     } else if (slot.type === 'gdelt') {
-      rows = await gdeltRows(slot.q, slot.cat, slot.source);
+      rows = rowsFromItems(await cachedNews(searchFeed(slot.q)), '', slot.cat);
+      if (rows.length < need) rows = mergeRows(rows, await gdeltRows(slot.q, slot.cat, slot.source));
     }
     const matched = rows.filter(r => linkFits(slot, r));
     const rest = slot.type === 'x' && slot.who ? [] : rows.filter(r => !linkFits(slot, r));
@@ -4673,7 +4674,7 @@ async function rowsForSlot(slot) {
       if (hit.length) rows = hit.concat(rows.filter(r => hit.indexOf(r) < 0));
     }
   } catch (e) { console.warn(e); }
-  return rows.filter(r => r.headline && !blocked(r.headline));
+  return rows.filter(r => r.headline && !blocked(r.headline) && !GONE.has(sourceId(r)));
 }
 async function fillText(rows, lang) {
   const news = rows.filter(r => r && !r.coffee && r.headline);
@@ -4830,8 +4831,7 @@ function slotSourceId(slot) {
   if (!slot) return 'web';
   if (slot.type === 'x') return 'x';
   if (slot.rss === RSS.nikkei) return 'nikkei';
-  if (slot.rss === RSS.nyt || slot.rss === RSS.food) return 'nyt';
-  if (slot.rss === RSS.cnn) return 'cnn';
+  if (slot.rss === RSS.abc) return 'abc';
   if (slot.rss === RSS.bbc || slot.rss === RSS.sport || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return 'bbc';
   return 'web';
 }
@@ -5044,7 +5044,7 @@ async function collect(date) {
   const batches = [];
   const n = Number(store.get('gen', '0')) || 0;
   store.set('gen', String(n + 1));
-  const intlFeeds = ['bbc', 'cnn', 'nyt'].filter(id => RSS[id] && sourceOn(id));
+  const intlFeeds = ['bbc', 'abc', 'reuters'].filter(id => feedOf(id) && sourceOn(id));
   const jpFeeds = ['nikkei'].filter(id => RSS[id] && sourceOn(id));
   const picks = [];
   if (intlFeeds.length) picks.push(intlFeeds[n % intlFeeds.length]);
@@ -5057,7 +5057,7 @@ async function collect(date) {
     if (S.playing) say('Adding ' + name);
     else { showWaiting('News', []); say('Searching ' + name); }
     try {
-      const items = await newsRows(RSS[id], 'NEWS');
+      const items = await newsRows(feedOf(id), 'NEWS');
       const tagged = items.map(it => ({ ...it, source: it.source || name }));
       batches.push(tagged);
       if (!S.playing) showWaiting('News', []);
@@ -5119,7 +5119,7 @@ async function collect(date) {
   const freshRows = () => rows.filter(r => !isSeen(r, past) && !xkeys.has(keyOf(r)));
   /* Not enough new stories: read the other papers, then topic searches, until there are enough. */
   if (freshRows().length < 10) {
-    const more = intlFeeds.concat(jpFeeds).filter(id => !picks.includes(id)).map(id => [RSS[id], SOURCE_LABEL[id] || id]).concat(topicFeeds());
+    const more = intlFeeds.concat(jpFeeds).filter(id => !picks.includes(id)).map(id => [feedOf(id), SOURCE_LABEL[id] || id]).concat(topicFeeds());
     for (const [url, label] of more) {
       if (S.again || freshRows().length >= 10) break;
       if (S.playing) say('Adding ' + label);
