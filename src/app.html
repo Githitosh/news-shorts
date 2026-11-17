@@ -145,7 +145,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
     <div class="music" id="paces"></div>
-    <p class="note pace-note">Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.</p>
     <p class="music-label">Wallpaper</p>
     <div class="music" id="walls"></div>
     <p class="music-label">Music</p>
@@ -3155,6 +3154,30 @@ function keepInitTail() {
   $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('Copied the sources.'));
 }
 
+/* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
+   version.json names the latest build of each page; it is read past the browser's cache. */
+function watchVersion(key, url) {
+  const BUILD = '__BUILD_ID__';
+  if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
+  /* At the start it may reload at once; later it waits while a video is being made or saved. */
+  const check = first => {
+    if (!first && S.busy) { setTimeout(() => check(false), 5000); return; }
+    fetch(url + '?t=' + Date.now(), { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(v => {
+      const now = v && v[key];
+      if (!now || now === BUILD) return;
+      if (!first && S.busy) { setTimeout(() => check(false), 5000); return; }
+      try {
+        if (sessionStorage.getItem('reloaded.' + key) === now) return;
+        sessionStorage.setItem('reloaded.' + key, now);
+      } catch (e) {}
+      const u = new URL(location.href);
+      u.searchParams.set('v', now);
+      location.replace(u.href);
+    }).catch(() => {});
+  };
+  check(true);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });
+}
 window.NS = {
   run: runAll, exportMP4, setScript,
   state: () => ({ script: S.script, sources: S.script ? sourcesText(S.script) : '', names: S.outs.map(o => o.name), sizes: S.outs.map(o => o.blob.size) }),
@@ -3163,6 +3186,7 @@ window.NS = {
 
 (async () => {
   initUI();
+  watchVersion('news', 'version.json');
   /* Japanese for the page's own words when Language is Japanese. */
   if (window.UIJA) {
     UIJA.start(() => $('lang').value);
