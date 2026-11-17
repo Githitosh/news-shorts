@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+/* The build number on GitHub becomes the version, so each new APK installs over the last one. */
+def build = (System.getenv('VERSION_CODE') ?: '1') as Integer
+
+android {
+    namespace 'io.github.githitosh.humor'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.githitosh.humor'
+        minSdk 26
+        targetSdk 34
+        versionCode build
+        versionName "1.${build}"
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+/* Copy the Humor page and its music into the app before building. */
+tasks.register('copyHumor', Copy) {
+    from(rootProject.file('../humor/index.html')) { into 'humor' }
+    from(rootProject.file('../assets')) {
+        include 'jupiter_1922.m4a', 'neptune_1923.m4a', 'stripes_1909.m4a'
+        into 'assets'
+    }
+    into layout.projectDirectory.dir('src/main/assets')
+}
+preBuild.dependsOn copyHumor

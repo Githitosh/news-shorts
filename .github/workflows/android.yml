@@ -1,0 +1,62 @@
+name: Android app (Humor)
+
+# Builds the Humor page as an Android app (APK) whenever the page or the app changes,
+# and puts it on the release "humor-android":
+# https://github.com/Githitosh/news-shorts/releases/download/humor-android/Humor.apk
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'humor/index.html'
+      - 'assets/*.m4a'
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # The same signing key every time, so a new APK installs over the last one.
+      # It lives in the Actions cache; if the cache is ever lost, a new key is made
+      # and the app has to be uninstalled once before installing the new APK.
+      - name: Signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: humor-android-signing-key-v1
+
+      - name: Build the APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: gradle --no-daemon assembleDebug
+
+      - name: Publish the APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Humor.apk
+          gh release delete humor-android --yes --cleanup-tag || true
+          gh release create humor-android Humor.apk \
+            --title "Humor Android app (build ${{ github.run_number }})" \
+            --notes "The Humor page as an Android app. Download Humor.apk on the phone and open it to install (allow installing from this source when asked). Built from ${GITHUB_SHA::7}." \
+            --target "$GITHUB_SHA"
