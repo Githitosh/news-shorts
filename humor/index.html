@@ -3676,6 +3676,15 @@ const NEVER = /ヤリモク|風俗|パパ活|ママ活|援交|AV女優|アダル
 /* Children: fine in everyday couple talk, never next to anything sexual. */
 const CHILD = /子供|子ども|こども|息子|娘|園児|赤ちゃん|\bkids?\b|\bchild|\bson\b|\bdaughter\b/i;
 const UNSAFE = new RegExp(ADULT.source + '|' + NEVER.source, 'i');
+/* School life: fine in everyday talk, never next to anything suggestive. */
+const YOUTH = /学校|放課後|部活|修学旅行|制服|受験|担任|学年|文化祭|体育祭|\bschool\b|\bprom\b|\bhomework\b|\bgrade\b/i;
+/* Accounts that say they are under 18 are never used for Romance. */
+const MINOR_BIO = /(?:^|[^0-9])1[0-7]\s*(?:歳|才|y\/?o\b|years? old)|高[1-3１-３一二三](?:$|[^0-9０-９])|中[1-3１-３一二三](?:$|[^0-9０-９])|高校生|中学生|ＪＫ|ＪＣ|\bJ[KC]\b|\bminor\b|\bunder ?18\b|\bteen\b/i;
+function minorAccount(st) {
+  const a = st && st.author;
+  return MINOR_BIO.test(String((a && (a.description || a.bio)) || '') + ' ' + String((a && a.name) || ''));
+}
+function suggestive(text, st) { return ADULT.test(text) || SUGGESTIVE.test(text) || flagged(st); }
 function postText(st) {
   return String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -3798,12 +3807,29 @@ const ROMANCE_Q = {
     '(だいしゅき OR すきすき OR ぎゅーして OR ちゅー OR 会いたいよ OR なでなで OR ♡) filter:replies',
     '(ただいまー OR おかえりー OR おつかれさま♡ OR おかえりなさい♡ OR がんばったね) filter:replies',
     '(彼氏 OR 彼女 OR 旦那 OR 嫁) (すき OR ぎゅー OR だいすき OR ありがと) filter:replies',
+    '(愛してる OR あいしてる OR 愛してるよ OR 大好きすぎ OR ずっと一緒にいようね OR 一生離さない) filter:replies',
+    '(いちゃいちゃ OR イチャイチャ OR くっつきたい OR 甘えたい OR ぎゅーってして OR ちゅーして OR ちゅっ) filter:replies',
   ],
   en: [
     '("night night" OR "nighty night" OR "sweet dreams" OR "sleep tight") filter:replies',
     '("morning sunshine" OR "morning babe" OR "rise and shine" OR "good morning beautiful") filter:replies',
     '("love you more" OR "miss you more" OR "love ya" OR "my love" OR babe) filter:replies',
+    '("i love you" OR "love you so much" OR "love you forever" OR cuddle OR snuggle OR "come cuddle") filter:replies',
   ],
+};
+/* Playful hints between couples (今夜は寝かさない😏). Searched only while sensitive posts are shown. */
+const FLIRT_Q = {
+  ja: ['(寝かさない OR 覚悟してね OR 今夜は OR 😏 OR 🍆 OR 🍑) (好き OR 大好き OR ♡ OR 😘 OR 🥰) filter:replies'],
+  en: ['(😏 OR "you\'re trouble" OR "come here" OR "behave") (babe OR baby OR "love you") filter:replies'],
+};
+/* The loving, lovey-dovey kind of talk comes first; playful hints next. */
+const ICHA = {
+  ja: /愛してる|あいしてる|いちゃ|イチャ|くっつ|甘え|ぎゅーって|ちゅーして|ちゅっ|一生離さない|ずっと一緒|大好きすぎ/,
+  en: /i love you|love you so much|love you forever|cuddle|snuggle|can'?t wait to (?:see|hold) you/i,
+};
+const HINT = {
+  ja: /寝かさない|覚悟し|今夜は|😏|🍆|🍑|🔞/,
+  en: /😏|you'?re trouble|behave|come here/i,
 };
 /* Cute, loving ways of saying things are preferred to plain greetings. */
 const CUTE = {
@@ -3817,6 +3843,8 @@ const PLAIN = {
 /* The kind of talk, so a video does not play two good-nights. */
 function talkKind(text) {
   const t = String(text || '');
+  if (/寝かさない|覚悟して|😏|🍆|🍑|🔞|you'?re trouble|behave/i.test(t)) return 'hint';
+  if (/愛してる|あいしてる|いちゃ|イチャ|くっつ|甘え|一生離さない|ずっと一緒|i love you|cuddle|snuggle/i.test(t)) return 'icha';
   if (/おやす|ねんね|すや|寝|眠|night|sleep|dream|💤|😴/i.test(t)) return 'night';
   if (/おは|朝|morning|rise and shine|sunshine|☀/i.test(t)) return 'morning';
   if (/ただいま|おかえり|おつかれ|お疲れ|がんばった|home|welcome back/i.test(t)) return 'home';
@@ -3826,8 +3854,8 @@ function talkKind(text) {
 }
 /* Everyday couple talk: greetings, thanks, missing each other, and love. */
 const LOVE = {
-  ja: /大好き|だいすき|だいしゅき|しゅき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|なでなで|よしよし|かわいい|可愛い|かっこいい|おやす|ねんね|すや|おはよ|おはおは|おっはー|おつかれ|お疲れ|ただいま|おかえり|いってらっしゃ|いってきます|気をつけて|がんばったね|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|♡|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😚|😍|🤗|💤|😴|☺/,
-  en: /love you|love ya|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|xxx|forever|good ?night|night night|nighty|good ?morning|sunshine|rise and shine|sleep well|sleep tight|sweet dreams|home safe|take care|thank you|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😚|😍|🤗|💤|😴/i,
+  ja: /大好き|だいすき|だいしゅき|しゅき|好き|すき|愛して|あいして|いちゃ|イチャ|くっつ|甘え|寝かさない|😏|会いたい|あいたい|ぎゅ|ちゅ|なでなで|よしよし|かわいい|可愛い|かっこいい|おやす|ねんね|すや|おはよ|おはおは|おっはー|おつかれ|お疲れ|ただいま|おかえり|いってらっしゃ|いってきます|気をつけて|がんばったね|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|♡|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😚|😍|🤗|💤|😴|☺/,
+  en: /love you|love ya|luv u|\bily\b|cuddle|snuggle|😏|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|xxx|forever|good ?night|night night|nighty|good ?morning|sunshine|rise and shine|sleep well|sleep tight|sweet dreams|home safe|take care|thank you|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😚|😍|🤗|💤|😴/i,
 };
 /* What onlookers say about a couple. */
 const CHEER = {
@@ -3840,10 +3868,9 @@ const LONG = { ja: 60, en: 180 };
 const UNSAFE_ROMANCE = /浮気|不倫|別れ|離婚|ブロック|死ね|殺|嫌い|最低|ストーカー|cheat|divorce|break ?up|hate you/i;
 function romanceText(st, lang) {
   const text = postText(st);
-  if (!text || NEVER.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || heavy(text)) return '';
-  /* Sexual couple talk plays only with Hide sensitive posts off, and never with children mentioned. */
-  const sexual = ADULT.test(text) || SUGGESTIVE.test(text) || flagged(st);
-  if (sexual && (sensitiveHidden() || CHILD.test(text))) return '';
+  if (!text || NEVER.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || heavy(text) || minorAccount(st)) return '';
+  /* Suggestive couple talk plays only with Hide sensitive posts off, and never next to children or school life. */
+  if (suggestive(text, st) && (sensitiveHidden() || CHILD.test(text) || YOUTH.test(text))) return '';
   if (lang === 'en') {
     if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{2,}/.test(text) || text.length < 4) return '';
   } else if ((text.match(/[぀-ヿ]/g) || []).length < 1 || [...text].length < 2) return '';
@@ -3885,7 +3912,8 @@ async function collectRomance(need, place) {
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
   say('Searching couples on X');
-  const lists = await Promise.all(ROMANCE_Q[lang].map(q => searchX(q + ' lang:' + lang + xRange())));
+  const queries = ROMANCE_Q[lang].concat(sensitiveHidden() ? [] : FLIRT_Q[lang]);
+  const lists = await Promise.all(queries.map(q => searchX(q + ' lang:' + lang + xRange())));
   const used = new Set();
   const cands = [];
   lists.flat().forEach(st => {
@@ -3900,7 +3928,8 @@ async function collectRomance(need, place) {
     used.add(tk);
     const cute = CUTE[lang].test(text) ? 5 : 0;
     const plain = PLAIN[lang].test(text) ? -5 : 0;
-    cands.push({ b: { handle, text, url: st.url || '', id }, parent, score: (charLen(text) <= SHORT[lang] ? 4 : 0) + cute + plain + Math.random() * 3 });
+    const icha = (ICHA[lang].test(text) ? 6 : 0) + (HINT[lang].test(text) ? 4 : 0);
+    cands.push({ b: { handle, text, url: st.url || '', id }, parent, score: (charLen(text) <= SHORT[lang] ? 4 : 0) + cute + icha + plain + Math.random() * 3 });
   });
   const ranked = cands.sort((x, y) => y.score - x.score).slice(0, need * 4);
   const parents = await Promise.all(ranked.map(c => fetchStatus(c.parent.id).catch(() => null)));
@@ -3912,7 +3941,7 @@ async function collectRomance(need, place) {
     const back = pst ? parentOf(pst) : { who: '' };
     const mutual = !!back.who && back.who.toLowerCase() === c.b.handle.toLowerCase();
     const at = pst ? postText(pst) : '';
-    const both = (CUTE[lang].test(at) ? 4 : 0) + (PLAIN[lang].test(at) && PLAIN[lang].test(c.b.text) ? -6 : 0);
+    const both = (CUTE[lang].test(at) ? 4 : 0) + (ICHA[lang].test(at) ? 4 : 0) + (HINT[lang].test(at) && !sensitiveHidden() ? 6 : 0) + (PLAIN[lang].test(at) && PLAIN[lang].test(c.b.text) ? -6 : 0);
     return { i, w: (mutual ? 6 : 0) + c.score + both };
   }).sort((x, y) => y.w - x.w).map(x => x.i);
   /* One story of each kind per video (one good-night, one good-morning...), unless there are not enough. */
@@ -3931,6 +3960,9 @@ async function collectRomance(need, place) {
     const atk = 't:' + squash(aText).slice(0, 50);
     if (!aText || !aHandle || aHandle.toLowerCase() === c.b.handle.toLowerCase() || charLen(aText) > LONG[lang] || past.has(atk) || now.has(atk) || used.has(atk)) return;
     if (!LOVE[lang].test(aText) && !mutualOf(i) && charLen(aText) > (lang === 'en' ? 40 : 16)) return;
+    /* The pair read together: nothing suggestive next to children or school life, from either side. */
+    const pairText = aText + ' ' + c.b.text;
+    if (suggestive(pairText) && (CHILD.test(pairText) || YOUTH.test(pairText))) return;
     const long = charLen(aText) > SHORT[lang] || charLen(c.b.text) > SHORT[lang];
     if (long && longs >= 1) return;
     const kind = talkKind(aText + ' ' + c.b.text);
@@ -5326,7 +5358,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '09ce2d484367';
+  const BUILD = 'b3c8e62b26a6';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
