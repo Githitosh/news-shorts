@@ -92,6 +92,11 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .check input { width: 18px; height: 18px; accent-color: var(--acc); }
 .note { color: var(--mute); font-size: 12px; margin: 6px 0 0; }
 .filters { display: grid; gap: 6px; margin: 4px 0 8px; }
+.x-add { display: flex; gap: 8px; align-items: center; }
+.x-add input { flex: 1 1 auto; width: auto; }
+.x-add button { flex: 0 0 auto; }
+#xAccounts { margin-top: 8px; }
+#xAccounts button { flex: 0 1 auto; }
 .filter-row { display: flex; align-items: center; gap: 8px; }
 .filter-row .check { margin: 0; flex: 1; }
 .filter-row select { width: 7.2em; }
@@ -152,9 +157,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
-      <label for="xUser">X account</label>
-      <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
-      <p class="note">Posts and replies from accounts this user follows are added to the video. Opening this page from that account on X fills the name in.</p>
+      <label for="xUser">X accounts</label>
+      <div class="x-add">
+        <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
+        <button type="button" id="addX">Add</button>
+      </div>
+      <div id="xAccounts" class="music"></div>
+      <p class="note">Add an account to load its posts. Press Add again for another account. Press a name to remove it.</p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -214,11 +223,6 @@ const LANGS = [
   { id: 'ja', name: 'Japanese' },
   { id: 'both', name: 'Both' },
 ];
-const COFFEE_FALLBACK = {
-  ja: ['ひと息ついて', '今日のニュースを振り返る'],
-  en: ['A pause between', 'the headlines'],
-  both: ['A pause between headlines', 'ひと息ついて振り返る'],
-};
 const WALLS = [
   { id: 'morning', name: 'Morning' },
   { id: 'bright', name: 'Bright' },
@@ -490,7 +494,7 @@ function normItem(it) {
     cat: up(it.cat || 'NEWS'), topic: up(it.topic || ''),
     head: head.length ? head : [up(it.kw)],
     sub: arr(it.sub).slice(0, 3).map(subCase),
-    jp: arr(it.jp).slice(0, 3),
+    jp: arr(it.jp).slice(0, 8),
     tags: arr(it.tags).map(up).slice(0, 4),
     src: String(it.src || '').trim(), date: String(it.date || '').trim(), url: String(it.url || '').trim(),
   };
@@ -779,7 +783,74 @@ function market() {
   const lang = LANGS.find(l => l.id === (($('lang') && $('lang').value) || '')) || LANGS.find(l => l.id === country.lang) || LANGS[0];
   return { country, lang };
 }
-function xHandle() { return String(S.xUser || '').replace(/^@+/, '').trim(); }
+function cleanHandle(v) {
+  const raw = String(v || '').trim();
+  const url = raw.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})/i);
+  const name = (url ? url[1] : raw).replace(/^@+/, '').split(/[\s/?#]/)[0];
+  return name;
+}
+function validHandle(name) { return /^[A-Za-z0-9_]{1,15}$/.test(name); }
+function xAccounts() {
+  let list = [];
+  try { list = JSON.parse(store.get('xAccounts', '[]')); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  const out = [];
+  const seen = new Set();
+  list.forEach(v => {
+    const name = cleanHandle(v);
+    const key = name.toLowerCase();
+    if (!validHandle(name) || seen.has(key)) return;
+    seen.add(key);
+    out.push(name);
+  });
+  return out.slice(0, 8);
+}
+function paintAccounts() {
+  const box = $('xAccounts');
+  if (!box) return;
+  box.innerHTML = '';
+  xAccounts().forEach(name => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'on';
+    b.textContent = '@' + name + ' ×';
+    b.title = 'Remove @' + name;
+    b.onclick = () => {
+      saveAccounts(xAccounts().filter(n => n.toLowerCase() !== name.toLowerCase()));
+      say('Removed @' + name);
+      refreshMarket();
+    };
+    box.appendChild(b);
+  });
+}
+function saveAccounts(list) {
+  const clean = [];
+  const seen = new Set();
+  (list || []).forEach(v => {
+    const name = cleanHandle(v);
+    const key = name.toLowerCase();
+    if (!validHandle(name) || seen.has(key) || clean.length >= 8) return;
+    seen.add(key);
+    clean.push(name);
+  });
+  store.set('xAccounts', JSON.stringify(clean));
+  S.xUser = clean[0] || '';
+  store.set('xUser', S.xUser);
+  paintAccounts();
+  return clean;
+}
+function addAccount() {
+  const name = cleanHandle($('xUser').value);
+  $('xUser').value = '';
+  if (!validHandle(name)) { say('Use an X account name, like @name'); return; }
+  const list = xAccounts();
+  if (list.some(n => n.toLowerCase() === name.toLowerCase())) { say('Already added @' + name); return; }
+  if (list.length >= 8) { say('Eight accounts is the limit'); return; }
+  saveAccounts(list.concat(name));
+  say('Loading @' + name);
+  refreshMarket();
+}
+function xHandle() { return xAccounts()[0] || ''; }
 const SECTIONS = [
   ['', 'NEWS'],
   ['WORLD', 'WORLD'],
@@ -1045,7 +1116,7 @@ function rowFromStatus(st, minLen) {
   if (!author || text.length < floor || (violentHidden() && VIOLENT.test(text))) return null;
   const created = st.created_at ? new Date(st.created_at) : null;
   return {
-    headline: text.slice(0, 220),
+    headline: text.slice(0, 480),
     link: st.url || ('https://x.com/' + author),
     pubDate: created && !Number.isNaN(created.getTime()) ? created.toISOString() : '',
     cat: 'NEWS',
@@ -1094,9 +1165,9 @@ function postsFromJina(text, name) {
       const timed = tail.match(/\[\d+\s*[smhdw]\]\([^)]*\)\s+([^\n\[]+)/i);
       const tm = timed || (loose ? tail.match(/\n+([^\n#*\[\]()]{4,200})/) : null);
       const headline = readableLine(tm && tm[1]);
-      if (!headline || headline.length < 4 || ui.test(headline) || (violentHidden() && VIOLENT.test(headline))) continue;
+      if (!headline || headline.length < 12 || ui.test(headline) || (violentHidden() && VIOLENT.test(headline))) continue;
       rows.push({
-        headline: headline.slice(0, 220),
+        headline: headline.slice(0, 480),
         link: 'https://x.com/' + author + '/status/' + id,
         pubDate: '',
         cat: 'X',
@@ -1133,7 +1204,7 @@ async function authorSearch(name) {
   for (const q of ['from:' + name, name]) {
     try {
       const more = await Promise.race([
-        searchPosts(q, 4),
+        searchPosts(q, 12),
         new Promise(resolve => setTimeout(() => resolve([]), 7000)),
       ]);
       (more || []).filter(r => String(r.source || '').toLowerCase() === 'x @' + name.toLowerCase()).forEach(r => out.push(r));
@@ -1152,6 +1223,29 @@ function cachedUserPosts(name) {
 function saveUserPosts(name, rows) {
   try { sessionStorage.setItem('newsShorts.xposts.' + name.toLowerCase(), JSON.stringify(rows.slice(0, 8))); } catch (e) {}
 }
+async function accountRows() {
+  const names = xAccounts();
+  if (!names.length) return [];
+  const lists = await Promise.all(names.map(async name => {
+    try { return await userPosts(name, 3); } catch (e) { console.warn(e); return []; }
+  }));
+  const rows = [];
+  const seen = new Set();
+  const missed = [];
+  lists.forEach((list, i) => {
+    const name = names[i];
+    const got = (list || []).filter(r => r && r.headline).slice(0, 3);
+    if (!got.length) missed.push(name);
+    got.forEach(r => {
+      const key = String(r.headline).toLowerCase().slice(0, 90);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      rows.push({ ...r, x: true, cat: r.cat || 'X', source: r.source || ('X @' + name) });
+    });
+  });
+  if (missed.length) say('No posts from @' + missed.join(', @') + ' yet');
+  return rows.slice(0, 12);
+}
 async function userPosts(handle, need) {
   const name = String(handle || '').replace(/^@+/, '');
   if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
@@ -1162,7 +1256,13 @@ async function userPosts(handle, need) {
     bag.rows = mergeRows(bag.rows, rows || []);
   }).catch(e => console.warn(e)).finally(() => { done++; }));
   const start = Date.now();
-  while (done < 3 && bag.rows.length < want && Date.now() - start < 10000) await sleep(180);
+  let firstAt = 0;
+  while (done < 3 && Date.now() - start < 10000) {
+    if (bag.rows.length && !firstAt) firstAt = Date.now();
+    if (bag.rows.length >= want && firstAt && Date.now() - firstAt > 400) break;
+    if (bag.rows.length && firstAt && Date.now() - firstAt > 1200) break;
+    await sleep(180);
+  }
   const live = bag.rows.slice(0, 8);
   if (live.length) { saveUserPosts(name, live); return live; }
   return cachedUserPosts(name).slice(0, 8);
@@ -1278,9 +1378,13 @@ function storyFrom(raw, english, local, langId) {
   const head = headPack.lines;
   const sub = subPack.lines;
   let jp;
-  if (langId === 'both') jp = [...cutLines(en, 28, 1, false), ...cutLines(loc, 14, 2, true)];
-  else if (langId === 'ja') jp = cutLines(loc || en, 14, 3, true);
-  else jp = cutLines(en, 28, 3, false);
+  if (langId === 'en') jp = en ? [en] : [];
+  else if (langId === 'ja') jp = [loc || en].filter(Boolean);
+  else {
+    const ja = loc || en;
+    jp = ja ? [ja] : [];
+    if (en && en !== ja) jp.push(en);
+  }
   let md = '';
   if (raw.pubDate) {
     const stamp = String(raw.pubDate);
@@ -1513,9 +1617,29 @@ async function fillText(rows, lang) {
     pending.forEach(r => { if (!r._local) r._local = r.headline; });
   }
 }
+function commentCard(row, lang) {
+  const local = String((row && (row._local || row.headline)) || '').replace(/\s+/g, ' ').trim();
+  const en = String((row && (row._en || row.headline)) || '').replace(/\s+/g, ' ').trim();
+  const jaNote = 'ここで一度立ち止まり、このニュースを見直す。';
+  const enNote = 'Here, stop once and look at this news again.';
+  const id = lang && lang.id;
+  if (id === 'en') {
+    const body = en || enNote;
+    return { coffee: true, sub: ['A NOTE ON', 'THIS STORY'], jp: body === enNote ? [enNote] : [body, enNote], tags: ['COFFEE BREAK'] };
+  }
+  const body = local || en || jaNote;
+  const jp = body ? [body] : [];
+  if (!jp.length || jp[jp.length - 1] !== jaNote) jp.push(jaNote);
+  return { coffee: true, sub: ['A NOTE ON', 'THIS STORY'], jp, tags: ['COFFEE BREAK'] };
+}
+function withCoffee(rows) {
+  const news = (rows || []).filter(r => r && !r.coffee && r.headline);
+  if (!news.length) return (rows || []).some(r => r && r.coffee) ? [{ coffee: true }] : [];
+  return [news[0], { coffee: true, about: news[0] }, ...news.slice(1)];
+}
 function scriptFromSequence(date, sequence, lang, country) {
   const items = sequence.map(row => {
-    if (row.coffee) return { coffee: true, sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] };
+    if (row.coffee) return commentCard(row.about, lang);
     return storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id);
   });
   return { date, items, market: country.name + ' · ' + lang.name };
@@ -1537,17 +1661,43 @@ async function collectSlots(date, slots, reorder) {
     showWaiting(label, lines);
     say('Searching ' + label);
   };
-  note(slots.map(s => s.label || s.cat || 'News').filter(Boolean).join('\n'));
+  const names = xAccounts();
+  note(names.map(n => '@' + n).concat(slots.map(s => s.label || s.cat || 'News')).filter(Boolean).join('\n'));
   progress(0.08);
   let sequence = [];
   const used = new Set();
   let guard = 0;
+  const keyOf = r => String(r.headline || '').toLowerCase().slice(0, 90);
+  const fromAccounts = await accountRows();
+  fromAccounts.forEach(r => {
+    if (guard >= 24) return;
+    const key = keyOf(r);
+    if (!key || used.has(key)) return;
+    used.add(key);
+    sequence.push(r);
+    found.push(r);
+    guard++;
+  });
+  let wantCoffee = slots.some(s => s.type === 'coffee');
+  let coffeePinned = false;
+  const pinCoffee = () => {
+    if (!wantCoffee || coffeePinned) return;
+    const first = sequence.findIndex(r => r && r.headline);
+    if (first < 0) return;
+    sequence.splice(first + 1, 0, { coffee: true, about: sequence[first] });
+    coffeePinned = true;
+  };
+  if (fromAccounts.length) {
+    pinCoffee();
+    await revealSequence(date, sequence);
+  }
   for (const slot of slots) {
     if (S.again || guard >= 24) break;
     const label = slot.label || slot.cat || 'News';
     note(label);
     if (slot.type === 'coffee') {
-      for (let i = 0; i < slot.count && guard < 24; i++) { sequence.push({ coffee: true }); guard++; }
+      wantCoffee = true;
+      pinCoffee();
       found.push({ headline: 'Coffee break' });
       if (sequence.some(r => r.headline)) await revealSequence(date, sequence);
       note(label);
@@ -1555,7 +1705,6 @@ async function collectSlots(date, slots, reorder) {
     }
     const rows = await rowsForSlot(slot);
     const past = seenKeys();
-    const keyOf = r => r.headline.toLowerCase().slice(0, 90);
     const fresh = rows.filter(r => !used.has(keyOf(r)) && !past.has(keyOf(r)));
     const pool = fresh.length >= slot.count ? fresh : rows.filter(r => !used.has(keyOf(r)));
     let added = 0;
@@ -1567,12 +1716,20 @@ async function collectSlots(date, slots, reorder) {
       guard++;
       added++;
     });
-    if (added) await revealSequence(date, sequence);
-    else if (slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
+    if (added) {
+      pinCoffee();
+      await revealSequence(date, sequence);
+    } else if (slot.type === 'x' && slot.who && !sequence.some(r => String(r.source || '').toLowerCase() === 'x @' + String(slot.who).toLowerCase())) say('No posts from @' + slot.who + ' yet');
     note(label);
     await sleep(80);
   }
-  if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => !r.coffee), 12);
+  if (reorder && !S.playing) {
+    sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
+    coffeePinned = false;
+    pinCoffee();
+  }
+  if (wantCoffee) pinCoffee();
+  if (wantCoffee && !sequence.some(r => r && r.coffee)) sequence.unshift({ coffee: true });
   const news = sequence.filter(r => !r.coffee);
   if (!news.length && !sequence.some(r => r.coffee)) throw new Error('Could not collect those requests. Press Update to try again.');
   rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
@@ -1602,18 +1759,16 @@ async function collect(date) {
   const genres = genreChoices();
   if (!genres.length) throw new Error('Choose at least one genre in Settings.');
   if (genres.length !== GENRES.length) return collectGenres(date, genres);
-  const allowX = sourceOn('x');
-  let handle = '';
-  if (allowX) {
-    handle = xHandle() || handleFromReferrer();
-    if (!handle) handle = await sessionHandle();
-    if (handle && handle !== xHandle()) {
-      S.xUser = handle;
-      store.set('xUser', handle);
-      if ($('xUser')) $('xUser').value = '@' + handle;
-    }
-  }
+  const blocked = text => violentHidden() && VIOLENT.test(text);
   progress(0.08);
+  let xrows = [];
+  const names = xAccounts();
+  if (names.length) {
+    if (S.playing) say('Adding @' + names[0]);
+    else { showWaiting(names.map(n => '@' + n).join('\n'), []); say('Searching @' + names[0]); }
+    try { xrows = (await accountRows()).filter(r => r.headline && !blocked(r.headline)); }
+    catch (e) { console.warn(e); }
+  }
   const batches = [];
   const order = RSS_ORDER[country.id] || RSS_ORDER.US;
   const list = order.filter(id => RSS[id] && sourceOn(id));
@@ -1623,7 +1778,10 @@ async function collect(date) {
   for (let i = 0; i < list.length && picks.length < 2; i++) picks.push(list[(n + i) % list.length]);
   const lines = [];
   let lead = [];
-  const blocked = text => violentHidden() && VIOLENT.test(text);
+  if (xrows.length) {
+    lead = withCoffee(xrows.slice(0, 4));
+    await revealSequence(date, lead);
+  }
   for (const id of picks) {
     if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
@@ -1647,8 +1805,8 @@ async function collect(date) {
           seen.add(sp.headline.toLowerCase().slice(0, 90));
           early.push(row);
         });
-        lead = early.slice(0, 4);
-        if (lead.length) await revealSequence(date, lead);
+        lead = withCoffee(early.slice(0, 4));
+        if (lead.some(r => r.headline)) await revealSequence(date, lead);
       }
     } catch (e) { console.warn(e); }
     await sleep(120);
@@ -1687,45 +1845,35 @@ async function collect(date) {
     used.add(key);
     rows.push(row);
   });
-  let xrows = [];
-  if (allowX && handle) {
-    try {
-      xrows = await Promise.race([
-        followedPosts(handle),
-        new Promise(resolve => setTimeout(() => resolve([]), 8000)),
-      ]) || [];
-    } catch (e) { console.warn(e); }
-    xrows = xrows.filter(r => !blocked(r.headline)).map(r => ({ ...r, place: 'middle', cat: 'X' }));
-  }
   const past = seenKeys();
   const keyOf = r => r.headline.toLowerCase().slice(0, 90);
-  const fresh = rows.filter(r => !past.has(keyOf(r)));
-  const pool = fresh.length >= 8 ? fresh : rows;
-  const posts = xrows.filter(r => !past.has(keyOf(r))).slice(0, 3);
-  let chosen = orderStories([...posts, ...pool], 12);
-  if (lead.length) {
+  const xkeys = new Set(xrows.map(keyOf));
+  const fresh = rows.filter(r => !past.has(keyOf(r)) && !xkeys.has(keyOf(r)));
+  const pool = fresh.length >= 8 ? fresh : rows.filter(r => !xkeys.has(keyOf(r)));
+  let chosen = orderStories(pool, 12);
+  const leadNews = lead.filter(r => r && r.headline && !r.coffee);
+  if (xrows.length) {
+    const head = xrows.slice(0, 8);
+    const keys = new Set(head.map(keyOf));
+    chosen = head.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
+  } else if (leadNews.length) {
     const byKey = new Map(chosen.map(r => [keyOf(r), r]));
-    lead.forEach(r => {
+    leadNews.forEach(r => {
       const hit = byKey.get(keyOf(r));
       if (!hit) return;
       r.cat = hit.cat || r.cat;
       r.place = hit.place || r.place;
       r.source = hit.source || r.source;
     });
-    const keys = new Set(lead.map(keyOf));
-    const rest = chosen.filter(r => !keys.has(keyOf(r)));
-    chosen = lead.concat(rest).slice(0, 12);
+    const keys = new Set(leadNews.map(keyOf));
+    chosen = leadNews.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
   }
-  rememberKeys(chosen.map(r => r.headline.toLowerCase().slice(0, 90)));
-  if (!chosen.length) throw new Error('Could not collect headlines. Press Update to try again.');
+  chosen = withCoffee(chosen);
+  rememberKeys(chosen.filter(r => r.headline).map(r => r.headline.toLowerCase().slice(0, 90)));
+  if (!chosen.some(r => r.headline)) throw new Error('Could not collect headlines. Press Update to try again.');
   progress(0.45);
   await fillText(chosen, lang);
-  return {
-    date,
-    items: chosen.map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id)),
-    coffee: { topic: 'NOTE', sub: ['A PAUSE BETWEEN', 'THE HEADLINES'], jp: COFFEE_FALLBACK[lang.id] || COFFEE_FALLBACK.en, tags: ['COFFEE BREAK'] },
-    market: country.name + ' · ' + lang.name,
-  };
+  return scriptFromSequence(date, chosen, lang, country);
 }
 
 /* ---------- export ---------- */
@@ -1850,8 +1998,12 @@ function setBusy(b) {
 
 function previewLabel() {
   const preview = parseLineup(lineupText());
+  const names = xAccounts();
+  const accountLines = names.map(n => '@' + n);
+  if (!preview.length && names.length) return { title: accountLines.join('\n'), say: 'Searching @' + names[0] };
   if (!preview.length) return { title: "Today's headlines", say: "Searching today's headlines" };
-  return { title: preview.map(s => s.label || 'News').join('\n'), say: 'Searching ' + (preview[0].label || 'the lineup') };
+  const title = accountLines.concat(preview.map(s => s.label || 'News')).join('\n');
+  return { title, say: names.length ? ('Searching @' + names[0]) : ('Searching ' + (preview[0].label || 'the lineup')) };
 }
 async function runAll(opts) {
   opts = opts || {};
@@ -2013,8 +2165,13 @@ function initUI() {
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
   langBox.value = pickedLang;
-  S.xUser = (Q.get('x') || store.get('xUser', '') || handleFromReferrer()).replace(/^@+/, '');
-  $('xUser').value = S.xUser ? '@' + S.xUser : '';
+  let savedAccounts = xAccounts();
+  const seeded = cleanHandle(Q.get('x') || store.get('xUser', '') || handleFromReferrer());
+  if (validHandle(seeded) && !savedAccounts.some(n => n.toLowerCase() === seeded.toLowerCase())) savedAccounts = [seeded, ...savedAccounts];
+  saveAccounts(savedAccounts);
+  $('xUser').value = '';
+  $('addX').onclick = addAccount;
+  $('xUser').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addAccount(); } });
   const saveMarket = () => { store.set('country', countryBox.value); store.set('lang', langBox.value); };
   buildFilters();
   countryBox.onchange = () => {
@@ -2024,17 +2181,6 @@ function initUI() {
     refreshMarket();
   };
   langBox.onchange = () => { saveMarket(); refreshMarket(); };
-  const saveX = () => {
-    S.xUser = $('xUser').value.replace(/^@+/, '').trim();
-    store.set('xUser', S.xUser);
-    saveMarket();
-  };
-  $('xUser').oninput = () => { saveX(); scheduleRefresh(800); };
-  $('xUser').onchange = () => {
-    saveX();
-    $('xUser').value = S.xUser ? '@' + S.xUser : '';
-    scheduleRefresh(0);
-  };
   $('date').onchange = () => scheduleRefresh(0);
   const fq = (Q.get('formats') || '').split(',').filter(f => FORMATS[f]);
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
