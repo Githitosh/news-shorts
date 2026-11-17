@@ -184,7 +184,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics&#10;Sports&#10;Romance&#10;Jokes"></textarea>
-      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for a mix of all genres.</p>
+      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment. The number of items comes from Items under the video. Leave the lineup empty for a mix of all genres.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div class="music hides">
         <button type="button" id="hideViolent" aria-pressed="true">Hide violence</button>
@@ -1286,7 +1286,7 @@ async function collectTravel(need, place) {
 
 /* ---------- two cards for each comment ---------- */
 /* The first card shows the short part (すごーい), the second the whole comment
-   (兼六園の雪吊りすごーい) with a line on where it was said or what it answers. */
+   (兼六園の雪吊りすごーい). Only the posted words are shown, with no added explanation. */
 const REACT = {
   ja: /(?:すご[ーぉおいっ〜~]*い?|すげ[ーぇえっ]*|スゴ[ーイい]*|やば[いぁーっ]*|ヤバ[いイー]*|かわい[いー〜]*|可愛[いー]*|きれ[いー]+|綺麗|キレイ|美し[いー]*|最高|さいこう|絶景|感動|圧巻|エモ[いー]*|尊[いー]*|うま[いー]+|美味し[いー]*|おいし[いー]*|楽し[いー]*|たのし[いー]*|ワロタ|爆笑|笑笑|ウケる|面白[いー]*|おもしろ[いー]*|草)[^、。！？!?\n]{0,6}[！!？?〜~ーｗw笑✨♪…]*[\s\p{Extended_Pictographic}‍️]*$/u,
   en: /\b(?:wow+|omg|amazing|stunning|beautiful|gorgeous|breathtaking|incredible|insane|lol+|lmao+|haha\w*)\b[^.!?\n]{0,20}[.!?]*[\s\p{Extended_Pictographic}‍️]*$/iu,
@@ -1302,29 +1302,18 @@ function teaserOf(text, lang) {
   if (parts.length > 1 && fits(last)) return last;
   return '';
 }
-function explainOf(r, ja) {
-  if (r.travel && r.spot) return ja ? `${r.spot}（${r.where}）での投稿` : `Posted at ${r.spot}, ${r.where}`;
-  const t = String(r.topic || '').trim();
-  const to = t.match(/^to:(\w+)$/);
-  if (to) return ja ? `@${to[1]} への返信` : `A reply to @${to[1]}`;
-  if (!t || /^(ニュース|今日|話題|トレンド|news|today|trending|weird)$/i.test(t) || /[:()"]/.test(t)) return '';
-  return ja ? `「${t}」の話題への返信` : `A reply about “${t}”`;
-}
 function beats(r, card, langId) {
   const ja = langId !== 'en' && CJK.test(card.head.join('') + (card.jp[0] || ''));
   const text = ja ? (r._shownJa || r.headline) : (r._shownEn || r.headline);
   const lang = ja ? 'ja' : 'en';
   const corner = r.travel ? (ja ? '観光' : 'TRAVEL') : card.topic;
   const main = { ...card, topic: corner, cat: r.travel ? 'TRAVEL' : card.cat, jp: card.jp.slice(), _main: true };
-  const why = explainOf(r, ja);
   const tease = teaserOf(text, lang);
   if (tease) {
-    if (why) main.jp.push(why);
     const bare = tease.replace(/[\p{Extended_Pictographic}\u200d\ufe0f!！?？〜~…✨♪\s\d]/gu, '');
     const kw = bare && charLen(bare) <= 6 ? bare : (ja ? jaWord(tease) : storyWord(tease, ''));
     return [{ ...card, topic: corner, cat: main.cat, kw, head: [tease], sub: [], jp: [] }, main];
   }
-  if (why) return [main, { ...card, topic: corner, cat: main.cat, kw: ja ? jaWord(why) : storyWord(why, ''), head: [why], sub: [], jp: [] }];
   return [main];
 }
 
@@ -1445,7 +1434,7 @@ async function collect() {
   let topicWords = [];
   const topicPlace = {};
   /* Items (5, 10 or 20) is the number of cards. News, then comments gives about 40% to the reports.
-     Each comment is two cards: the short part, then the whole comment and what it is about.
+     Each comment is two cards: the short part, then the whole comment.
      Romance adds couples (the post, the reply, what others said); Travel adds what people said
      at famous places. A lineup line asks for more of them; the genres, when the lineup has no
      topics, add a few. A lineup of only Romance and Travel plays only those. */
