@@ -28,7 +28,9 @@ main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom));
 main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
 body:has(#studio:not([hidden])) .stage { position: static; }
-.frame { position: relative; max-width: 400px; margin: 0 auto; }
+.frame { position: relative; max-width: 400px; margin: 0 auto; transition: transform .18s ease; }
+.frame.pulling { transition: none; }
+.source-url { display: block; max-width: 400px; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
 canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
 canvas#cv.wide { aspect-ratio: 16 / 9; }
 .stage.wide .frame, .stage.wide .ctl, .stage.wide .music, .stage.wide .picks { max-width: 100%; }
@@ -38,6 +40,8 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .picks button { flex: 1 1 100%; }
 #keySlot { flex: 1 1 100%; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
+.pace-note { text-align: center; max-width: 400px; margin: 4px auto 0; }
+#lineupGo, #applyLine, #backVideo { width: 100%; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
 button.on, .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
@@ -69,7 +73,8 @@ button.primary { background: var(--acc); color: #1a1408; border-color: var(--acc
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 .studio { display: grid; gap: 12px; margin-top: 16px; }
-.studio:not([hidden]) { position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; top: var(--header-h, 64px); margin: 0; padding: 8px 16px 48px; overflow: auto; background: var(--bg); }
+.studio:not([hidden]) { position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; top: var(--header-h, 64px); margin: 0; padding: 8px 16px calc(92px + env(safe-area-inset-bottom)); overflow: auto; background: var(--bg); }
+.back-dock { position: fixed; z-index: 60; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; background: var(--acc); color: #1a1408; border-color: var(--acc); font-size: 17px; padding: 14px; }
 .studio-bar { position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--bg); }
 #backVideo { width: 100%; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
@@ -97,24 +102,28 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </head>
 <body>
 <header><div><button type="button" id="home" class="title">News Shorts</button><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
+<button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <section class="stage" id="stage">
     <div class="frame">
       <canvas id="cv" width="1080" height="1920"></canvas>
       <button type="button" id="unmute" hidden>Tap for sound</button>
     </div>
+    <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
     <div class="ctl">
       <button id="play" disabled>Play</button>
       <button id="update" type="button">Update</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
+    <p class="music-label">Story length</p>
+    <div class="music" id="paces"></div>
+    <p class="note pace-note">Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.</p>
     <p class="music-label">Wallpaper</p>
     <div class="music" id="walls"></div>
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
     <p id="caption" class="caption">Opening the news video…</p>
-    <p class="caption"><a id="storyLink" href="" target="_blank" rel="noopener" hidden>Open this story</a></p>
   </section>
 
   <div id="studio" class="studio" hidden>
@@ -136,7 +145,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <p class="note">Press a name or type a line. The video starts with the first stories and adds the rest while it plays.</p>
       <div id="genreChips" class="music"></div>
-      <button type="button" id="lineupGo" class="line-title">Lineup</button>
+      <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
@@ -2083,12 +2092,19 @@ If you want to offset all timestamps of a track such that the first one is zero,
 })();
 if (typeof module === "object" && typeof module.exports === "object") Object.assign(module.exports, Mp4Muxer)
 </script>
-<script>/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story. */
+<script>/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story, or 4.2 / 5.2. */
 (function (global) {
 'use strict';
 
-const FPS = 30, DUR = 3.2;
+const FPS = 30;
+let DUR = 3.2;
+function setDuration(seconds) {
+  const n = Math.round(Number(seconds) * 10) / 10;
+  DUR = n === 4.2 || n === 5.2 ? n : 3.2;
+  return DUR;
+}
 const INK = '#F5F1E9';
+const INK_DAY = '#141414';
 const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
 const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
@@ -2166,10 +2182,14 @@ let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
 const WALLPAPERS = {
   morning: '',
+  bright: 'brightness(1.85) saturate(1.14) contrast(1.05)',
+  day: 'brightness(2.35) saturate(0.55) contrast(1.08)',
   evening: 'brightness(0.72) saturate(1.35) sepia(0.45)',
   night: 'brightness(0.38) saturate(0.5)',
   pop: 'brightness(1.65) saturate(1.85) contrast(1.04)',
 };
+function inkNow() { return wallpaper === 'day' ? INK_DAY : INK; }
+function creditNow() { return wallpaper === 'day' ? 'rgba(20,20,20,0.62)' : P.credit.color; }
 let wallpaper = 'morning';
 function setWallpaper(id) { wallpaper = Object.prototype.hasOwnProperty.call(WALLPAPERS, id) ? id : 'morning'; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
@@ -2459,6 +2479,12 @@ function drawBg(ctx, img, t, key) {
   if (wallpaper === 'evening') {
     ctx.fillStyle = 'rgba(140,48,0,0.18)';
     ctx.fillRect(0, 0, W, H);
+  } else if (wallpaper === 'bright') {
+    ctx.fillStyle = 'rgba(255,236,214,0.16)';
+    ctx.fillRect(0, 0, W, H);
+  } else if (wallpaper === 'day') {
+    ctx.fillStyle = 'rgba(255,250,240,0.5)';
+    ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
 }
@@ -2468,13 +2494,13 @@ function drawItem(ctx, show, i, t, bgs) {
   const it = show.items[i], L = it.L;
   ctx.textBaseline = 'alphabetic';
   drawBg(ctx, bgs[it.bg], t, it.bg);
-  ctx.fillStyle = INK;
+  ctx.fillStyle = inkNow();
   /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
   ctx.font = font(P.header.w, P.header.size, F_SERIF);
   textX(ctx, show.header, P.header.cx, P.header.base, P.header.sx, 'center');
   ctx.font = font(400, P.credit.size, F_SANS);
-  ctx.fillStyle = P.credit.color; ctx.textAlign = 'left';
+  ctx.fillStyle = creditNow(); ctx.textAlign = 'left';
   const mw = ctx.measureText(musicCredit).width, ms = Math.min(P.credit.size, P.credit.size * P.credit.maxW1 / mw);
   ctx.font = font(400, ms, F_SANS);
   ctx.fillText(musicCredit, P.left, P.credit.base1 - (P.credit.size - ms) * 1.33);
@@ -2482,7 +2508,7 @@ function drawItem(ctx, show, i, t, bgs) {
   const cw = ctx.measureText(it.credit2).width, cs = Math.min(P.credit.size, P.credit.size * P.credit.maxW / cw);
   ctx.font = font(400, cs, F_SANS);
   ctx.fillText(it.credit2, P.left, P.credit.base2 - (P.credit.size - cs) * 1.33);
-  ctx.fillStyle = INK;
+  ctx.fillStyle = inkNow();
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
   /* Keyword. */
@@ -2547,7 +2573,7 @@ function allText(script) {
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
+global.NSEngine = { FPS, get DUR() { return DUR; }, setDuration, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
 })(window);
 </script>
 <script>
@@ -2583,9 +2609,16 @@ const COFFEE_FALLBACK = {
 };
 const WALLS = [
   { id: 'morning', name: 'Morning' },
+  { id: 'bright', name: 'Bright' },
+  { id: 'day', name: 'Day' },
   { id: 'evening', name: 'Evening' },
   { id: 'night', name: 'Night' },
   { id: 'pop', name: 'Pop' },
+];
+const PACES = [
+  { sec: 3.2, name: '3.2s' },
+  { sec: 4.2, name: '4.2s' },
+  { sec: 5.2, name: '5.2s' },
 ];
 const TRACKS = [
   { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
@@ -2621,6 +2654,8 @@ function wrapCanvas(text, x, y, width, lineH, maxLines) {
   return y;
 }
 function showWaiting(title, lines) {
+  const link = $('storyLink');
+  if (link) link.hidden = true;
   const cv = $('cv');
   if (!cv) return;
   if (!cv.width) { cv.width = 1080; cv.height = 1920; }
@@ -2628,19 +2663,20 @@ function showWaiting(title, lines) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const img = S.bgs && (S.bgs.A || S.bgs.B || S.bgs.C || S.bgs.D);
   const wall = store.get('wall', 'morning');
-  const filter = { evening: 'brightness(0.72) saturate(1.35) sepia(0.45)', night: 'brightness(0.38) saturate(0.5)', pop: 'brightness(1.65) saturate(1.85) contrast(1.04)' }[wall] || 'none';
+  const filter = { bright: 'brightness(1.85) saturate(1.14) contrast(1.05)', day: 'brightness(2.35) saturate(0.55) contrast(1.08)', evening: 'brightness(0.72) saturate(1.35) sepia(0.45)', night: 'brightness(0.38) saturate(0.5)', pop: 'brightness(1.65) saturate(1.85) contrast(1.04)' }[wall] || 'none';
+  const day = wall === 'day';
   if (img) {
     ctx.save();
     ctx.filter = filter;
     const k = Math.max(W / img.width, H / img.height);
     ctx.drawImage(img, (W - img.width * k) / 2, (H - img.height * k) / 2, img.width * k, img.height * k);
     ctx.restore();
-    ctx.fillStyle = 'rgba(8,10,16,0.5)';
+    ctx.fillStyle = day ? 'rgba(255,250,240,0.5)' : (wall === 'bright' ? 'rgba(255,236,214,0.16)' : 'rgba(8,10,16,0.5)');
     ctx.fillRect(0, 0, W, H);
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#2a3548');
-    g.addColorStop(1, '#10141c');
+    g.addColorStop(0, day ? '#f4efe4' : '#2a3548');
+    g.addColorStop(1, day ? '#d9e4ef' : '#10141c');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
@@ -2648,11 +2684,11 @@ function showWaiting(title, lines) {
   let y = wide ? 110 : 170;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = '#e8c27a';
+  ctx.fillStyle = day ? '#6a4a12' : '#e8c27a';
   ctx.font = `700 ${wide ? 48 : 64}px "Noto Serif JP", Georgia, serif`;
   ctx.fillText('SEARCHING', pad, y);
   y += wide ? 78 : 96;
-  ctx.fillStyle = '#f5f1e9';
+  ctx.fillStyle = day ? '#141414' : '#f5f1e9';
   ctx.font = `700 ${wide ? 40 : 52}px "Noto Sans JP", sans-serif`;
   String(title || 'News').split('\n').slice(0, 8).forEach(part => {
     if (y > H * 0.42) return;
@@ -2662,7 +2698,7 @@ function showWaiting(title, lines) {
   ctx.font = `400 ${wide ? 30 : 38}px "Noto Sans JP", sans-serif`;
   (lines || []).slice(-8).forEach(line => {
     if (y > H - 90) return;
-    ctx.fillStyle = '#f7f3ea';
+    ctx.fillStyle = day ? '#141414' : '#f7f3ea';
     y = wrapCanvas(String(line || ''), pad, y, W - pad * 2, wide ? 40 : 50, 2);
     y += wide ? 12 : 18;
   });
@@ -2706,6 +2742,26 @@ function applyLayout() {
   if (choice === 'phone' || choice === 'x') format = 'x';
   else if (choice === 'youtube' || choice === 'pc') format = choice;
   if (format !== S.format) setFormat(format);
+}
+function usePace(sec) {
+  const next = E.setDuration ? E.setDuration(sec) : 3.2;
+  store.set('pace', String(next));
+  document.querySelectorAll('#paces button').forEach(b => b.classList.toggle('on', Number(b.dataset.p) === next));
+  if (!S.script || !S.show) return;
+  const ratio = S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
+  const was = S.playing;
+  S.show = E.prepare(S.script, S.format);
+  sizeCanvas();
+  const T = ratio * S.show.duration;
+  $('seek').value = String(Math.round(ratio * 1000));
+  if (was) {
+    S.origin = T;
+    S.t0perf = performance.now();
+    if (S.audioOn && S.el && !S.el.paused) {
+      try { S.el.currentTime = soundOffset(T); } catch (e) {}
+    }
+  }
+  draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
 }
 function useWall(id) {
   const w = WALLS.find(x => x.id === id) || WALLS[0];
@@ -2880,6 +2936,7 @@ async function setScript(raw, quiet) {
   return S.show;
 }
 function growShow(raw) {
+  if (S.again) return;
   const s = normalize(raw);
   const was = !!(S.playing && S.show);
   const oldDur = was ? S.show.duration : 0;
@@ -2957,13 +3014,14 @@ function draw(T) {
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
   const a = $('storyLink');
   if (!a || !S.show.items.length) return;
-  const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / E.DUR)));
+  const pace = E.DUR || 3.2;
+  const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / pace)));
   const it = S.show.items[i];
   const url = it && it.kind !== 'coffee' ? safeUrl(it.url) : '';
-  if (!url) { a.hidden = true; return; }
+  if (!url) { a.hidden = true; a.removeAttribute('href'); return; }
   a.hidden = false;
   a.href = url;
-  a.textContent = (it.src || 'Source') + ' — open this story';
+  a.textContent = url;
 }
 async function audioCtx() {
   if (!S.ac) S.ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -3472,6 +3530,16 @@ async function authorSearch(name) {
   }
   return out;
 }
+function cachedUserPosts(name) {
+  try {
+    const raw = sessionStorage.getItem('newsShorts.xposts.' + name.toLowerCase());
+    const rows = raw ? JSON.parse(raw) : [];
+    return Array.isArray(rows) ? rows.filter(r => r && r.headline && r.x) : [];
+  } catch (e) { return []; }
+}
+function saveUserPosts(name, rows) {
+  try { sessionStorage.setItem('newsShorts.xposts.' + name.toLowerCase(), JSON.stringify(rows.slice(0, 8))); } catch (e) {}
+}
 async function userPosts(handle, need) {
   const name = String(handle || '').replace(/^@+/, '');
   if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
@@ -3483,7 +3551,9 @@ async function userPosts(handle, need) {
   }).catch(e => console.warn(e)).finally(() => { done++; }));
   const start = Date.now();
   while (done < 3 && bag.rows.length < want && Date.now() - start < 10000) await sleep(180);
-  return bag.rows.slice(0, 8);
+  const live = bag.rows.slice(0, 8);
+  if (live.length) { saveUserPosts(name, live); return live; }
+  return cachedUserPosts(name).slice(0, 8);
 }
 async function followedPosts(handle) {
   const names = await followHandles(handle);
@@ -3839,6 +3909,7 @@ function scriptFromSequence(date, sequence, lang, country) {
   return { date, items, market: country.name + ' · ' + lang.name };
 }
 async function revealSequence(date, sequence) {
+  if (S.again) return;
   if (!sequence.some(r => r && r.headline)) return;
   const { country, lang } = market();
   await fillText(sequence, lang);
@@ -3848,6 +3919,7 @@ async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
   const found = [];
   const note = label => {
+    if (S.again) return;
     const lines = found.map(r => (r.x ? 'X  ' : '') + r.headline);
     if (S.playing) { say('Adding ' + label); return; }
     showWaiting(label, lines);
@@ -3859,7 +3931,7 @@ async function collectSlots(date, slots, reorder) {
   const used = new Set();
   let guard = 0;
   for (const slot of slots) {
-    if (guard >= 24) break;
+    if (S.again || guard >= 24) break;
     const label = slot.label || slot.cat || 'News';
     note(label);
     if (slot.type === 'coffee') {
@@ -3884,6 +3956,7 @@ async function collectSlots(date, slots, reorder) {
       added++;
     });
     if (added) await revealSequence(date, sequence);
+    else if (slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
     note(label);
     await sleep(80);
   }
@@ -3940,6 +4013,7 @@ async function collect(date) {
   let lead = [];
   const blocked = text => violentHidden() && VIOLENT.test(text);
   for (const id of picks) {
+    if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
     if (S.playing) say('Adding ' + name);
     else { showWaiting(name, lines); say('Searching ' + name); }
@@ -4162,24 +4236,37 @@ function setBusy(b) {
   if (u) { u.disabled = !!b; u.textContent = b ? 'Creating…' : 'Update'; }
 }
 
+function previewLabel() {
+  const preview = parseLineup(lineupText());
+  if (!preview.length) return { title: "Today's headlines", say: "Searching today's headlines" };
+  return { title: preview.map(s => s.label || 'News').join('\n'), say: 'Searching ' + (preview[0].label || 'the lineup') };
+}
 async function runAll(opts) {
   opts = opts || {};
-  if (S.busy) { S.again = opts; return; }
+  if (S.busy) {
+    S.again = opts;
+    stop();
+    const preview = previewLabel();
+    showWaiting(preview.title, []);
+    say(preview.say);
+    return;
+  }
   S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    const preview = parseLineup(lineupText());
-    const label = preview.length ? preview.map(s => s.label || 'News').join('\n') : "Today's headlines";
-    showWaiting(label, []);
-    say(preview.length ? 'Searching ' + (preview[0].label || 'the lineup') : "Searching today's headlines");
+    const preview = previewLabel();
+    showWaiting(preview.title, []);
+    say(preview.say);
   }
   try {
     const date = opts.date || $('date').value || todayJST();
     const script = opts.sample ? { ...SAMPLE } : await collect(date);
     progress(0.7);
-    if (!opts.sample && S.grew && S.playing && S.show) growShow(script);
+    if (S.again) {
+      /* A newer update is waiting. Keep that search on screen. */
+    } else if (!opts.sample && S.grew && S.playing && S.show) growShow(script);
     else await setScript(script, true);
-    say(watchLine(!!(S.ac && S.ac.state === 'running')));
+    if (!S.again) say(watchLine(!!(S.ac && S.ac.state === 'running')));
   } catch (e) {
     console.error(e); say(e.message || String(e), true); progress(0);
     S.busy = false; setBusy(false);
@@ -4208,9 +4295,19 @@ function scheduleRefresh(delay) {
   refreshTimer = setTimeout(() => { refreshTimer = 0; refreshMarket(); }, delay);
 }
 function closeStudio() {
+  const wasOpen = !$('studio').hidden;
   $('studio').hidden = true;
-  const stage = $('stage');
-  if (stage && stage.scrollIntoView) stage.scrollIntoView({ block: 'start' });
+  const dock = $('backDock');
+  if (dock) dock.hidden = true;
+  if (wasOpen) window.scrollTo(0, 0);
+}
+function openStudio() {
+  window.scrollTo(0, 0);
+  document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
+  $('studio').hidden = false;
+  $('studio').scrollTop = 0;
+  const dock = $('backDock');
+  if (dock) dock.hidden = false;
 }
 
 /* ---------- page ---------- */
@@ -4219,19 +4316,17 @@ function initUI() {
   $('autoExport').checked = store.get('autoExport', '0') === '1';
   $('autoExport').onchange = () => store.set('autoExport', $('autoExport').checked ? '1' : '0');
   $('gear').onclick = () => {
-    const opening = $('studio').hidden;
-    if (!opening) { closeStudio(); return; }
-    document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
-    $('studio').hidden = false;
-    $('studio').scrollTop = 0;
+    if (!$('studio').hidden) { closeStudio(); return; }
+    openStudio();
   };
   $('backVideo').onclick = closeStudio;
+  $('backDock').onclick = closeStudio;
   $('home').onclick = () => {
     closeStudio();
     window.scrollTo(0, 0);
     refreshMarket();
   };
-  if (Q.get('edit') === '1') $('studio').hidden = false;
+  if (Q.get('edit') === '1') openStudio();
   const forced = Q.get('format');
   const savedLayout = store.get('layout', 'auto');
   $('layout').value = forced === 'pc' || forced === 'youtube' ? forced : (forced === 'x' ? 'phone' : (['auto', 'phone', 'x', 'youtube', 'pc'].includes(savedLayout) ? savedLayout : 'auto'));
@@ -4282,6 +4377,17 @@ function initUI() {
   });
   const requestedWall = Q.get('wall') || store.get('wall', 'morning');
   useWall(WALLS.some(w => w.id === requestedWall) ? requestedWall : 'morning');
+  const paceBox = $('paces');
+  PACES.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.p = String(p.sec);
+    b.textContent = p.name;
+    b.onclick = () => usePace(p.sec);
+    paceBox.appendChild(b);
+  });
+  const savedPace = Number(Q.get('pace') || store.get('pace', '3.2'));
+  usePace(PACES.some(p => p.sec === savedPace) ? savedPace : 3.2);
   const countryBox = $('country');
   const langBox = $('lang');
   COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
@@ -4362,6 +4468,8 @@ function initUI() {
     store.set('lineup', lineup.value);
     paintChips();
     arm('applyLine');
+    closeStudio();
+    window.scrollTo(0, 0);
     refreshMarket();
   };
   $('applyLine').onclick = applyLineup;
@@ -4450,38 +4558,56 @@ function keepInitTail() {
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
   let pull = null;
   const header = document.querySelector('header');
+  const frame = document.querySelector('.frame');
   const pullLabel = () => document.querySelector('header .pull');
+  const videoAtTop = () => {
+    const cv = $('cv');
+    if (!cv) return window.scrollY < 80;
+    return cv.getBoundingClientRect().top <= header.offsetHeight + 12;
+  };
   const canPull = e => {
+    if (!$('studio').hidden) return false;
+    if (!videoAtTop()) return false;
     if (e.target.closest && e.target.closest('#gear, button, a, input, select, textarea, summary')) return false;
-    if (header.contains(e.target)) return true;
-    return window.scrollY < 4 && e.clientY < header.offsetHeight + 90;
+    return header.contains(e.target) || !!(e.target.closest && e.target.closest('#stage, canvas, main'));
   };
   const markPull = dy => {
     const label = pullLabel();
     if (label) label.textContent = dy > 70 ? 'Release to refresh' : 'Pull down to refresh';
+    if (!frame) return;
+    if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.45, 96) + 'px)'; }
+    else { frame.classList.remove('pulling'); frame.style.transform = ''; }
   };
   const finishPull = dy => {
+    const dead = pull && pull.dead;
     pull = null;
+    if (frame) { frame.classList.remove('pulling'); frame.style.transform = ''; }
     const label = pullLabel();
     if (label) label.textContent = 'Pull down to refresh';
-    if (dy < 70) return;
+    if (dead || dy < 70) return;
     say('Refreshing. The stories and their order change.');
-    runAll({ download: false, export: false }).catch(() => {});
+    refreshMarket();
   };
   window.addEventListener('pointerdown', e => {
     if (!canPull(e)) return;
-    pull = { y: e.clientY, id: e.pointerId };
+    pull = { y: e.clientY, id: e.pointerId, dead: false };
   });
   window.addEventListener('pointermove', e => {
-    if (!pull || pull.id !== e.pointerId) return;
-    markPull(e.clientY - pull.y);
+    if (!pull || pull.id !== e.pointerId || pull.dead) return;
+    const dy = e.clientY - pull.y;
+    if (dy < -12) { pull.dead = true; markPull(0); return; }
+    if (dy > 0) markPull(dy);
   });
   window.addEventListener('touchmove', e => {
-    if (!pull) return;
+    if (!pull || pull.dead) return;
     const t = e.touches[0];
     if (!t) return;
-    markPull(t.clientY - pull.y);
-    if (t.clientY - pull.y > 8 && e.cancelable) e.preventDefault();
+    const dy = t.clientY - pull.y;
+    if (dy < -12) { pull.dead = true; markPull(0); return; }
+    if (dy > 8) {
+      markPull(dy);
+      if (e.cancelable) e.preventDefault();
+    }
   }, { passive: false });
   window.addEventListener('pointerup', e => {
     if (!pull || pull.id !== e.pointerId) return;
@@ -4490,6 +4616,12 @@ function keepInitTail() {
   window.addEventListener('pointercancel', e => {
     if (!pull || pull.id !== e.pointerId) return;
     finishPull(e.clientY - pull.y);
+  });
+  window.addEventListener('touchend', e => {
+    if (!pull) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    finishPull(t.clientY - pull.y);
   });
   $('seek').oninput = () => {
     if (!S.show) return;
