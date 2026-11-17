@@ -3904,6 +3904,12 @@ async function collect() {
     collectJokes(topicWords, Math.min(jokeNeed, Math.max(0, room - romanceNeed * 4)), { headlines }),
     collectRomance(Math.min(romanceNeed, room), romancePlace).catch(e => { console.warn(e); return []; }),
   ]);
+  /* A comment found both as a joke and under a couple plays once, as the joke. */
+  const jokeKeySet = new Set(found.flatMap(j => jokeKeys({ text: j.text, link: j.url })));
+  couples.forEach(r => {
+    r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50)));
+    r.keys = [r.story.a, r.story.b, ...r.story.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
+  });
   const jokes = found
     .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
     .concat(couples.map(r => ({ ...r, headline: r.story.a.text, joke: true })))
