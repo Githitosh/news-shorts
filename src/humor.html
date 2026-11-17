@@ -23,7 +23,9 @@ main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100
 .ctl, #prog, .caption { max-width: 560px; margin-left: auto; margin-right: auto; }
 .frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
-canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
+canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
+/* iPhone: a copy of the picture as a video, behind the canvas, for the system full-screen player. */
+video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 12px; background: #f4efe4; }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen (iPhone, in-app browsers). */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
@@ -87,7 +89,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.humor.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.humor.' + k, v); } catch (e) {} },
 };
-const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false };
+const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false, vfull: false, fv: null, lastDraw: 0 };
 const TAP = ' Press Sound for music.';
 const FEEDS = [
   ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
@@ -418,6 +420,7 @@ function safeUrl(u) {
 }
 function draw(T) {
   if (!S.show) return;
+  S.lastDraw = performance.now();
   const shown = Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS));
   E.drawFrame(ctx, S.show, shown, S.bgs);
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
@@ -600,12 +603,60 @@ function toggle() {
   say('Playing.');
 }
 function realFull() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
-function fullOn() { return !!(realFull() || S.pseudo); }
-/* S.pseudo is the page's own full screen, for browsers without the Fullscreen API
-   (iPhone Safari, the X app). The CSS for .pseudo fills the screen with the portrait picture. */
+function fullOn() { return !!(realFull() || S.pseudo || S.vfull); }
+/* The browser's Fullscreen API, when it has one that works (PC, Android, iPad). */
+function fsApi() {
+  const node = $('watch');
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  return req && allowed !== false ? req : null;
+}
+/* iPhone Safari and the X app have no Fullscreen API for a page, but a video can go full screen.
+   The canvas is copied into a muted video behind it, and Full screen opens that video in the
+   system player. The music keeps playing from the page. */
+function setupVideoFull() {
+  if (fsApi() || S.fv) return;
+  const cv = $('cv');
+  const v = document.createElement('video');
+  if (typeof v.webkitEnterFullscreen !== 'function' || typeof cv.captureStream !== 'function') return;
+  let stream = null;
+  try { stream = cv.captureStream(30); } catch (e) { console.warn(e); return; }
+  v.id = 'fsv';
+  v.muted = true;
+  v.defaultMuted = true;
+  v.playsInline = true;
+  v.setAttribute('muted', '');
+  v.setAttribute('playsinline', '');
+  v.setAttribute('webkit-playsinline', '');
+  v.setAttribute('aria-hidden', 'true');
+  v.srcObject = stream;
+  cv.parentNode.insertBefore(v, cv);
+  S.fv = v;
+  const kick = () => { if (v.paused && !S.vfull) { const r = v.play(); if (r && r.catch) r.catch(() => {}); } };
+  kick();
+  /* Low Power Mode blocks the first start; any tap on the page tries again. */
+  window.addEventListener('pointerdown', kick, true);
+  v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
+  v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
+  /* Pause and play in the system player pause and play the video and the music. */
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) toggle(); }, 300); });
+  v.addEventListener('play', () => { if (S.vfull && !S.playing) toggle(); });
+}
+function videoFull() {
+  const v = S.fv;
+  if (!v || v.readyState < 1 || typeof v.webkitEnterFullscreen !== 'function') return false;
+  try {
+    const r = v.play();
+    if (r && r.catch) r.catch(() => {});
+    v.webkitEnterFullscreen();
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+/* S.pseudo is the page's own full screen, the last resort when neither works.
+   The CSS for .pseudo fills the window with the portrait picture. */
 function paintFull() {
   const on = fullOn();
-  $('watch').classList.toggle('is-full', on);
+  $('watch').classList.toggle('is-full', !!(realFull() || S.pseudo));
   $('watch').classList.toggle('pseudo', !!S.pseudo);
   document.body.classList.toggle('lock', !!S.pseudo);
   $('full').textContent = on ? 'Exit' : 'Full screen';
@@ -620,9 +671,10 @@ function waitFullChange(ms) {
 }
 async function enterFull() {
   const node = $('watch');
-  const req = node.requestFullscreen || node.webkitRequestFullscreen;
-  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-  if (req && allowed !== false) {
+  const req = fsApi();
+  /* iPhone: this must run inside the tap, before any await. */
+  if (!req && videoFull()) return;
+  if (req) {
     try {
       const r = req.call(node);
       if (r && r.then) await r; else await waitFullChange(700);
@@ -638,6 +690,10 @@ async function enterFull() {
 }
 async function exitFull() {
   if (S.pseudo) { S.pseudo = false; paintFull(); return; }
+  if (S.vfull && S.fv) {
+    try { S.fv.webkitExitFullscreen(); } catch (e) { console.warn(e); }
+    return;
+  }
   try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
   const exit = document.exitFullscreen || document.webkitExitFullscreen;
   if (exit && realFull()) {
@@ -651,6 +707,13 @@ $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), tr
 document.addEventListener('fullscreenchange', paintFull);
 document.addEventListener('webkitfullscreenchange', paintFull);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.pseudo) exitFull(); });
+/* While the system player covers the page, the browser may stop animation frames. Keep drawing. */
+setInterval(() => {
+  if (!S.vfull || !S.playing || performance.now() - S.lastDraw < 80) return;
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+  tick();
+}, 40);
+setupVideoFull();
 $('update').onclick = () => runAll();
 $('home').onclick = () => { window.scrollTo(0, 0); runAll(); };
 $('sound').onclick = () => toggleSound();
