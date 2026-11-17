@@ -17,13 +17,31 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 button.title { background: none; border: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; cursor: pointer; }
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
+.hright { display: flex; align-items: center; gap: 12px; }
+#gear { width: 44px; height: 40px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
+#gear.on { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+/* Settings: a sheet at the bottom, so the video stays in view and each change shows at once. */
+.sheet { position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; max-height: min(62vh, 560px); max-height: min(62dvh, 560px); overflow: auto; overscroll-behavior: contain; background: var(--card); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 28px rgba(28,20,12,.14); padding: 0 16px calc(14px + env(safe-area-inset-bottom)); }
+@media (min-width: 640px) { .sheet { left: 50%; right: auto; width: 580px; transform: translateX(-50%); } }
+.sheet-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: var(--card); font: 700 16px "Noto Serif JP",serif; }
+.sheet-bar button { padding: 8px 14px; font-size: 14px; }
+.opt-label { margin: 10px 0 6px; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.opts button { flex: 1 1 28%; padding: 9px 6px; font-size: 13px; }
+.opts button.on { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+.opt-note { margin: 6px 0 0; color: var(--mute); font-size: 12px; }
 main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
 /* The portrait video is as tall as the screen allows, leaving room for the title and the buttons. */
 .frame { width: min(100%, max(280px, calc((100vh - 150px) * 9 / 16))); width: min(100%, max(280px, calc((100dvh - 150px) * 9 / 16))); }
 .ctl, #prog, .caption { max-width: 560px; margin-left: auto; margin-right: auto; }
 .frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
-canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
+/* PC layout: landscape, as wide as the page and the screen height allow. */
+.land .frame { width: min(100%, max(320px, calc((100vh - 150px) * 16 / 9))); width: min(100%, max(320px, calc((100dvh - 150px) * 16 / 9))); }
+.land canvas#cv { aspect-ratio: 16 / 9; }
+canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
+/* iPhone: a copy of the picture as a video, behind the canvas, for the system full-screen player. */
+video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 12px; background: #f4efe4; }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen (iPhone, in-app browsers). */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
@@ -51,7 +69,7 @@ button:disabled { opacity: .45; cursor: default; }
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><a class="jump" href="../">News</a></header>
+<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false" aria-controls="sheet">*</button></div></header>
 <main>
   <div id="watch" class="watch">
     <div class="frame">
@@ -70,6 +88,18 @@ button:disabled { opacity: .45; cursor: default; }
   <div id="prog"><i></i></div>
   <p id="caption" class="caption">Opening five stories…</p>
 </main>
+<div id="sheet" class="sheet" role="dialog" aria-label="Settings" hidden>
+  <div class="sheet-bar"><span>Settings</span><button type="button" id="sheetDone">Done</button></div>
+  <p class="opt-label">Layout</p>
+  <div class="opts" id="optLayout"></div>
+  <p class="opt-label">Story length</p>
+  <div class="opts" id="optPace"></div>
+  <p class="opt-label">Wallpaper</p>
+  <div class="opts" id="optWall"></div>
+  <p class="opt-label">Music</p>
+  <div class="opts" id="optMusic"></div>
+  <p class="opt-note">Choices stay in this browser.</p>
+</div>
 <script>
 /* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story, or 4.2 / 5.2. */
 (function (global) {
@@ -658,15 +688,46 @@ const ctx = $('cv').getContext('2d');
 const Q = new URLSearchParams(location.search);
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 const WATCH = Q.get('watch') !== '0' && !REDUCE;
-/* Portrait 1080×1920, the same layout as the main page on X and phones. */
-const LAYOUT = 'x';
+/* Display settings. The same choices as the News page. */
+const LAYOUTS = [
+  { id: 'x', name: 'Phone · X' },
+  { id: 'youtube', name: 'YouTube' },
+  { id: 'wide', name: 'PC (landscape)' },
+];
+const PACES = [
+  { sec: 3.2, name: '3.2s' },
+  { sec: 4.2, name: '4.2s' },
+  { sec: 5.2, name: '5.2s' },
+];
+const WALLS = [
+  { id: 'morning', name: 'Morning' },
+  { id: 'bright', name: 'Bright' },
+  { id: 'day', name: 'Day' },
+  { id: 'evening', name: 'Evening' },
+  { id: 'night', name: 'Night' },
+  { id: 'pop', name: 'Pop' },
+];
+/* Jupiter is inside the page. The others load from ../assets/ the first time they are chosen. */
+const TRACKS = [
+  { id: 'jupiter', name: 'Jupiter', file: '', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
+  { id: 'neptune', name: 'Neptune', file: 'neptune_1923.m4a', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
+  { id: 'stripes', name: 'Stars and Stripes', file: 'stripes_1909.m4a', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
+  { id: 'sandman', name: 'Sandman', file: 'sandman_1920.m4a', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
+];
 const NEWS_COUNT = 5;
 const JOKE_COUNT = 10;
 const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.humor.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.humor.' + k, v); } catch (e) {} },
 };
-const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false };
+const pick = (list, id, key) => list.some(x => x[key || 'id'] === id) ? id : list[0][key || 'id'];
+let LAYOUT = pick(LAYOUTS, store.get('layout', 'x'));
+const SET = {
+  pace: Number(pick(PACES, Number(store.get('pace', '3.2')), 'sec')),
+  wall: pick(WALLS, store.get('wall', 'day')),
+  music: pick(TRACKS, store.get('music', 'jupiter')),
+};
+const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false, vfull: false, fv: null, lastDraw: 0, tracks: {} };
 const TAP = ' Press Sound for music.';
 const FEEDS = [
   ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
@@ -997,6 +1058,7 @@ function safeUrl(u) {
 }
 function draw(T) {
   if (!S.show) return;
+  S.lastDraw = performance.now();
   const shown = Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS));
   E.drawFrame(ctx, S.show, shown, S.bgs);
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
@@ -1019,6 +1081,7 @@ function musicEl() {
   if (S.el) return S.el;
   const el = document.createElement('audio');
   el.preload = 'auto';
+  el.loop = true;
   el.setAttribute('playsinline', '');
   const blob = new Blob([S.music], { type: 'audio/mp4' });
   S.musicUrl = URL.createObjectURL(blob);
@@ -1179,12 +1242,60 @@ function toggle() {
   say('Playing.');
 }
 function realFull() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
-function fullOn() { return !!(realFull() || S.pseudo); }
-/* S.pseudo is the page's own full screen, for browsers without the Fullscreen API
-   (iPhone Safari, the X app). The CSS for .pseudo fills the screen with the portrait picture. */
+function fullOn() { return !!(realFull() || S.pseudo || S.vfull); }
+/* The browser's Fullscreen API, when it has one that works (PC, Android, iPad). */
+function fsApi() {
+  const node = $('watch');
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  return req && allowed !== false ? req : null;
+}
+/* iPhone Safari and the X app have no Fullscreen API for a page, but a video can go full screen.
+   The canvas is copied into a muted video behind it, and Full screen opens that video in the
+   system player. The music keeps playing from the page. */
+function setupVideoFull() {
+  if (fsApi() || S.fv) return;
+  const cv = $('cv');
+  const v = document.createElement('video');
+  if (typeof v.webkitEnterFullscreen !== 'function' || typeof cv.captureStream !== 'function') return;
+  let stream = null;
+  try { stream = cv.captureStream(30); } catch (e) { console.warn(e); return; }
+  v.id = 'fsv';
+  v.muted = true;
+  v.defaultMuted = true;
+  v.playsInline = true;
+  v.setAttribute('muted', '');
+  v.setAttribute('playsinline', '');
+  v.setAttribute('webkit-playsinline', '');
+  v.setAttribute('aria-hidden', 'true');
+  v.srcObject = stream;
+  cv.parentNode.insertBefore(v, cv);
+  S.fv = v;
+  const kick = () => { if (v.paused && !S.vfull) { const r = v.play(); if (r && r.catch) r.catch(() => {}); } };
+  kick();
+  /* Low Power Mode blocks the first start; any tap on the page tries again. */
+  window.addEventListener('pointerdown', kick, true);
+  v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
+  v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
+  /* Pause and play in the system player pause and play the video and the music. */
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) toggle(); }, 300); });
+  v.addEventListener('play', () => { if (S.vfull && !S.playing) toggle(); });
+}
+function videoFull() {
+  const v = S.fv;
+  if (!v || v.readyState < 1 || typeof v.webkitEnterFullscreen !== 'function') return false;
+  try {
+    const r = v.play();
+    if (r && r.catch) r.catch(() => {});
+    v.webkitEnterFullscreen();
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+/* S.pseudo is the page's own full screen, the last resort when neither works.
+   The CSS for .pseudo fills the window with the portrait picture. */
 function paintFull() {
   const on = fullOn();
-  $('watch').classList.toggle('is-full', on);
+  $('watch').classList.toggle('is-full', !!(realFull() || S.pseudo));
   $('watch').classList.toggle('pseudo', !!S.pseudo);
   document.body.classList.toggle('lock', !!S.pseudo);
   $('full').textContent = on ? 'Exit' : 'Full screen';
@@ -1198,17 +1309,19 @@ function waitFullChange(ms) {
   });
 }
 async function enterFull() {
+  if (sheetOpen()) showSheet(false);
   const node = $('watch');
-  const req = node.requestFullscreen || node.webkitRequestFullscreen;
-  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-  if (req && allowed !== false) {
+  const req = fsApi();
+  /* iPhone: this must run inside the tap, before any await. */
+  if (!req && videoFull()) return;
+  if (req) {
     try {
       const r = req.call(node);
       if (r && r.then) await r; else await waitFullChange(700);
     } catch (e) { console.warn(e); }
     if (realFull()) {
       paintFull();
-      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('portrait'); } catch (e) {}
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock(LAYOUT === 'wide' ? 'landscape' : 'portrait'); } catch (e) {}
       return;
     }
   }
@@ -1217,6 +1330,10 @@ async function enterFull() {
 }
 async function exitFull() {
   if (S.pseudo) { S.pseudo = false; paintFull(); return; }
+  if (S.vfull && S.fv) {
+    try { S.fv.webkitExitFullscreen(); } catch (e) { console.warn(e); }
+    return;
+  }
   try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
   const exit = document.exitFullscreen || document.webkitExitFullscreen;
   if (exit && realFull()) {
@@ -1225,14 +1342,143 @@ async function exitFull() {
   paintFull();
 }
 function toggleFull() { return fullOn() ? exitFull() : enterFull(); }
+
+/* Rebuild the picture for a new layout or story length, keeping the place in the video. */
+function reshow() {
+  if (!S.script || !S.show) return;
+  const frac = S.show.duration ? Math.max(0, Math.min(1, currentT() / S.show.duration)) : 0;
+  S.show = E.prepare(S.script, LAYOUT);
+  sizeCanvas();
+  const T = frac * S.show.duration;
+  if (S.playing) {
+    S.origin = T;
+    S.t0perf = performance.now();
+    if (S.audioOn && S.el) { try { S.el.currentTime = Math.max(0, (isFinite(S.el.duration) ? S.el.duration : 40) - S.show.duration + T); } catch (e) {} }
+  }
+  $('seek').value = String(Math.round(frac * 1000));
+  draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
+}
+function redraw() { if (S.show && !S.playing) draw(currentT()); }
+function paintLayout() { document.body.classList.toggle('land', LAYOUT === 'wide'); }
+function paintOpts() {
+  const mark = (box, key, val) => document.querySelectorAll('#' + box + ' button').forEach(b => {
+    const on = b.dataset[key] === String(val);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  mark('optLayout', 'v', LAYOUT);
+  mark('optPace', 'v', SET.pace);
+  mark('optWall', 'v', SET.wall);
+  mark('optMusic', 'v', SET.music);
+}
+function setLayout(id) {
+  LAYOUT = pick(LAYOUTS, id);
+  store.set('layout', LAYOUT);
+  paintLayout();
+  reshow();
+  paintOpts();
+}
+function setPace(sec) {
+  SET.pace = Number(pick(PACES, Number(sec), 'sec'));
+  store.set('pace', String(SET.pace));
+  E.setDuration(SET.pace);
+  reshow();
+  paintOpts();
+}
+function setWall(id) {
+  SET.wall = pick(WALLS, id);
+  store.set('wall', SET.wall);
+  E.setWallpaper(SET.wall);
+  redraw();
+  paintOpts();
+}
+async function trackBytes(t) {
+  if (!t.file) return S.tracks.jupiter || (S.tracks.jupiter = b64bytes(ASSETS.track));
+  if (S.tracks[t.id]) return S.tracks[t.id];
+  const res = await fetch('../assets/' + t.file);
+  if (!res.ok) throw new Error('Could not load ' + t.name);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  S.tracks[t.id] = bytes;
+  return bytes;
+}
+async function setMusic(id) {
+  const t = TRACKS.find(x => x.id === id) || TRACKS[0];
+  SET.music = t.id;
+  store.set('music', t.id);
+  paintOpts();
+  let bytes;
+  try { bytes = await trackBytes(t); } catch (e) {
+    console.warn(e);
+    if (SET.music !== t.id) return;
+    say('Could not load ' + t.name + '. Jupiter plays instead.', true);
+    if (t.id !== 'jupiter') setMusic('jupiter');
+    return;
+  }
+  if (SET.music !== t.id) return;
+  S.music = bytes;
+  E.setMusicCredit(t.credit);
+  redraw();
+  if (!S.el) return;
+  /* The same audio element keeps playing, so iPhone still allows it after the change. */
+  const was = S.audioOn;
+  try { S.el.pause(); } catch (e) {}
+  if (S.musicUrl) { try { URL.revokeObjectURL(S.musicUrl); } catch (e) {} }
+  S.musicUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/mp4' }));
+  S.el.src = S.musicUrl;
+  try { S.el.load(); } catch (e) {}
+  S.audioOn = false;
+  paintSound();
+  if (was && S.playing && !S.mute) {
+    await new Promise(r => { S.el.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 3000); });
+    if (SET.music === t.id && S.playing && !S.mute) playSound(currentT());
+  }
+}
+function buildOpts() {
+  const fill = (box, list, val, label, fn) => {
+    const el = $(box);
+    el.innerHTML = '';
+    list.forEach(x => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.v = String(x[val]);
+      b.textContent = x[label];
+      b.onclick = () => fn(x[val]);
+      el.appendChild(b);
+    });
+  };
+  fill('optLayout', LAYOUTS, 'id', 'name', setLayout);
+  fill('optPace', PACES, 'sec', 'name', setPace);
+  fill('optWall', WALLS, 'id', 'name', setWall);
+  fill('optMusic', TRACKS, 'id', 'name', setMusic);
+  paintOpts();
+}
+function sheetOpen() { return !$('sheet').hidden; }
+function showSheet(on) {
+  $('sheet').hidden = !on;
+  $('gear').classList.toggle('on', !!on);
+  $('gear').setAttribute('aria-expanded', on ? 'true' : 'false');
+}
 $('play').onclick = toggle;
 $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
 document.addEventListener('fullscreenchange', paintFull);
 document.addEventListener('webkitfullscreenchange', paintFull);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.pseudo) exitFull(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (sheetOpen()) showSheet(false);
+  else if (S.pseudo) exitFull();
+});
+/* While the system player covers the page, the browser may stop animation frames. Keep drawing. */
+setInterval(() => {
+  if (!S.vfull || !S.playing || performance.now() - S.lastDraw < 80) return;
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+  tick();
+}, 40);
+setupVideoFull();
 $('update').onclick = () => runAll();
 $('home').onclick = () => { window.scrollTo(0, 0); runAll(); };
 $('sound').onclick = () => toggleSound();
+$('gear').onclick = () => showSheet(!sheetOpen());
+$('sheetDone').onclick = () => showSheet(false);
 $('seek').addEventListener('input', () => {
   if (!S.show) return;
   const T = (+$('seek').value / 1000) * S.show.duration;
@@ -1259,8 +1505,8 @@ function pullEnd(go) {
 }
 function pullBegin(target, y, kind) {
   if (pull) pullEnd(false);
-  if (fullOn() || window.scrollY > 8) return;
-  if (target && target.closest && target.closest('button, a, input, .ctl')) return;
+  if (fullOn() || sheetOpen() || window.scrollY > 8) return;
+  if (target && target.closest && target.closest('button, a, input, .ctl, .sheet')) return;
   pull = { y, kind, dy: 0, dead: false };
 }
 function pullMove(y) {
@@ -1290,9 +1536,16 @@ window.addEventListener('pointerup', e => { if (pull && pull.kind === 'mouse' &&
 window.addEventListener('pointercancel', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') pullEnd(false); });
 window.addEventListener('blur', () => { if (pull) pullEnd(false); });
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing }) };
-E.setWallpaper('day');
-E.setMusicCredit('Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons');
-loadAssets().then(() => { window.NS.ready = true; runAll(); }).catch(e => { window.NS.ready = true; say(e.message || String(e), true); });
+E.setWallpaper(SET.wall);
+E.setDuration(SET.pace);
+E.setMusicCredit(TRACKS[0].credit);
+paintLayout();
+buildOpts();
+loadAssets().then(() => {
+  window.NS.ready = true;
+  if (SET.music !== 'jupiter') setMusic(SET.music);
+  runAll();
+}).catch(e => { window.NS.ready = true; say(e.message || String(e), true); });
 </script>
 </body>
 </html>
