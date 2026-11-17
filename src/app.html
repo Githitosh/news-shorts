@@ -43,7 +43,6 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .picks button { flex: 1 1 100%; }
 #keySlot { flex: 1 1 100%; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
-.pace-note { text-align: center; max-width: 400px; margin: 4px auto 0; }
 #lineupGo, #applyLine, #backVideo { width: 100%; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
@@ -288,7 +287,8 @@ const TRACKS = [
   { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
-const LOOK = { uniform: true, jp: 2 };
+/* lang: the date line at the top is in the chosen language only. */
+const LOOK = { uniform: true, jp: 2, get lang() { const el = document.getElementById('lang'); return el && el.value === 'en' ? 'en' : 'ja'; } };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 

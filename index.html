@@ -43,7 +43,6 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .picks button { flex: 1 1 100%; }
 #keySlot { flex: 1 1 100%; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
-.pace-note { text-align: center; max-width: 400px; margin: 4px auto 0; }
 #lineupGo, #applyLine, #backVideo { width: 100%; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
@@ -2810,7 +2809,10 @@ function prepare(script, preset, opts) {
   if (OPT.uniform) uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
+    /* The line at the top: Japanese only, English only, or both when the page does not say. */
+    header: OPT.lang === 'ja' ? `${y}年${mo}月${da}日 速報ニュース`
+      : OPT.lang === 'en' ? `${pad2(da)}-${pad2(mo)}-${y} News Shorts`
+      : `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
   };
 }
 
@@ -3040,7 +3042,8 @@ const TRACKS = [
   { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
-const LOOK = { uniform: true, jp: 2 };
+/* lang: the date line at the top is in the chosen language only. */
+const LOOK = { uniform: true, jp: 2, get lang() { const el = document.getElementById('lang'); return el && el.value === 'en' ? 'en' : 'ja'; } };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
@@ -5909,7 +5912,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '8f2938260952';
+  const BUILD = '5dae23105b66';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
