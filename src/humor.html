@@ -74,7 +74,7 @@ button:disabled { opacity: .45; cursor: default; }
 .studio { display: grid; gap: 12px; margin-top: 16px; }
 .studio:not([hidden]) { position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; top: var(--header-h, 64px); margin: 0; padding: 8px 16px calc(92px + env(safe-area-inset-bottom)); overflow: auto; background: var(--bg); }
 .studio > * { width: 100%; max-width: 640px; margin-left: auto; margin-right: auto; }
-.studio-bar { position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--bg); }
+.studio-bar { position: sticky; top: -8px; z-index: 2; padding: 12px 0 8px; margin-top: -8px; background: var(--bg); }
 #backVideo, #lineupGo, #applyLine { width: 100%; }
 .back-dock { position: fixed; z-index: 60; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; background: var(--acc); color: var(--on); border-color: var(--acc); font-size: 17px; padding: 14px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
@@ -106,6 +106,8 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 button.primary { background: var(--acc); color: var(--on); border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
+.hides { margin-top: 12px; }
+.hides button { flex: 1 1 40%; }
 pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace; color: var(--ink); margin: 0 0 8px; }
 #out { display: none; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 #out.show { display: flex; }
@@ -181,10 +183,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics&#10;Sports&#10;Romance&#10;Jokes"></textarea>
-      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for the genres below.</p>
+      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for a mix of all genres.</p>
       <button id="applyLine" type="button">Apply lineup</button>
-      <div id="genres" class="filters"></div>
-      <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
+      <div class="music hides">
+        <button type="button" id="hideViolent" aria-pressed="true">Hide violence</button>
+        <button type="button" id="hideSensitive" aria-pressed="false">Hide sensitive posts</button>
+      </div>
+      <p class="note">A lit button hides those posts.</p>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X accounts</label>
@@ -505,15 +510,8 @@ function addAccount() {
   refreshMarket();
 }
 function savedJson(key) { try { return JSON.parse(store.get(key, '{}')) || {}; } catch (e) { return {}; } }
-function genreChoices() {
-  const saved = savedJson('genres');
-  return GENRES.map(g => {
-    const box = document.querySelector('.genre[value="' + g.id + '"]');
-    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
-    const rec = saved[g.id] || {};
-    return { ...g, on: box ? box.checked : rec.on !== false, place: (place && place.value) || rec.place || g.place };
-  });
-}
+/* Every genre is used, in its usual place; the lineup chooses what to play. */
+function genreChoices() { return GENRES.map(g => ({ ...g, on: true })); }
 /* Sources taken out of the settings (NHK, Asahi, Yomiuri, AP, CNN, The New York Times):
    never read, and their stories are skipped. Abroad means BBC, ABC and Reuters only. */
 const GONE = new Set(['nhk', 'asahi', 'yomiuri', 'ap', 'cnn', 'nyt']);
@@ -548,58 +546,31 @@ function sourceId(row) {
   if (/yomiuri|読売/i.test(s)) return 'yomiuri';
   return 'web';
 }
-function violentHidden() { return $('hideViolent').checked; }
+function violentHidden() { return $('hideViolent').classList.contains('on'); }
+/* Sensitive: posts X marks as sensitive, suggestive words and emoji, and hard news
+   (death, accidents, disasters, illness, bullying, discrimination). Off unless chosen. */
+const SENSITIVE = /🔞|🍆|🍑|😏|💋|👅|寝かさない|抱いて|抱かれ|夜這い|ベッドで|一緒にお風呂|色っぽ|セクシー|えちえち|死(?!ぬほど|ぬかと|んだ笑)|亡くな|遺体|事故|災害|震災|地震|津波|火災|病気|闘病|入院|がん|癌|自殺|自死|いじめ|虐待|差別|\bsexy\b|\bspicy\b|\bnaughty\b|\bin bed\b|\bdied\b|\bdeath\b|\bcrash\b|\bdisaster\b|\bcancer\b|\bsuicide\b|\bbull(?:y|ied|ying)\b|\bracis/i;
+function sensitiveHidden() { return $('hideSensitive').classList.contains('on'); }
+function sensitive(text, st) { return sensitiveHidden() && (SENSITIVE.test(String(text || '')) || !!(st && (st.possibly_sensitive || st.sensitive))); }
 function saveFilters() {
-  const genres = {};
-  GENRES.forEach(g => {
-    const box = document.querySelector('.genre[value="' + g.id + '"]');
-    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
-    genres[g.id] = { on: !!(box && box.checked), place: place ? place.value : g.place };
-  });
-  store.set('genres', JSON.stringify(genres));
   const sources = {};
   SOURCES.forEach(s => {
     const box = document.querySelector('.srcf[value="' + s.id + '"]');
     sources[s.id] = !!(box && box.checked);
   });
   store.set('sourcesOn', JSON.stringify(sources));
-  store.set('hideViolent', $('hideViolent').checked ? '1' : '0');
+  store.set('hideViolent', violentHidden() ? '1' : '0');
+  store.set('hideSensitive', sensitiveHidden() ? '1' : '0');
 }
 function buildFilters() {
-  const savedG = savedJson('genres');
   const savedS = savedJson('sourcesOn');
-  const box = $('genres');
-  GENRES.forEach(g => {
-    const row = document.createElement('div');
-    row.className = 'filter-row';
-    const lab = document.createElement('label');
-    lab.className = 'check';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.className = 'genre';
-    input.value = g.id;
-    input.checked = !savedG[g.id] || savedG[g.id].on !== false;
-    lab.appendChild(input);
-    lab.appendChild(document.createTextNode(g.name));
-    const sel = document.createElement('select');
-    sel.className = 'place';
-    sel.dataset.genre = g.id;
-    [['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']].forEach(([value, name]) => {
-      const o = document.createElement('option');
-      o.value = value;
-      o.textContent = name;
-      sel.appendChild(o);
-    });
-    sel.value = (savedG[g.id] && savedG[g.id].place) || g.place;
-    const changed = () => { saveFilters(); refreshMarket(); };
-    input.onchange = changed;
-    sel.onchange = changed;
-    row.append(lab, sel);
-    box.appendChild(row);
+  /* Hide violence starts on, as Humor always did; Hide sensitive posts starts off. */
+  [['hideViolent', '1'], ['hideSensitive', '0']].forEach(([id, d]) => {
+    const b = $(id);
+    const paint = on => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+    paint(store.get(id, d) === '1');
+    b.onclick = () => { paint(!b.classList.contains('on')); saveFilters(); refreshMarket(); };
   });
-  /* Humor has always hidden violent stories, so this starts on. */
-  $('hideViolent').checked = store.get('hideViolent', '1') === '1';
-  $('hideViolent').onchange = () => { saveFilters(); refreshMarket(); };
   const sbox = $('sourceFilters');
   let group = '';
   SOURCES.forEach(s => {
@@ -757,7 +728,7 @@ function rowFromStatus(st) {
   if (!st || (st.type && st.type !== 'status')) return null;
   const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
   const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!author || text.length < 12 || (violentHidden() && VIOLENT.test(text))) return null;
+  if (!author || text.length < 12 || (violentHidden() && VIOLENT.test(text)) || sensitive(text, st)) return null;
   return { headline: text.slice(0, 480), link: st.url || ('https://x.com/' + author), pubDate: st.created_at || '', cat: 'X', source: 'X @' + author, x: true };
 }
 async function searchPosts(query) {
@@ -832,6 +803,7 @@ function requestForGenre(g) {
 function allowedRow(r) {
   if (!r || !r.headline) return false;
   if (violentHidden() && VIOLENT.test(r.headline)) return false;
+  if (sensitive(r.headline)) return false;
   return sourceOn(sourceId(r));
 }
 async function rowsForSlot(slot) {
@@ -945,6 +917,7 @@ function replyOf(st, lang) {
   let text = postText(st);
   if (UNSAFE.test(text)) return null;
   if (violentHidden() && VIOLENT.test(text)) return null;
+  if (sensitive(text, st)) return null;
   if (lang === 'en') {
     if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{3,}/.test(text) || text.length < 12) return null;
     if (/\b(rip|rest in peace|condolences|passed away)\b/i.test(text)) return null;
@@ -1099,7 +1072,7 @@ const LONG = { ja: 60, en: 180 };
 const UNSAFE_ROMANCE = /浮気|不倫|別れ|離婚|ブロック|死ね|殺|嫌い|最低|ストーカー|cheat|divorce|break ?up|hate you/i;
 function romanceText(st, lang) {
   const text = postText(st);
-  if (!text || UNSAFE.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text)) return '';
+  if (!text || UNSAFE.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || sensitive(text, st)) return '';
   if (lang === 'en') {
     if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{2,}/.test(text) || text.length < 4) return '';
   } else if ((text.match(/[぀-ヿ]/g) || []).length < 1 || [...text].length < 2) return '';
@@ -1293,7 +1266,7 @@ async function collectTravel(need, place) {
     const handle = handleOf(st);
     const raw = String((st && st.text) || '');
     const text = postText(st);
-    if (!handle || !text || UNSAFE.test(text) || VIOLENT.test(text) || NOT_TRIP.test(raw)) return;
+    if (!handle || !text || UNSAFE.test(text) || VIOLENT.test(text) || NOT_TRIP.test(raw) || sensitive(text, st)) return;
     if ((raw.match(/[#＃]/g) || []).length > 3) return;
     const spot = spots.find(([n]) => raw.toLowerCase().includes(n.toLowerCase()));
     if (!spot || seenSpot.has(spot[0]) || !WOW[lang].test(text)) return;
