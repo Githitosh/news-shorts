@@ -3,14 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f7f1e6">
+<meta name="theme-color" content="#ffffff">
+<script>/* The chosen color, before the page draws, so it does not flash another color. */
+try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'white'; } catch (e) {}</script>
 <title>Humor</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@700;900&family=Tinos:wght@700&display=swap" rel="stylesheet">
 <style>
-:root { --bg:#f7f1e6; --card:#fffaf2; --line:#e4d8c4; --ink:#1c140c; --mute:#6d6458; --acc:#9a5b12; --field:#ffffff; }
+:root { --bg:#ffffff; --card:#f6f6f7; --line:#e1e2e6; --ink:#16181c; --mute:#62666d; --acc:#e0531f; --field:#ffffff; --on:#ffffff; --frame:#f2f3f5; }
+/* Colors, chosen in Settings. White is the default. */
+:root[data-theme="beige"] { --bg:#f7f1e6; --card:#fffaf2; --line:#e4d8c4; --ink:#1c140c; --mute:#6d6458; --acc:#9a5b12; --field:#ffffff; --on:#fffaf2; --frame:#f4efe4; }
+:root[data-theme="pink"] { --bg:#fff6f9; --card:#ffffff; --line:#f2d4df; --ink:#2b1620; --mute:#7c5e6a; --acc:#d6457a; --field:#ffffff; --on:#ffffff; --frame:#fdeef3; }
+:root[data-theme="sky"] { --bg:#f3f8fd; --card:#ffffff; --line:#d3e2f2; --ink:#10202f; --mute:#58697a; --acc:#2a7bc8; --field:#ffffff; --on:#ffffff; --frame:#eaf2fa; }
+:root[data-theme="mint"] { --bg:#f2fbf7; --card:#ffffff; --line:#cfe9dd; --ink:#11231b; --mute:#56706a; --acc:#1f9a6a; --field:#ffffff; --on:#ffffff; --frame:#e6f5ee; }
+:root[data-theme="dark"] { --bg:#111214; --card:#1b1c1f; --line:#2d2f34; --ink:#f1f2f4; --mute:#9ea3ab; --acc:#f0c36b; --field:#15161a; --on:#151515; --frame:#1b1c1f; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
@@ -19,7 +27,7 @@ header .pull { display: block; color: var(--mute); font-size: 12px; letter-spaci
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
 .hright { display: flex; align-items: center; gap: 12px; }
 #gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
-#gear.on { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+#gear.on { background: var(--acc); border-color: var(--acc); color: var(--on); }
 main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
 /* The portrait video is as tall as the screen allows, leaving room for the title and the buttons. */
 .frame { width: min(100%, max(280px, calc((100vh - 150px) * 9 / 16))); width: min(100%, max(280px, calc((100dvh - 150px) * 9 / 16))); }
@@ -29,15 +37,15 @@ main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100
 /* PC layout: landscape, as wide as the page and the screen height allow. */
 .land .frame { width: min(100%, max(320px, calc((100vh - 150px) * 16 / 9))); width: min(100%, max(320px, calc((100dvh - 150px) * 16 / 9))); }
 .land canvas#cv { aspect-ratio: 16 / 9; }
-canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
+canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: var(--frame); border-radius: 12px; }
 /* iPhone: a copy of the picture as a video, behind the canvas, for the system full-screen player. */
-video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 12px; background: #f4efe4; }
+video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 12px; background: var(--frame); }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen. */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
 .watch.is-full canvas#cv { width: 100%; height: 100%; object-fit: contain; aspect-ratio: auto; border-radius: 0; }
 .watch.is-full .ctl { flex: none; width: 100%; max-width: 640px; }
-.watch.is-full .ctl #update { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+.watch.is-full .ctl #update { background: var(--acc); border-color: var(--acc); color: var(--on); }
 .watch.is-full .ctl input[type=range] { flex-basis: 100%; }
 .watch.is-full .source-url { flex: none; }
 .watch.pseudo { position: fixed; top: 0; left: 0; z-index: 100; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; }
@@ -47,13 +55,13 @@ body.lock { overflow: hidden; }
 .ctl button { white-space: nowrap; padding: 10px 11px; font-size: 14px; }
 /* Sound: lit while the music plays, outlined while the video plays without it. */
 button#sound.ask { border-color: var(--acc); color: var(--acc); }
-button#sound.on { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+button#sound.on { background: var(--acc); border-color: var(--acc); color: var(--on); }
 /* On a narrow phone the seek bar and time move to a second row instead of running off the screen. */
 .ctl input[type=range] { flex: 1 1 200px; min-width: 0; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; font-size: 13px; }
 button, .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
 button:disabled { opacity: .45; cursor: default; }
-.music button.on, .row button.on, #genreChips button.on, #xAccounts button { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
+.music button.on, .row button.on, #genreChips button.on, #xAccounts button { background: var(--acc); border-color: var(--acc); color: var(--on); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin-top: 10px; margin-bottom: 0; }
 .caption.err { color: #9a3b28; }
 #prog { height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -68,7 +76,7 @@ button:disabled { opacity: .45; cursor: default; }
 .studio > * { width: 100%; max-width: 640px; margin-left: auto; margin-right: auto; }
 .studio-bar { position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--bg); }
 #backVideo, #lineupGo, #applyLine { width: 100%; }
-.back-dock { position: fixed; z-index: 60; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; background: var(--acc); color: #fffaf2; border-color: var(--acc); font-size: 17px; padding: 14px; }
+.back-dock { position: fixed; z-index: 60; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; background: var(--acc); color: var(--on); border-color: var(--acc); font-size: 17px; padding: 14px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 #status { min-height: 1.6em; color: var(--ink); font-size: 14px; margin-top: 10px; white-space: pre-wrap; }
 #status.err { color: #9a3b28; }
@@ -95,7 +103,7 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .filter-row { display: flex; align-items: center; gap: 8px; }
 .filter-row .check { margin: 0; flex: 1; }
 .filter-row select { width: 7.2em; }
-button.primary { background: var(--acc); color: #fffaf2; border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
+button.primary { background: var(--acc); color: var(--on); border-color: var(--acc); width: 100%; font-size: 17px; padding: 14px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row > * { flex: 1 1 auto; }
 pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace; color: var(--ink); margin: 0 0 8px; }
@@ -150,6 +158,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <option value="youtube">YouTube</option>
         <option value="pc">PC</option>
       </select>
+      <label for="theme">Color</label>
+      <select id="theme">
+        <option value="white">White</option>
+        <option value="beige">Beige</option>
+        <option value="pink">Pink</option>
+        <option value="sky">Sky blue</option>
+        <option value="mint">Mint</option>
+        <option value="dark">Dark</option>
+      </select>
       <label for="country">Country</label>
       <select id="country"></select>
       <label for="lang">Language</label>
@@ -164,7 +181,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics&#10;Sports&#10;Romance&#10;Jokes"></textarea>
-      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.</p>
+      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for the genres below.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -2138,6 +2155,8 @@ const JA = {
   'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',
   'These settings are for Humor only. News keeps its own.': 'この設定はユーモア専用です。ニュースには別の設定があります。',
+  'Color': '色', 'White': '白', 'Beige': 'ベージュ', 'Pink': 'ピンク', 'Sky blue': '水色', 'Mint': 'ミント', 'Dark': 'ダーク',
+  'Travel': '観光', 'Searching famous places on X': 'Xで観光地の投稿を探しています',
   'Layout': 'レイアウト', 'Auto': '自動', 'Phone': 'スマホ', 'X': 'X', 'YouTube': 'YouTube', 'PC': 'PC',
   'Country': '国', 'Japan': '日本', 'United States': 'アメリカ',
   'Language': '言語', 'English': '英語', 'Japanese': '日本語', 'Both': '両方',
@@ -2149,8 +2168,8 @@ const JA = {
   'Genres': 'ジャンル', 'Lineup': 'ラインナップ', 'Apply lineup': 'ラインナップを反映',
   'One request on each line. The number of stories comes from Items under the video.':
     '1行に1つずつ書きます。本数は動画の下の「表示数」で決まります。',
-  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
-    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
+  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment and what it is about. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
+    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。「観光」は観光地での投稿を入れます（右上に「観光」と表示）。コメントは、まず短いひと言を出し、次にコメント全体と、何についての投稿かを出します。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
   'Space': '宇宙', 'Politics': '政治', 'Science': '科学', 'Culture': '文化', 'Local': '地域', 'Entertainment': 'エンタメ',
   'Public safety': '治安', 'Sports': 'スポーツ', 'Food': '食', 'Restaurant': 'レストラン', 'Romance': '恋愛',
   'Musk X': 'マスク氏のX', 'SpaceX': 'SpaceX', 'Nikkei': '日経', 'ABC': 'ABC', 'Jokes': 'ジョーク',
@@ -3033,6 +3052,7 @@ const GENRES = [
   { id: 'food', name: 'Food', place: 'bottom', q: { JP: '食べ物', US: 'food' } },
   { id: 'restaurant', name: 'Restaurant', place: 'bottom', q: { JP: 'レストラン', US: 'restaurant' } },
   { id: 'romance', name: 'Romance', place: 'middle', q: { JP: '恋愛', US: 'dating relationship' } },
+  { id: 'travel', name: 'Travel', place: 'middle', q: { JP: '観光', US: 'travel sightseeing' } },
 ];
 const SOURCES = [
   { id: 'x', name: 'X', group: 'X and web' },
@@ -3075,6 +3095,7 @@ const CHIPS = [
   { label: 'Food', line: 'Food' },
   { label: 'Restaurant', line: 'Restaurant' },
   { label: 'Romance', line: 'Romance' },
+  { label: 'Travel', line: 'Travel' },
   { label: 'Musk X', line: 'Musk X' },
   { label: 'SpaceX', line: 'SpaceX' },
   { label: 'Nikkei', line: 'Nikkei' },
@@ -3521,6 +3542,7 @@ function classifyRequest(text) {
   const low = name.toLowerCase();
   if (/joke|humou?r|funny|coffee|ジョーク|笑い|ユーモア|ネタ|コーヒー/.test(low)) return { type: 'jokes', label: name };
   if (/romance|love|couple|dating|恋愛|カップル|恋人|夫婦/.test(low)) return { type: 'romance', cat: 'ROMANCE', label: name };
+  if (/travel|trip|tourism|sightseeing|観光|旅行|名所/.test(low)) return { type: 'travel', cat: 'TRAVEL', label: name };
   if (/マスク|elon|\bmusk\b/.test(low)) return { type: 'x', q: 'from:elonmusk', who: 'elonmusk', topic: 'Elon Musk', cat: 'X', label: name };
   if (/spacex|スペース\s*x|スペースｘ/.test(low)) return { type: 'x', q: 'from:SpaceX', who: 'spacex', topic: 'SpaceX', cat: 'SPACEX', label: name };
   if (/(?:^|\s)x\s*$|エックス\s*$|twitter\s*$/i.test(name)) {
@@ -3549,6 +3571,7 @@ function requestForGenre(g) {
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: q, cat: 'SPACE', source: 'BBC', label: name };
   if (g.id === 'local') return { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name };
   if (g.id === 'romance') return { type: 'romance', cat: 'ROMANCE', label: name };
+  if (g.id === 'travel') return { type: 'travel', cat: 'TRAVEL', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q, cat: name.toUpperCase(), source: 'News', label: name };
 }
@@ -3975,6 +3998,108 @@ function romanceCards(r, langId) {
   ];
 }
 
+/* ---------- travel: what people say at famous places ---------- */
+const SPOTS = {
+  ja: [
+    ['兼六園', '石川・金沢'], ['ひがし茶屋街', '石川・金沢'], ['金沢21世紀美術館', '石川・金沢'], ['白川郷', '岐阜'],
+    ['金閣寺', '京都'], ['清水寺', '京都'], ['伏見稲荷', '京都'], ['嵐山', '京都'], ['奈良公園', '奈良'], ['東大寺', '奈良'],
+    ['富士山', '静岡・山梨'], ['河口湖', '山梨'], ['東京タワー', '東京'], ['スカイツリー', '東京'], ['浅草寺', '東京'], ['雷門', '東京・浅草'],
+    ['日光東照宮', '栃木'], ['鎌倉大仏', '神奈川'], ['箱根', '神奈川'], ['姫路城', '兵庫'], ['厳島神社', '広島・宮島'], ['道後温泉', '愛媛'],
+    ['熊本城', '熊本'], ['美ら海水族館', '沖縄'], ['首里城', '沖縄'], ['小樽運河', '北海道'], ['函館山', '北海道'], ['旭山動物園', '北海道'],
+    ['松本城', '長野'], ['上高地', '長野'], ['銀山温泉', '山形'], ['松島', '宮城'], ['出雲大社', '島根'], ['伊勢神宮', '三重'], ['高千穂峡', '宮崎'],
+  ],
+  en: [
+    ['Grand Canyon', 'Arizona'], ['Yosemite', 'California'], ['Golden Gate Bridge', 'San Francisco'], ['Yellowstone', 'Wyoming'],
+    ['Niagara Falls', 'New York'], ['Times Square', 'New York'], ['Central Park', 'New York'], ['Statue of Liberty', 'New York'],
+    ['Zion', 'Utah'], ['Hollywood Sign', 'Los Angeles'], ['Las Vegas Strip', 'Nevada'], ['Smoky Mountains', 'Tennessee'],
+  ],
+};
+const WOW_Q = { ja: '(すごい OR すごーい OR すげー OR きれい OR 綺麗 OR 絶景 OR 最高 OR 感動)', en: '(amazing OR stunning OR beautiful OR gorgeous OR wow OR breathtaking)' };
+const WOW = {
+  ja: /すご|すげ|スゴ|きれ[いー]|綺麗|キレイ|絶景|最高|感動|美し|やば|ヤバ|映え|エモ|圧巻|幻想的/,
+  en: /\b(amazing|stunning|beautiful|gorgeous|wow+|breathtaking|incredible|unreal|insane)\b/i,
+};
+/* Posts that sell something or report news are left out; people saying what they see stay. */
+const NOT_TRIP = /PR|広告|キャンペーン|プレゼント|予約|販売|募集|ツアー|セール|クーポン|ニュース|速報|公式|\bsale\b|\bbook now\b|\bgiveaway\b|\bnews\b|\btickets?\b/i;
+async function collectTravel(need, place) {
+  if (!need || !sourceOn('x')) return [];
+  const lang = jokeLang();
+  const past = seenSet(SEEN_JOKES);
+  const now = playingKeys();
+  say('Searching famous places on X');
+  const spots = shuffle(SPOTS[lang] || SPOTS.ja);
+  const groups = [];
+  for (let i = 0; i < spots.length && groups.length < 4; i += 4) groups.push(spots.slice(i, i + 4));
+  const build = g => `(${g.map(([n]) => lang === 'en' ? '"' + n + '"' : n).join(' OR ')}) ${WOW_Q[lang]} -filter:replies -filter:retweets lang:${lang}${xRange()}`;
+  const lists = await Promise.all(groups.map(g => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(build(g))).then(d => (d && d.results) || []).catch(() => [])));
+  const rows = [];
+  const keys = new Set();
+  const seenSpot = new Set();
+  lists.flat().forEach(st => {
+    const handle = handleOf(st);
+    const raw = String((st && st.text) || '');
+    const text = postText(st);
+    if (!handle || !text || UNSAFE.test(text) || VIOLENT.test(text) || NOT_TRIP.test(raw)) return;
+    if ((raw.match(/[#＃]/g) || []).length > 3) return;
+    const spot = spots.find(([n]) => raw.toLowerCase().includes(n.toLowerCase()));
+    if (!spot || seenSpot.has(spot[0]) || !WOW[lang].test(text)) return;
+    const n = charLen(text);
+    if (lang === 'ja' ? (n < 4 || n > 80 || !/[぀-ヿ]/.test(text)) : (n < 8 || n > 180)) return;
+    const url = st.url || '';
+    const ks = jokeKeys({ text, link: url });
+    if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
+    ks.forEach(k => keys.add(k));
+    seenSpot.add(spot[0]);
+    rows.push({ handle, text, url, spot: spot[0], where: spot[1], lang, score: (n <= 30 ? 4 : 0) + (/[\p{Extended_Pictographic}]/u.test(text) ? 1 : 0) });
+  });
+  return rows.sort((a, b) => b.score - a.score).slice(0, need)
+    .map(t => ({ headline: t.text, text: t.text, link: t.url, source: 'X @' + t.handle, x: true, cat: 'TRAVEL', joke: true, travel: true, spot: t.spot, where: t.where, place: place || 'middle' }));
+}
+
+/* ---------- two cards for each comment ---------- */
+/* The first card shows the short part (すごーい), the second the whole comment
+   (兼六園の雪吊りすごーい) with a line on where it was said or what it answers. */
+const REACT = {
+  ja: /(?:すご[ーぉおいっ〜~]*い?|すげ[ーぇえっ]*|スゴ[ーイい]*|やば[いぁーっ]*|ヤバ[いイー]*|かわい[いー〜]*|可愛[いー]*|きれ[いー]+|綺麗|キレイ|美し[いー]*|最高|さいこう|絶景|感動|圧巻|エモ[いー]*|尊[いー]*|うま[いー]+|美味し[いー]*|おいし[いー]*|楽し[いー]*|たのし[いー]*|ワロタ|爆笑|笑笑|ウケる|面白[いー]*|おもしろ[いー]*|草)[^、。！？!?\n]{0,6}[！!？?〜~ーｗw笑✨♪…]*[\s\p{Extended_Pictographic}‍️]*$/u,
+  en: /\b(?:wow+|omg|amazing|stunning|beautiful|gorgeous|breathtaking|incredible|insane|lol+|lmao+|haha\w*)\b[^.!?\n]{0,20}[.!?]*[\s\p{Extended_Pictographic}‍️]*$/iu,
+};
+function teaserOf(text, lang) {
+  const t = String(text || '').trim();
+  const n = charLen(t);
+  const fits = x => x && charLen(x) >= 2 && charLen(x) <= (lang === 'en' ? 40 : 14) && charLen(x) <= n - 3;
+  const m = t.match(REACT[lang]);
+  if (m && fits(m[0].trim())) return m[0].trim();
+  const parts = (lang === 'en' ? t.replace(/([.!?])\s+/g, '$1\u0000').split('\u0000') : t.split(/[、。！？!?\s]+/)).map(x => x.trim()).filter(Boolean);
+  const last = parts[parts.length - 1];
+  if (parts.length > 1 && fits(last)) return last;
+  return '';
+}
+function explainOf(r, ja) {
+  if (r.travel && r.spot) return ja ? `${r.spot}（${r.where}）での投稿` : `Posted at ${r.spot}, ${r.where}`;
+  const t = String(r.topic || '').trim();
+  const to = t.match(/^to:(\w+)$/);
+  if (to) return ja ? `@${to[1]} への返信` : `A reply to @${to[1]}`;
+  if (!t || /^(ニュース|今日|話題|トレンド|news|today|trending|weird)$/i.test(t) || /[:()"]/.test(t)) return '';
+  return ja ? `「${t}」の話題への返信` : `A reply about “${t}”`;
+}
+function beats(r, card, langId) {
+  const ja = langId !== 'en' && CJK.test(card.head.join('') + (card.jp[0] || ''));
+  const text = ja ? (r._shownJa || r.headline) : (r._shownEn || r.headline);
+  const lang = ja ? 'ja' : 'en';
+  const corner = r.travel ? (ja ? '観光' : 'TRAVEL') : card.topic;
+  const main = { ...card, topic: corner, cat: r.travel ? 'TRAVEL' : card.cat, jp: card.jp.slice(), _main: true };
+  const why = explainOf(r, ja);
+  const tease = teaserOf(text, lang);
+  if (tease) {
+    if (why) main.jp.push(why);
+    const bare = tease.replace(/[\p{Extended_Pictographic}\u200d\ufe0f!！?？〜~…✨♪\s\d]/gu, '');
+    const kw = bare && charLen(bare) <= 6 ? bare : (ja ? jaWord(tease) : storyWord(tease, ''));
+    return [{ ...card, topic: corner, cat: main.cat, kw, head: [tease], sub: [], jp: [] }, main];
+  }
+  if (why) return [main, { ...card, topic: corner, cat: main.cat, kw: ja ? jaWord(why) : storyWord(why, ''), head: [why], sub: [], jp: [] }];
+  return [main];
+}
+
 /* ---------- text for the picture ---------- */
 async function translateMany(texts, tl) {
   const sep = '\n###\n';
@@ -4058,20 +4183,22 @@ function storyFrom(raw, english, local, langId) {
   return { kw, cat: cat || kw, topic: kw, head, sub, jp: jp.length ? jp : [kw], tags: [], src, date: monthDay(raw.pubDate), url: raw.link || '' };
 }
 /* Translate each row into the chosen language, then make the cards. */
+/* The cards for each row, in the same order as the rows. Comments get two cards (see beats). */
 async function cardsFrom(rows, langId) {
   const plain = rows.filter(r => !r.romance);
   const toJa = langId !== 'en' ? plain.filter(r => !CJK.test(r.headline)) : [];
   const toEn = langId !== 'ja' ? plain.filter(r => CJK.test(r.headline)) : [];
   if (toJa.length) (await translateMany(toJa.map(r => r.headline), 'ja')).forEach((t, i) => { toJa[i]._ja = t; });
   if (toEn.length) (await translateMany(toEn.map(r => r.headline), 'en')).forEach((t, i) => { toEn[i]._en = t; });
-  return rows.flatMap(r => {
+  return rows.map(r => {
     if (r.romance) return romanceCards(r, langId);
     const cjk = CJK.test(r.headline);
     const en = cjk ? (r._en || '') : r.headline;
     const ja = cjk ? r.headline : (r._ja || '');
+    r._shownJa = ja; r._shownEn = en || r.headline;
     const card = storyFrom(r, en || r.headline, ja, langId);
     card.key = r.joke ? jokeKeys(r) : newsKeys(r);
-    return card;
+    return r.joke ? beats(r, card, langId) : [card];
   });
 }
 
@@ -4082,37 +4209,47 @@ async function collect() {
   const mode = feedMode();
   const N = total();
   const slots = parseLineup(lineupText());
-  const topicSlots = slots.filter(s => s.type !== 'jokes' && s.type !== 'romance');
+  const SPECIAL = new Set(['jokes', 'romance', 'travel']);
+  const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
   const used = new Set();
   let sequence = [];
   let jokeAt = -1;
   let topicWords = [];
   const topicPlace = {};
   /* Items (5, 10 or 20) is the number of cards. News, then comments gives about 40% to the reports.
-     Romance: a lineup line, or the Romance genre when the lineup has no topics, adds couples;
-     each couple is about three cards: the post, the reply, and what others said.
-     A lineup of Romance only plays couples only. */
+     Each comment is two cards: the short part, then the whole comment and what it is about.
+     Romance adds couples (the post, the reply, what others said); Travel adds what people said
+     at famous places. A lineup line asks for more of them; the genres, when the lineup has no
+     topics, add a few. A lineup of only Romance and Travel plays only those. */
   const romanceSlot = slots.find(s => s.type === 'romance');
+  const travelSlot = slots.find(s => s.type === 'travel');
   const romanceGenre = genreChoices().find(g => g.id === 'romance' && g.on);
-  const romanceOnly = !!romanceSlot && slots.every(s => s.type === 'romance');
+  const travelGenre = genreChoices().find(g => g.id === 'travel' && g.on);
+  const onlySpecial = slots.length > 0 && slots.every(s => s.type === 'romance' || s.type === 'travel');
   const newsNeed = mode === 'x' ? 0 : Math.max(1, Math.round(N * 0.4));
-  const romanceNeed = romanceOnly ? Math.min(7, Math.ceil((N - newsNeed) / 3))
-    : (romanceSlot || (!topicSlots.length && romanceGenre)) ? Math.max(1, Math.round(N / 6)) : 0;
+  const kinds = (romanceSlot ? 1 : 0) + (travelSlot ? 1 : 0);
+  const share = onlySpecial ? Math.ceil((N - newsNeed) / kinds) : 0;
+  const byGenre = !topicSlots.length;
+  const romanceNeed = onlySpecial ? (romanceSlot ? Math.min(7, Math.ceil(share / 3)) : 0)
+    : romanceSlot ? Math.max(1, Math.round(N / 6)) : (byGenre && romanceGenre) ? Math.max(1, Math.round(N / 10)) : 0;
+  const travelNeed = onlySpecial ? (travelSlot ? Math.min(10, Math.ceil(share / 2)) : 0)
+    : travelSlot ? Math.max(1, Math.round(N / 5)) : (byGenre && travelGenre) ? Math.max(1, Math.round(N / 10)) : 0;
   const romancePlace = romanceGenre ? romanceGenre.place : 'middle';
+  const travelPlace = travelGenre ? travelGenre.place : 'middle';
   if (mode === 'x') {
     /* X comments only: no reports. Funny replies about the lineup, the accounts,
        and today's news in each chosen genre, in the genres' Top, Middle, Bottom order. */
     say('Searching X');
     progress(0.1);
     topicSlots.forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
-    if (topicWords.length < 3 && !romanceOnly) {
-      const chosen = shuffle(genreChoices().filter(g => g.on && g.id !== 'romance')).slice(0, 6);
+    if (topicWords.length < 3 && !onlySpecial) {
+      const chosen = shuffle(genreChoices().filter(g => g.on && g.id !== 'romance' && g.id !== 'travel')).slice(0, 6);
       const lists = await Promise.all(chosen.map(g => searchRows(g.q[country.id] || g.q.US, up(g.name)).then(rows => rows.filter(allowedRow)).catch(() => [])));
       chosen.forEach((g, i) => {
         lists[i].slice(0, 3).forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => { topicWords.push(w); topicPlace[w] = g.place; }));
       });
     }
-    if (topicWords.length < 3 && !romanceOnly) {
+    if (topicWords.length < 3 && !onlySpecial) {
       const news = await homeNews(new Set(), 8).catch(() => []);
       news.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
     }
@@ -4123,7 +4260,7 @@ async function collect() {
     for (const slot of slots) {
       if (S.again || sequence.length >= MAX_ITEMS) break;
       if (slot.type === 'jokes') { jokeAt = sequence.length; continue; }
-      if (slot.type === 'romance') { if (jokeAt < 0) jokeAt = sequence.length; continue; }
+      if (slot.type === 'romance' || slot.type === 'travel') { if (jokeAt < 0) jokeAt = sequence.length; continue; }
       if (!slot.count) continue;
       say('Searching ' + (slot.label || slot.cat || 'news'));
       progress(0.08 + 0.4 * slots.indexOf(slot) / slots.length);
@@ -4141,38 +4278,66 @@ async function collect() {
   if (mode !== 'x') sequence.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
   say('Searching jokes');
   progress(0.55);
-  const band = { top: 0, middle: 1, bottom: 2 };
-  /* Jokes fill whatever the couples leave, so ask for enough to fill the rest on their own. */
+  /* Jokes fill whatever the couples and places leave, so ask for enough to fill the rest on their own. */
   const left0 = Math.max(0, N - sequence.length);
-  const [found, couples] = await Promise.all([
-    collectJokes(topicWords, romanceOnly ? 0 : left0, { headlines }),
+  const [found, couples, trips] = await Promise.all([
+    collectJokes(topicWords, onlySpecial ? 0 : left0, { headlines }),
     collectRomance(romanceNeed, romancePlace).catch(e => { console.warn(e); return []; }),
+    collectTravel(travelNeed, travelPlace).catch(e => { console.warn(e); return []; }),
   ]);
   /* A comment found both as a joke and under a couple plays once, as the joke. */
   const jokeKeySet = new Set(found.flatMap(j => jokeKeys({ text: j.text, link: j.url })));
-  /* Fit the cards to Items: couples first (two cards and the cheers that fit), then jokes. */
-  let left = left0;
-  const keptCouples = [];
+  const coupleKeys = r => [r.story.a, r.story.b, ...r.story.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
   couples.forEach(r => {
-    if (left < 2) return;
-    r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50))).slice(0, left - 2);
-    r.keys = [r.story.a, r.story.b, ...r.story.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
-    left -= 2 + r.story.cheers.length;
-    keptCouples.push(r);
+    r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50)));
+    r.keys = coupleKeys(r);
   });
-  const jokes = found.slice(0, left)
-    .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
-    .concat(keptCouples.map(r => ({ ...r, headline: r.story.a.text, joke: true })))
-    .sort((a, b) => band[a.place] - band[b.place]);
+  const jokeRows = found.map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, topic: j.topic, place: topicPlace[j.topic] || 'middle' }));
+  const coupleRows = couples.map(r => ({ ...r, headline: r.story.a.text, joke: true }));
   if (S.again) return null;
-  if (!sequence.length && !jokes.length) return { empty: true };
+  if (!sequence.length && !jokeRows.length && !coupleRows.length && !trips.length) return { empty: true };
   say('Reading the text');
   progress(0.75);
-  const rows = sequence.slice(0, jokeAt).concat(jokes, sequence.slice(jokeAt));
-  const items = await cardsFrom(rows, lang.id);
+  /* Fit the cards to Items: reports, couples and places first, then jokes fill the rest.
+     A comment without room for two cards keeps only the whole comment. */
+  const all = sequence.concat(coupleRows, trips, jokeRows);
+  const cards = await cardsFrom(all, lang.id);
+  if (S.again) return null;
+  let left = N;
+  all.forEach((r, i) => {
+    let c = cards[i];
+    r._cards = null;
+    if (!c.length || left <= 0) return;
+    if (c.length > left) {
+      if (r.romance) {
+        if (left < 2) return;
+        c = c.slice(0, left);
+        r.story.cheers = r.story.cheers.slice(0, left - 2);
+        r.keys = coupleKeys(r);
+        c.forEach(card => { card.key = r.keys; });
+      } else c = c.filter(card => card._main).slice(0, left);
+    }
+    if (!c.length) return;
+    r._cards = c;
+    left -= c.length;
+  });
+  /* Jokes, couples and places take turns within each band (Top, Middle, Bottom). */
+  const band = { top: 0, middle: 1, bottom: 2 };
+  const extra = [];
+  ['top', 'middle', 'bottom'].forEach(b => {
+    const lists = [jokeRows, coupleRows, trips].map(list => list.filter(r => r._cards && (band[r.place] === undefined ? 'middle' : r.place) === b));
+    for (let k = 0; lists.some(l => l.length); k++) {
+      const l = lists[k % lists.length];
+      if (l.length) extra.push(l.shift());
+    }
+  });
+  const news = sequence.filter(r => r._cards);
+  const at = Math.min(jokeAt, news.length);
+  const rows = news.slice(0, at).concat(extra, news.slice(at));
+  const items = rows.flatMap(r => r._cards);
   return {
     date: chosenDate(), items, market: country.name + ' · ' + lang.name,
-    played: { news: sequence.flatMap(newsKeys), jokes: jokes.flatMap(j => j.keys || jokeKeys(j)) },
+    played: { news: news.flatMap(newsKeys), jokes: extra.flatMap(j => j.keys || jokeKeys(j)) },
   };
 }
 function normItem(it) {
@@ -4962,6 +5127,16 @@ function initUI() {
     countBox.appendChild(b);
   });
   paintCounts();
+  const themeBox = $('theme');
+  const paintTheme = () => {
+    document.documentElement.dataset.theme = themeBox.value;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ffffff');
+  };
+  const savedTheme = store.get('theme', 'white');
+  themeBox.value = [...themeBox.options].some(o => o.value === savedTheme) ? savedTheme : 'white';
+  paintTheme();
+  themeBox.addEventListener('change', () => { store.set('theme', themeBox.value); paintTheme(); });
   const savedPace = Number(Q.get('pace') || store.get('pace', '3.2'));
   usePace(PACES.some(p => p.sec === savedPace) ? savedPace : 3.2);
   const countryBox = $('country');
