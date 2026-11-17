@@ -188,9 +188,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="applyLine" type="button">Apply lineup</button>
       <div class="music hides">
         <button type="button" id="hideViolent" aria-pressed="true">Hide violence</button>
-        <button type="button" id="hideSensitive" aria-pressed="false">Hide sensitive posts</button>
       </div>
-      <p class="note">A lit button hides those posts.</p>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X accounts</label>
@@ -548,11 +546,10 @@ function sourceId(row) {
   return 'web';
 }
 function violentHidden() { return $('hideViolent').classList.contains('on'); }
-/* Sensitive: posts X marks as sensitive, suggestive words and emoji, and hard news
-   (death, accidents, disasters, illness, bullying, discrimination). Off unless chosen. */
-const SENSITIVE = /🔞|🍆|🍑|😏|💋|👅|寝かさない|抱いて|抱かれ|夜這い|ベッドで|一緒にお風呂|色っぽ|セクシー|えちえち|死(?!ぬほど|ぬかと|んだ笑)|亡くな|遺体|事故|災害|震災|地震|津波|火災|病気|闘病|入院|がん|癌|自殺|自死|いじめ|虐待|差別|\bsexy\b|\bspicy\b|\bnaughty\b|\bin bed\b|\bdied\b|\bdeath\b|\bcrash\b|\bdisaster\b|\bcancer\b|\bsuicide\b|\bbull(?:y|ied|ying)\b|\bracis/i;
-function sensitiveHidden() { return $('hideSensitive').classList.contains('on'); }
-function sensitive(text, st) { return sensitiveHidden() && (SENSITIVE.test(String(text || '')) || !!(st && (st.possibly_sensitive || st.sensitive))); }
+/* Sensitive posts never play: posts X marks as sensitive, suggestive words and emoji, and hard news
+   (death, accidents, disasters, illness, bullying, discrimination). There is no setting for it. */
+const SENSITIVE = /🔞|🍆|🍑|😏|💋|👅|寝かさない|抱いて|抱かれ|夜這い|ベッドで|一緒にお風呂|色っぽ|セクシー|えちえち|(?:^|[^必])死(?!ぬほど|ぬかと|んだ笑)|亡くな|遺体|事故|災害|震災|地震|津波|火災|病気|闘病|入院|がん(?!ば|が)|癌|自殺|自死|いじめ|虐待|差別|\bsexy\b|\bspicy\b|\bnaughty\b|\bin bed\b|\bdied\b|\bdeath\b|\bcrash\b|\bdisaster\b|\bcancer\b|\bsuicide\b|\bbull(?:y|ied|ying)\b|\bracis/i;
+function sensitive(text, st) { return SENSITIVE.test(String(text || '')) || !!(st && (st.possibly_sensitive || st.sensitive)); }
 function saveFilters() {
   const sources = {};
   SOURCES.forEach(s => {
@@ -561,12 +558,11 @@ function saveFilters() {
   });
   store.set('sourcesOn', JSON.stringify(sources));
   store.set('hideViolent', violentHidden() ? '1' : '0');
-  store.set('hideSensitive', sensitiveHidden() ? '1' : '0');
 }
 function buildFilters() {
   const savedS = savedJson('sourcesOn');
-  /* Hide violence starts on, as Humor always did; Hide sensitive posts starts off. */
-  [['hideViolent', '1'], ['hideSensitive', '0']].forEach(([id, d]) => {
+  /* Hide violence starts on, as Humor always did. */
+  [['hideViolent', '1']].forEach(([id, d]) => {
     const b = $(id);
     const paint = on => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); };
     paint(store.get(id, d) === '1');
