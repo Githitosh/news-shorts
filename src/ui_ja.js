@@ -45,8 +45,8 @@ const JA = {
   'Turn violence off': '暴力的な内容を出さない',
   'Hide violence': '暴力を非表示', 'Hide sensitive posts': 'センシティブを非表示',
   'A lit button hides those posts.': '色が付いたボタンの内容は表示しません。',
-  "A lit button hides those posts. With Hide sensitive posts off, couples' talk in Romance may be sexual; jokes and places stay clean. Hard news such as deaths, accidents, disasters, illness, bullying and discrimination never plays.":
-    '色が付いたボタンの内容は表示しません。「センシティブを非表示」を消すと、恋愛のカップルの会話に限って、きわどい内容や性的な内容も出ます（ジョークと観光には出ません）。死亡・事故・災害・病気・いじめ・差別などの重い話題は、設定にかかわらず出しません。',
+  "Sensitive posts play at the start: couples' talk in Romance may be suggestive or sexual; jokes and places stay clean. Light Hide sensitive posts to leave them out everywhere. Violence and hard news such as deaths, accidents, disasters, illness, bullying and discrimination never play.":
+    '最初はセンシティブな投稿も出します。恋愛のカップルの会話に限って、きわどい内容や性的な内容も出ます（ジョークと観光には出ません）。「センシティブを非表示」を点けると、どこにも出しません。暴力や、死亡・事故・災害・病気・いじめ・差別などの重い話題は、設定にかかわらず出しません。',
   'Sources': '情報源', 'X and web': 'Xとウェブ', 'Other web': 'その他のウェブ', 'International': '海外', 'Japanese media': '日本のメディア',
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
