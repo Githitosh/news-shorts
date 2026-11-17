@@ -18,9 +18,11 @@ button.title { background: none; border: 0; padding: 0; color: var(--ink); font:
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
 main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
+/* The portrait video is as tall as the screen allows, leaving room for the title and the buttons. */
+.watch, #prog, .caption { width: min(100%, max(280px, calc((100vh - 150px) * 9 / 16))); width: min(100%, max(280px, calc((100dvh - 150px) * 9 / 16))); margin-left: auto; margin-right: auto; }
 .frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
-canvas#cv { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; background: #f4efe4; border-radius: 12px; }
+canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
 /* Full screen: the class is set for the browser's full screen and for the page's own full screen (iPhone, in-app browsers). */
 .watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
@@ -28,10 +30,6 @@ canvas#cv { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; bac
 .watch.is-full .ctl { flex: none; width: 100%; }
 .watch.is-full .source-url { flex: none; }
 .watch.pseudo { position: fixed; top: 0; left: 0; z-index: 100; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; transform-origin: 0 0; }
-/* A phone held upright: turn the picture sideways so it fills the screen. */
-@media (orientation: portrait) {
-  .watch.pseudo { width: 100vh; height: 100vw; width: 100dvh; height: 100dvw; transform: translateX(100vw) rotate(90deg); transform: translateX(100dvw) rotate(90deg); }
-}
 body.lock { overflow: hidden; }
 .source-url { display: block; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
 .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px auto 0; }
@@ -59,7 +57,7 @@ button:disabled { opacity: .45; cursor: default; }
 <main>
   <div id="watch" class="watch">
     <div class="frame">
-      <canvas id="cv" width="1920" height="1080"></canvas>
+      <canvas id="cv" width="1080" height="1920"></canvas>
       <button type="button" id="unmute" hidden>Tap for sound</button>
     </div>
     <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
@@ -662,6 +660,8 @@ const ctx = $('cv').getContext('2d');
 const Q = new URLSearchParams(location.search);
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 const WATCH = Q.get('watch') !== '0' && !REDUCE;
+/* Portrait 1080×1920, the same layout as the main page on X and phones. */
+const LAYOUT = 'x';
 const NEWS_COUNT = 5;
 const JOKE_COUNT = 10;
 const store = {
@@ -1090,7 +1090,7 @@ async function setScript(raw, autoplay) {
   stop();
   const s = normalize(raw);
   S.script = s;
-  S.show = E.prepare(s, 'wide');
+  S.show = E.prepare(s, LAYOUT);
   sizeCanvas();
   $('play').disabled = false;
   $('seek').disabled = false;
@@ -1108,7 +1108,7 @@ async function setScript(raw, autoplay) {
   await loadFonts(s);
   if (S.script !== s || !S.show) return;
   const T = S.playing ? Math.max(0, Math.min(currentT(), S.show.duration)) : 0;
-  S.show = E.prepare(s, 'wide');
+  S.show = E.prepare(s, LAYOUT);
   sizeCanvas();
   draw(S.playing ? Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)) : 0);
 }
@@ -1156,7 +1156,7 @@ function toggle() {
 function realFull() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
 function fullOn() { return !!(realFull() || S.pseudo); }
 /* S.pseudo is the page's own full screen, for browsers without the Fullscreen API
-   (iPhone Safari, the X app). The CSS for .pseudo fills the screen. */
+   (iPhone Safari, the X app). The CSS for .pseudo fills the screen with the portrait picture. */
 function paintFull() {
   const on = fullOn();
   $('watch').classList.toggle('is-full', on);
@@ -1183,7 +1183,7 @@ async function enterFull() {
     } catch (e) { console.warn(e); }
     if (realFull()) {
       paintFull();
-      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('portrait'); } catch (e) {}
       return;
     }
   }
