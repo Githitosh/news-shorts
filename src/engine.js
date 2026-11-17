@@ -320,8 +320,10 @@ function prepare(script, preset) {
   const d = new Date((script.date || '') + 'T12:00:00+09:00');
   const ok = !isNaN(d);
   const y = ok ? d.getFullYear() : 2026, mo = ok ? d.getMonth() + 1 : 1, da = ok ? d.getDate() : 1;
-  const items = (script.items || []).map((it, i) => ({ ...it, kind: 'news', bg: it.bg || BG_ORDER[i % BG_ORDER.length] }));
-  if (script.coffee) items.push({ ...script.coffee, kind: 'coffee', bg: 'E', kw: script.coffee.kw || 'COFFEE BREAK', head: script.coffee.head || ['COFFEE', 'BREAK'] });
+  const items = (script.items || []).map((it, i) => it && it.coffee
+    ? { ...it, kind: 'coffee', bg: 'E', kw: it.kw || 'COFFEE BREAK', head: (it.head && it.head.length) ? it.head : ['COFFEE', 'BREAK'] }
+    : { ...it, kind: 'news', bg: it.bg || BG_ORDER[i % BG_ORDER.length] });
+  if (script.coffee && !items.some(it => it.kind === 'coffee')) items.push({ ...script.coffee, kind: 'coffee', bg: 'E', kw: script.coffee.kw || 'COFFEE BREAK', head: script.coffee.head || ['COFFEE', 'BREAK'] });
   const total = items.length;
   items.forEach((it, i) => {
     const no = pad2(i + 1);
