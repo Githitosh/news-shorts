@@ -428,7 +428,7 @@ function uniformLayout(items) {
   let S = S0, J = J0;
   for (let k = 0; k < 120; k++) {
     const Ls = items.map((it, i) => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); });
-    if (Ls.every(L => L.blockH <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
+    if (Ls.every(L => L.blockH <= avail + 0.5 && (L.jpH || 0) <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
     /* The news lines keep their size first. The headline gives way, but stays larger than the news lines;
        past that point both get smaller together. */
     const floor = Math.max(S0 * 0.6, J * P.jp.size * 1.12);
@@ -488,6 +488,7 @@ function layoutAt(it, scale, forced) {
     L.cxHead = P.colL.cx; L.ruleX = [P.colL.left, P.colL.right]; L.cxJp = P.colR.cx;
     const line = P.jp.line * jpScale, para = P.jp.para * jpScale, inkH = P.jp.inkH * jpScale;
     const jh = jp.length ? (jp.length - 1) * line + jp.filter(l => l.para).length * (para - line) + inkH : 0;
+    L.jpH = jh;
     const jt = Math.max(P.box.top + P.gap.shortJp * jpScale, P.box.center - (jh - P.gap.shortJp * jpScale) / 2);
     L.short = jt - P.gap.shortJp * jpScale;
     let y = jt;
@@ -542,9 +543,9 @@ function prepare(script, preset, opts) {
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());
-    if (!(OPT.uniform && it.kind === 'news' && P.layout === 'stack')) it.L = layout(it);
+    if (!(OPT.uniform && it.kind === 'news')) it.L = layout(it);
   });
-  if (OPT.uniform && P.layout === 'stack') uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
+  if (OPT.uniform) uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
     header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,

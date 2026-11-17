@@ -102,6 +102,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 #out { display: none; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 #out.show { display: flex; }
 #out .btn { flex: 1 1 30%; font-size: 14px; }
+.set-title { margin: 0; font: 700 18px "Noto Serif JP",serif; color: var(--ink); }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -136,6 +137,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   <div id="studio" class="studio" hidden>
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
+      <p class="set-title">Humor settings</p>
+      <p class="note">These settings are for Humor only. News keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -150,10 +153,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <label for="feed">Feed</label>
       <select id="feed">
-        <option value="news">News</option>
-        <option value="x">X posts</option>
+        <option value="x">X comments only</option>
+        <option value="news">News, then comments</option>
       </select>
-      <p class="note">News plays the reports, then funny replies about them. X posts skips the news and plays funny posts about the lineup and the accounts below. A story or joke that has played does not play again. Japanese text is shown large.</p>
+      <p class="note">X comments only (the default) plays funny replies on X about today's news in the genres you choose, the lineup, and the accounts below. News, then comments plays the reports first. A comment or story that has played does not play again. Japanese text is shown large.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
@@ -2477,7 +2480,7 @@ function uniformLayout(items) {
   let S = S0, J = J0;
   for (let k = 0; k < 120; k++) {
     const Ls = items.map((it, i) => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); });
-    if (Ls.every(L => L.blockH <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
+    if (Ls.every(L => L.blockH <= avail + 0.5 && (L.jpH || 0) <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
     /* The news lines keep their size first. The headline gives way, but stays larger than the news lines;
        past that point both get smaller together. */
     const floor = Math.max(S0 * 0.6, J * P.jp.size * 1.12);
@@ -2537,6 +2540,7 @@ function layoutAt(it, scale, forced) {
     L.cxHead = P.colL.cx; L.ruleX = [P.colL.left, P.colL.right]; L.cxJp = P.colR.cx;
     const line = P.jp.line * jpScale, para = P.jp.para * jpScale, inkH = P.jp.inkH * jpScale;
     const jh = jp.length ? (jp.length - 1) * line + jp.filter(l => l.para).length * (para - line) + inkH : 0;
+    L.jpH = jh;
     const jt = Math.max(P.box.top + P.gap.shortJp * jpScale, P.box.center - (jh - P.gap.shortJp * jpScale) / 2);
     L.short = jt - P.gap.shortJp * jpScale;
     let y = jt;
@@ -2591,9 +2595,9 @@ function prepare(script, preset, opts) {
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());
-    if (!(OPT.uniform && it.kind === 'news' && P.layout === 'stack')) it.L = layout(it);
+    if (!(OPT.uniform && it.kind === 'news')) it.L = layout(it);
   });
-  if (OPT.uniform && P.layout === 'stack') uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
+  if (OPT.uniform) uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
     header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
@@ -3543,10 +3547,11 @@ async function collectJokes(topics, need, opts) {
   for (let i = 0; i < queries.length && rows.length < need * 2 && i < 24; i += 6) {
     if (S.again) break;
     const batch = queries.slice(i, i + 6);
-    const lists = await Promise.all(batch.map(q => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(build(q))).then(d => (d && d.results) || []).catch(() => [])));
-    lists.flat().forEach(st => {
+    const lists = await Promise.all(batch.map(q => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(build(q))).then(d => ((d && d.results) || []).map(st => ({ st, q }))).catch(() => [])));
+    lists.flat().forEach(({ st, q }) => {
       const got = replyOf(st, lang);
       if (!got) return;
+      got.topic = q;
       const ks = jokeKeys(got);
       if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
       ks.forEach(k => keys.add(k));
@@ -3668,13 +3673,22 @@ async function collect() {
   const jokeSlot = slots.find(s => s.type === 'jokes');
   if (jokeSlot) jokeNeed = jokeSlot.count;
   let topicWords = [];
+  const topicPlace = {};
   if (mode === 'x') {
-    /* X posts: no reports. Jokes about the lineup, the accounts, and today's news. */
+    /* X comments only: no reports. Funny replies about the lineup, the accounts,
+       and today's news in each chosen genre, in the genres' Top, Middle, Bottom order. */
     say('Searching X');
     progress(0.1);
     slots.filter(s => s.type !== 'jokes').forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
     const sum = slots.reduce((n, s) => n + (s.count || 0), 0);
     jokeNeed = Math.min(MAX_ITEMS, sum || 12);
+    if (topicWords.length < 3) {
+      const chosen = shuffle(genreChoices().filter(g => g.on)).slice(0, 6);
+      const lists = await Promise.all(chosen.map(g => searchRows(g.q[country.id] || g.q.US, up(g.name)).then(rows => rows.filter(allowedRow)).catch(() => [])));
+      chosen.forEach((g, i) => {
+        lists[i].slice(0, 3).forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => { topicWords.push(w); topicPlace[w] = g.place; }));
+      });
+    }
     if (topicWords.length < 3) {
       const news = await homeNews(new Set(), 8).catch(() => []);
       news.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
@@ -3699,8 +3713,10 @@ async function collect() {
   if (mode !== 'x') sequence.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
   say('Searching jokes');
   progress(0.55);
-  const jokes = (await collectJokes(topicWords, Math.min(jokeNeed, MAX_ITEMS - sequence.length), { posts: mode === 'x', headlines }))
-    .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true }));
+  const band = { top: 0, middle: 1, bottom: 2 };
+  const jokes = (await collectJokes(topicWords, Math.min(jokeNeed, MAX_ITEMS - sequence.length), { headlines }))
+    .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
+    .sort((a, b) => band[a.place] - band[b.place]);
   if (S.again) return null;
   if (!sequence.length && !jokes.length) return { empty: true };
   say('Reading the text');
@@ -4448,8 +4464,9 @@ function initUI() {
   const countryDefault = (COUNTRIES.find(c => c.id === pickedCountry) || COUNTRIES[0]).lang;
   langBox.value = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
-  $('feed').value = store.get('feed', 'news') === 'x' ? 'x' : 'news';
-  $('feed').onchange = () => { store.set('feed', $('feed').value); refreshMarket(); };
+  /* X comments only is the default. */
+  $('feed').value = store.get('feedMode', 'x') === 'news' ? 'news' : 'x';
+  $('feed').onchange = () => { store.set('feedMode', $('feed').value); refreshMarket(); };
   saveAccounts(xAccounts());
   $('addX').onclick = addAccount;
   $('xUser').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addAccount(); } });
