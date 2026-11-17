@@ -287,7 +287,7 @@ function layoutStill(it) {
   };
 }
 function layout(it) {
-  if (it.still || it.coffee || it.kind === 'coffee') return layoutStill(it);
+  if (it.still && !(it.jp && it.jp.length)) return layoutStill(it);
   return layoutAt(it, 1);
 }
 function layoutAt(it, scale) {
@@ -378,9 +378,9 @@ function prepare(script, preset) {
   items.forEach((it, i) => {
     const no = pad2(i + 1);
     const lead = String(it.kw || it.topic || 'NOTE').toUpperCase();
-    it.catLeft = it.kind === 'coffee' ? `COMMENTS  ${no}` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
+    it.catLeft = it.kind === 'coffee' ? `NOTE ${no}  /  COFFEE BREAK` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
     it.catRight = it.kind === 'coffee' ? '' : String(it.topic || '').toUpperCase();
-    it.foot = it.kind === 'coffee' ? 'COMMENTS' : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
+    it.foot = it.kind === 'coffee' ? (it.src || 'COFFEE BREAK') : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());

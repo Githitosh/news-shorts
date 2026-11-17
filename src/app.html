@@ -149,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Update plays the next stories. Comments are one video. Japanese shows Japanese replies, English shows English replies, and Both mixes them.</p>
+      <p class="note">Update plays the next stories. Coffee break picks a few odd replies and shows each one large, like a report. Japanese, English, or a mix of both.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -512,12 +512,18 @@ function coffeeReplies(it) {
 function normalize(s) {
   const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 24).map(it => {
     if (!it || !it.coffee) return normItem(it);
-    const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], sub: it.sub, jp: it.jp, tags: it.tags });
-    c.kw = 'COMMENTS'; c.head = ['COMMENTS']; c.cat = 'COMMENTS'; c.coffee = true; c.still = true;
-    c.replies = coffeeReplies(it);
-    c.tags = [];
-    c.jp = [];
-    c.sub = [];
+    const c = normItem({
+      kw: it.kw || 'NOTE',
+      head: (it.head && it.head.length) ? it.head : [it.kw || 'NOTE'],
+      sub: it.sub,
+      jp: it.jp,
+      tags: (it.tags && it.tags.length) ? it.tags : ['COFFEE BREAK'],
+      src: it.src,
+    });
+    c.cat = 'COFFEE BREAK';
+    c.coffee = true;
+    c.still = false;
+    c.replies = [];
     return c;
   }), market: String(s.market || '').trim() };
   if (s.coffee && !out.items.some(it => it.coffee)) {
@@ -1188,7 +1194,7 @@ function clipReply(text) {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
   const chars = [...s];
   const cjk = (s.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
-  const limit = cjk * 2 >= chars.length ? 28 : 46;
+  const limit = cjk * 2 >= chars.length ? 42 : 64;
   if (chars.length <= limit) return s;
   return chars.slice(0, limit - 1).join('').replace(/\s+$/, '') + '…';
 }
@@ -1212,9 +1218,11 @@ function replyLineFrom(st, handle, mode) {
   let body = text;
   if (mode === 'ja') {
     const at = body.search(/[\u3040-\u30ff\u4e00-\u9fff「『【（]/);
-    if (at > 0) body = body.slice(at);
+    const lead = at > 0 ? body.slice(0, at).trim() : '';
+    const words = lead.split(/\s+/).filter(Boolean);
+    if (at > 0 && words.length >= 2 && words.some(w => /[A-Za-z]{4,}/.test(w))) body = body.slice(at);
   }
-  const line = clipReply('@' + author + '  ' + body);
+  const line = '@' + author + '  ' + clipReply(body);
   const shown = line.replace(/^@\S+\s+/, '');
   const latin = (shown.match(/[A-Za-z]/g) || []).length;
   const kana = (shown.match(/[\u3040-\u30ff]/g) || []).length;
@@ -1243,7 +1251,7 @@ function poolFor(handle, mode) {
         seen.add(got.line.toLowerCase());
         out.push(got);
       }
-      out.sort((a, b) => b.letters - a.letters);
+      out.sort((a, b) => weirdScore(b.line.replace(/^@\S+\s+/, ''), []) - weirdScore(a.line.replace(/^@\S+\s+/, ''), []) || b.letters - a.letters);
       return out.map(x => x.line);
     }).catch(e => { console.warn(e); return []; }));
   }
@@ -1276,7 +1284,7 @@ function commentsAbout(query, mode) {
         seen.add(got.line.toLowerCase());
         out.push(got);
       }
-      out.sort((a, b) => b.letters - a.letters);
+      out.sort((a, b) => weirdScore(b.line.replace(/^@\S+\s+/, ''), []) - weirdScore(a.line.replace(/^@\S+\s+/, ''), []) || b.letters - a.letters);
       return out.map(x => x.line);
     }).catch(e => { console.warn(e); return []; }));
   }
@@ -1297,18 +1305,30 @@ async function gatherNetComments(handles, headlines) {
     topics.push(q);
   });
   const modes = commentModes();
-  const jobs = [];
-  names.slice(0, 3).forEach(h => modes.forEach(m => jobs.push(within(poolFor(h, m), 9000))));
-  topics.slice(0, 2).forEach(q => modes.forEach(m => jobs.push(within(commentsAbout(q, m), 9000))));
-  const pools = await Promise.all(jobs);
+  const handleJobs = [];
+  names.slice(0, 3).forEach(h => modes.forEach(m => handleJobs.push(within(poolFor(h, m), 9000))));
+  const topicJobs = [];
+  topics.slice(0, 2).forEach(q => modes.forEach(m => topicJobs.push(within(commentsAbout(q, m), 9000))));
+  const handlePools = await Promise.all(handleJobs);
+  const out = mixPools(handlePools, 20);
+  if (out.length < 3 && topicJobs.length) {
+    const topicPools = await Promise.all(topicJobs);
+    mixPools(topicPools, 20).forEach(line => {
+      if (out.length >= 20 || out.some(x => x.toLowerCase() === line.toLowerCase())) return;
+      out.push(line);
+    });
+  }
+  return out;
+}
+function mixPools(pools, cap) {
   const out = [];
   const seen = new Set();
-  const idx = pools.map(() => 0);
+  const idx = (pools || []).map(() => 0);
   let guard = 0;
-  while (out.length < 20 && guard < 80) {
+  while (out.length < cap && guard < 80) {
     guard++;
     let grew = false;
-    for (let i = 0; i < pools.length && out.length < 20; i++) {
+    for (let i = 0; i < (pools || []).length && out.length < cap; i++) {
       const list = pools[i] || [];
       while (idx[i] < list.length && seen.has(String(list[idx[i]] || '').toLowerCase())) idx[i]++;
       if (idx[i] >= list.length) continue;
@@ -1857,16 +1877,108 @@ async function fillText(rows, lang) {
     pending.forEach(r => { if (!r._local) r._local = r.headline; });
   }
 }
-function commentStill(replies) {
+function replyParts(line) {
+  const m = String(line || '').match(/^@(\S+)\s+([\s\S]*)$/);
+  return { handle: m ? m[1] : '', text: (m ? m[2] : String(line || '')).replace(/\s+/g, ' ').trim() };
+}
+const NEWSY = /市況|日経|株価|金利|相場|市場|決算|円高|円安|国債|半導体|指数|平均|利回り|market|stock|shares|yield|nasdaq|yen|percent|economy|nvidia|エヌビディア|金融政策|米国市況|政権|大統領|大臣|商務省|トランプ/i;
+function weirdScore(text, headlines) {
+  let score = 0;
+  if (/^([A-Za-z0-9]{1,12}\s*)?(のように|ので|から|より|って|とは|のは|には|では|でも|て、|で、|に、|を、|は、|が、|と、|も、)|^[達らっー…・]/.test(text)) score -= 12;
+  if (NEWSY.test(text)) score -= 16;
+  const blob = (headlines || []).join('\n');
+  (text.match(/[\u30a0-\u30ff]{2,}|[\u4e00-\u9fff]{2,}|[A-Za-z]{4,}/g) || []).forEach(bit => {
+    if (bit.length >= 2 && blob.indexOf(bit) >= 0) score -= 8;
+  });
+  if (/[\u30a0-\u30ff]{3,}/.test(text)) score += 7;
+  if (/[\u{1F300}-\u{1FAFF}]|www|ｗｗ|草|😂|🤣|😆|😅/u.test(text)) score += 4;
+  if (/[！？!?]{2,}|〜|～/.test(text)) score += 2;
+  if (/とかw|やな|じゃん|だわ|草|[wｗ]$/.test(text)) score += 4;
+  const n = [...text].length;
+  if (n >= 4 && n <= 48) score += 4;
+  else if (n > 60) score -= 3;
+  return score;
+}
+function tooClose(a, b) {
+  const x = a.text.replace(/\s/g, '');
+  const y = b.text.replace(/\s/g, '');
+  if (!x || !y) return true;
+  if (x.slice(0, 8) === y.slice(0, 8)) return true;
+  const grams = s => {
+    const g = new Set();
+    for (let i = 0; i < s.length - 2; i++) g.add(s.slice(i, i + 3));
+    return g;
+  };
+  const ga = grams(x);
+  const gb = grams(y);
+  let hit = 0;
+  ga.forEach(g => { if (gb.has(g)) hit++; });
+  return hit / (Math.min(ga.size, gb.size) || 1) > 0.5;
+}
+function weirdWord(text) {
+  const kata = text.match(/[\u30a0-\u30ff]{2,8}/);
+  if (kata) return kata[0].slice(0, 8);
+  const kana = text.match(/[\u3040-\u309f]{2,6}/);
+  if (kana) return kana[0];
+  const words = text.split(/[^A-Za-z0-9]+/).filter(w => w.length >= 4 && !NEWSY.test(w));
+  if (words.length) return words.sort((a, b) => b.length - a.length)[0].slice(0, 12);
+  const kanji = text.match(/[\u4e00-\u9fff]{2,4}/);
+  return kanji ? kanji[0] : 'NOTE';
+}
+function pickWeird(lines, headlines) {
+  const rows = [];
+  const seen = new Set();
+  (lines || []).forEach(line => {
+    const part = replyParts(line);
+    const key = part.text.toLowerCase();
+    if (part.text.length < 4 || seen.has(key) || VIOLENT.test(part.text)) return;
+    seen.add(key);
+    rows.push(Object.assign(part, { score: weirdScore(part.text, headlines) }));
+  });
+  rows.sort((a, b) => b.score - a.score || b.text.length - a.text.length);
+  const picked = [];
+  const handles = new Set();
+  const take = (row, allowSame) => {
+    if (picked.length >= 3) return;
+    if (picked.some(p => p.text === row.text || tooClose(p, row))) return;
+    const who = row.handle.toLowerCase();
+    if (!allowSame && who && handles.has(who)) return;
+    picked.push(row);
+    if (who) handles.add(who);
+  };
+  rows.forEach(row => take(row, false));
+  if (picked.length < 3) rows.forEach(row => take(row, true));
+  return picked;
+}
+function commentHead(text) {
+  const chars = [...String(text || '')];
+  if (!chars.length) return { head: ['NOTE'], rest: '' };
+  const cap = Math.min(chars.length, 40);
+  const rest = chars.slice(cap).join('').trim();
+  if (cap <= 18) return { head: [chars.slice(0, cap).join('')], rest };
+  const mid = Math.ceil(cap / 2);
+  const breaks = [];
+  for (let i = 8; i <= cap - 6; i++) {
+    const prev = chars[i - 1];
+    if (chars[i] === ' ' || chars[i] === '　' || /[、。！？とでをはがに]/.test(prev)) breaks.push(i);
+  }
+  const at = breaks.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0] || mid;
+  return { head: [chars.slice(0, at).join('').trim(), chars.slice(at, cap).join('').trim()], rest };
+}
+function coffeeTalk(row) {
+  const word = weirdWord(row.text);
+  const parts = commentHead(row.text);
   return {
     coffee: true,
-    still: true,
-    kw: 'COMMENTS',
-    head: ['COMMENTS'],
+    kw: word,
+    cat: 'COFFEE BREAK',
+    topic: word,
+    head: parts.head,
     sub: [],
-    jp: [],
-    tags: [],
-    replies: arr(replies).slice(0, 20),
+    jp: parts.rest ? [parts.rest] : [],
+    tags: ['COFFEE BREAK'],
+    src: row.handle ? ('X @' + row.handle).slice(0, 40) : 'X',
+    url: '',
   };
 }
 function withCoffee(rows) {
@@ -1877,7 +1989,8 @@ function withCoffee(rows) {
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
   const lines = arr(comments).slice(0, 20);
-  if (lines.length) items.push(commentStill(lines));
+  const headlines = (sequence || []).filter(r => r && r.headline && !r.coffee).map(r => r.headline);
+  pickWeird(lines, headlines).forEach(row => items.push(coffeeTalk(row)));
   (sequence || []).forEach(row => {
     if (!row || row.coffee) return;
     items.push(storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id));
