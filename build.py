@@ -5,7 +5,6 @@
 """
 import base64
 import json
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -52,17 +51,11 @@ def main() -> None:
     dest.parent.mkdir(exist_ok=True)
     dest.write_text(ja, encoding="utf-8")
     print(f"ja/index.html {len(ja.encode('utf-8')) / 1048576:.2f} MB")
-    # Humor stays in src/humor.html and is unpublished for now.
-    # `python build.py --humor` writes humor/index.html again when it is ready to publish.
+    humor = pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets, license_note + muxer)
     humor_dest = ROOT / "humor" / "index.html"
-    if "--humor" in sys.argv:
-        humor = pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets, license_note + muxer)
-        humor_dest.parent.mkdir(exist_ok=True)
-        humor_dest.write_text(humor, encoding="utf-8")
-        print(f"humor/index.html {len(humor.encode('utf-8')) / 1048576:.2f} MB")
-    elif humor_dest.exists():
-        humor_dest.unlink()
-        print("humor/index.html removed")
+    humor_dest.parent.mkdir(exist_ok=True)
+    humor_dest.write_text(humor, encoding="utf-8")
+    print(f"humor/index.html {len(humor.encode('utf-8')) / 1048576:.2f} MB")
 
 
 if __name__ == "__main__":
