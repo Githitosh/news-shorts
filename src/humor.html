@@ -19,7 +19,8 @@ header .pull { display: block; color: var(--mute); font-size: 12px; letter-spaci
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
 main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
 /* The portrait video is as tall as the screen allows, leaving room for the title and the buttons. */
-.watch, #prog, .caption { width: min(100%, max(280px, calc((100vh - 150px) * 9 / 16))); width: min(100%, max(280px, calc((100dvh - 150px) * 9 / 16))); margin-left: auto; margin-right: auto; }
+.frame { width: min(100%, max(280px, calc((100vh - 150px) * 9 / 16))); width: min(100%, max(280px, calc((100dvh - 150px) * 9 / 16))); }
+.ctl, #prog, .caption { max-width: 560px; margin-left: auto; margin-right: auto; }
 .frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
 canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: #f4efe4; border-radius: 12px; }
@@ -32,8 +33,11 @@ canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; bac
 .watch.pseudo { position: fixed; top: 0; left: 0; z-index: 100; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; transform-origin: 0 0; }
 body.lock { overflow: hidden; }
 .source-url { display: block; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
-.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px auto 0; }
-.ctl button { white-space: nowrap; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 10px auto 0; }
+.ctl button { white-space: nowrap; padding: 10px 11px; font-size: 14px; }
+/* Sound: lit while the music plays, outlined while the video plays without it. */
+button#sound.ask { border-color: var(--acc); color: var(--acc); }
+button#sound.on { background: var(--acc); border-color: var(--acc); color: #fffaf2; }
 /* On a narrow phone the seek bar and time move to a second row instead of running off the screen. */
 .ctl input[type=range] { flex: 1 1 200px; min-width: 0; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; font-size: 13px; }
@@ -43,12 +47,6 @@ button:disabled { opacity: .45; cursor: default; }
 .caption.err { color: #9a3b28; }
 #prog { height: 4px; background: var(--line); border-radius: 2px; margin: 10px auto 0; max-width: 100%; overflow: hidden; }
 #prog i { display: block; height: 100%; width: 0; background: var(--acc); }
-#unmute {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  width: max-content; max-width: calc(100% - 24px);
-  background: rgba(255,250,242,.9); color: var(--ink); border: 1px solid var(--acc);
-  border-radius: 999px; padding: 8px 14px; font-size: 14px;
-}
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -58,11 +56,11 @@ button:disabled { opacity: .45; cursor: default; }
   <div id="watch" class="watch">
     <div class="frame">
       <canvas id="cv" width="1080" height="1920"></canvas>
-      <button type="button" id="unmute" hidden>Tap for sound</button>
     </div>
     <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
     <div class="ctl">
       <button id="play" disabled>Play</button>
+      <button id="sound" type="button" aria-pressed="false">Sound</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
@@ -89,8 +87,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.humor.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.humor.' + k, v); } catch (e) {} },
 };
-const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false };
-const TAP = ' Tap the picture for sound.';
+const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: false };
+const TAP = ' Press Sound for music.';
 const FEEDS = [
   ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
   ['https://assets.wor.jp/rss/rdf/nikkei/news.rdf', 'Nikkei'],
@@ -451,7 +449,7 @@ function musicEl() {
   return el;
 }
 function playSound(T) {
-  if (!S.music) return;
+  if (!S.music || S.mute) return;
   const el = musicEl();
   const dur = S.show ? S.show.duration : 0;
   const len = el && isFinite(el.duration) ? el.duration : 40;
@@ -459,10 +457,37 @@ function playSound(T) {
   try { el.currentTime = at; } catch (e) {}
   const play = el.play();
   if (play && play.then) play.then(() => {
+    if (S.mute || !S.playing) { try { el.pause(); } catch (e) {} S.audioOn = false; paintSound(); return; }
     S.audioOn = true;
-    $('unmute').hidden = true;
-    if (S.playing && $('caption').textContent.endsWith(TAP)) say(watchLine());
-  }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
+    paintSound();
+    if ($('caption').textContent.endsWith(TAP)) say(watchLine());
+  }).catch(() => { S.audioOn = false; paintSound(); });
+}
+function paintSound() {
+  const b = $('sound');
+  b.classList.toggle('on', !!S.audioOn);
+  b.classList.toggle('ask', !S.audioOn && !S.mute && !!S.playing);
+  b.setAttribute('aria-pressed', S.audioOn ? 'true' : 'false');
+}
+/* The Sound button turns the music on, and off again. Turning it on also starts the video. */
+function toggleSound() {
+  if (S.audioOn) {
+    S.mute = true;
+    if (S.el) { try { S.el.pause(); } catch (e) {} }
+    S.audioOn = false;
+    paintSound();
+    if (S.playing) say('Sound off. Press Sound to hear the music.');
+    return;
+  }
+  if (!S.show) return;
+  S.mute = false;
+  if (!S.playing) {
+    let T0 = (+$('seek').value / 1000) * S.show.duration;
+    if (T0 >= S.show.duration - 0.05) T0 = 0;
+    beginPlayback(T0);
+  }
+  playSound(currentT());
+  say(watchLine());
 }
 function watchLine() {
   const jokes = ((S.script && S.script.items) || []).filter(it => it.cat === 'HUMOR').length;
@@ -474,7 +499,7 @@ function stop() {
   if (S.el) { try { S.el.pause(); } catch (e) {} }
   S.audioOn = false;
   $('play').textContent = 'Play';
-  $('unmute').hidden = true;
+  paintSound();
 }
 function beginPlayback(T0) {
   S.origin = T0;
@@ -482,7 +507,7 @@ function beginPlayback(T0) {
   S.playing = true;
   $('play').disabled = false;
   $('play').textContent = 'Pause';
-  $('unmute').hidden = !!S.audioOn;
+  paintSound();
   if (!S.raf) S.raf = requestAnimationFrame(tick);
 }
 function tick() {
@@ -628,8 +653,7 @@ document.addEventListener('webkitfullscreenchange', paintFull);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.pseudo) exitFull(); });
 $('update').onclick = () => runAll();
 $('home').onclick = () => { window.scrollTo(0, 0); runAll(); };
-$('unmute').onclick = e => { e.stopPropagation(); if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * S.show.duration); playSound(currentT()); };
-$('cv').addEventListener('pointerdown', () => { if (!S.audioOn) { if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * (S.show.duration || 0)); playSound(S.playing ? currentT() : 0); } });
+$('sound').onclick = () => toggleSound();
 $('seek').addEventListener('input', () => {
   if (!S.show) return;
   const T = (+$('seek').value / 1000) * S.show.duration;
