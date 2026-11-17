@@ -161,7 +161,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Romance, 2&#10;Jokes, 10"></textarea>
-      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a short note on who they are, a loving post, the partner's reply, and what others said. Leave the lineup empty for the genres below.</p>
+      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Leave the lineup empty for the genres below.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -1129,49 +1129,28 @@ async function collectRomance(need, place) {
     keys: [st.a, st.b, ...st.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]),
   }));
 }
-/* One story becomes several cards: the background, the post, the reply, then what others said. */
-function relationWord(text, lang) {
-  if (lang === 'en') {
-    if (/boyfriend|\bbf\b/i.test(text)) return 'boyfriend';
-    if (/girlfriend|\bgf\b/i.test(text)) return 'girlfriend';
-    if (/husband/i.test(text)) return 'husband';
-    if (/wife/i.test(text)) return 'wife';
-    return 'partner';
-  }
-  if (/彼氏/.test(text)) return '彼氏';
-  if (/彼女/.test(text)) return '彼女';
-  if (/旦那|夫/.test(text)) return '旦那さん';
-  if (/嫁|妻/.test(text)) return '奥さん';
-  return '恋人';
-}
+/* One story becomes several cards: the post, the reply, then what others said. */
 function romanceCards(r, langId) {
   const st = r.story;
   const ja = r.lang !== 'en';
+  /* The top-right corner says 恋愛 (ROMANCE in English); that is enough to set the scene. */
+  const corner = ja && langId !== 'en' ? '恋愛' : 'ROMANCE';
   const one = (text, src, url) => {
     let card;
     if (ja && CJK.test(text) && langId !== 'en') {
       const parts = largeJa(text);
       const kw = jaWord(text);
-      card = { kw, cat: 'ROMANCE', topic: kw, head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
+      card = { kw, cat: 'ROMANCE', topic: corner, head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
     } else {
       const words = String(text).split(/\s+/).filter(Boolean);
       const kw = storyWord(text, '');
-      card = { kw, cat: 'ROMANCE', topic: kw, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
+      card = { kw, cat: 'ROMANCE', topic: corner, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
     }
     card.url = url || '';
     card.key = r.keys;
     return card;
   };
-  const rel = relationWord(st.a.text + ' ' + st.b.text, r.lang);
-  const intro = ja
-    ? { kw: 'カップル', cat: 'ROMANCE', topic: 'カップル', head: ['カップルの会話'], sub: [], tags: [], src: 'X @' + st.a.handle + ' / @' + st.b.handle,
-        jp: [`${rel}への投稿に、相手がこたえた、カップルらしい二人のやりとりです。` + (st.cheers.length ? 'つづいて、見ていた人の声。' : '')] }
-    : { kw: 'COUPLE', cat: 'ROMANCE', topic: 'COUPLE', head: ['A COUPLE ON X'], sub: [], tags: [], src: 'X @' + st.a.handle + ' / @' + st.b.handle,
-        jp: [`A post to a ${rel}, and the reply. They seem to be a couple.` + (st.cheers.length ? ' Then what others said.' : '')] };
-  intro.url = st.a.url;
-  intro.key = r.keys;
   return [
-    intro,
     one(st.a.text, 'X @' + st.a.handle, st.a.url),
     one(st.b.text, 'X @' + st.b.handle + ' → @' + st.a.handle, st.b.url),
     ...st.cheers.map(c => one(c.text, 'X @' + c.handle, c.url)),
@@ -1293,7 +1272,7 @@ async function collect() {
   let topicWords = [];
   const topicPlace = {};
   /* Romance: a lineup line sets the number of couples; otherwise the Romance genre adds two.
-     Each couple is about four cards: the background, the post, the reply, and what others said. */
+     Each couple is about three cards: the post, the reply, and what others said. */
   const romanceSlot = slots.find(s => s.type === 'romance');
   const romanceGenre = genreChoices().find(g => g.id === 'romance' && g.on);
   const romanceNeed = Math.min(4, romanceSlot ? romanceSlot.count : (!slots.some(s => s.type !== 'jokes' && s.type !== 'romance') && romanceGenre ? 2 : 0));
