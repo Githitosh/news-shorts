@@ -4,10 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f7f1e6">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Humor">
-<link rel="apple-touch-icon" href="../icon-192.png?v=2">
 <title>Humor</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,7 +119,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="sound" type="button" aria-pressed="false">Sound</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
-      <button id="vonly" type="button" hidden>Video only</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
@@ -4305,16 +4300,13 @@ function videoFull() {
     return true;
   } catch (e) { console.warn(e); return false; }
 }
-/* S.pseudo is the page's own full screen (iPhone, the X app): it keeps the buttons, Update included.
-   From the Home Screen it has no browser bars. */
+/* S.pseudo is the page's own full screen, the last resort when neither works. */
 function paintFull() {
   const on = fullOn();
   $('watch').classList.toggle('is-full', !!(realFull() || S.pseudo));
   $('watch').classList.toggle('pseudo', !!S.pseudo);
   document.body.classList.toggle('lock', !!S.pseudo);
   $('full').textContent = on ? 'Exit' : 'Full screen';
-  /* iPhone: Video only opens the system player, which shows the picture without the buttons. */
-  $('vonly').hidden = !(S.pseudo && S.fv);
 }
 function waitFullChange(ms) {
   return new Promise(resolve => {
@@ -4328,6 +4320,8 @@ async function enterFull() {
   closeStudio();
   const node = $('watch');
   const req = fsApi();
+  /* iPhone: the system player. This must run inside the tap, before any await. */
+  if (!req && videoFull()) return;
   if (req) {
     try {
       const r = req.call(node);
@@ -4527,8 +4521,6 @@ function initUI() {
   $('lineupGo').onclick = applyLineup;
   $('play').onclick = toggle;
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
-  /* Inside the tap: the system player only opens from one. */
-  $('vonly').onclick = () => { if (!videoFull()) say('This browser cannot show the video by itself.', true); };
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
   $('sound').onclick = () => toggleSound();
   $('seek').addEventListener('input', () => {

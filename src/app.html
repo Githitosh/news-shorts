@@ -32,7 +32,9 @@ body:has(#studio:not([hidden])) .stage { position: static; }
 .frame { position: relative; max-width: 400px; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
 .source-url { display: block; max-width: 400px; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
-canvas#cv { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
+canvas#cv { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; margin: 0; background: #000; border-radius: 10px; }
+/* iPhone: a copy of the picture as a video, behind the canvas, for the system full-screen player. */
+video#fsv { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 10px; background: #000; }
 canvas#cv.wide { aspect-ratio: 16 / 9; }
 .stage.wide .frame, .stage.wide .ctl, .stage.wide .music, .stage.wide .picks { max-width: 100%; }
 .picks { display: flex; flex-wrap: wrap; gap: 8px; max-width: 400px; margin: 12px auto 0; align-items: end; }
@@ -52,7 +54,7 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 #storyLink { color: var(--acc); }
 .caption.err { color: #ff9b8a; }
 #unmute {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  position: absolute; z-index: 2; left: 50%; bottom: 16px; transform: translateX(-50%);
   width: max-content; max-width: calc(100% - 24px);
   background: rgba(13,13,15,.82); color: var(--ink); border: 1px solid var(--acc);
   border-radius: 999px; padding: 8px 14px; font-size: 14px;
@@ -63,9 +65,20 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
   body.watching .frame { max-width: min(100%, calc((100dvh - 300px) * 9 / 16)); }
 }
 #out { flex-wrap: wrap; }
+/* Full screen: the class is set for the browser's full screen and for the page's own full screen. */
+.watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+.watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; max-width: none; }
+.watch.is-full canvas#cv, .watch.is-full canvas#cv.wide { width: 100%; height: 100%; object-fit: contain; aspect-ratio: auto; border-radius: 0; }
+.watch.is-full .ctl { flex: none; width: 100%; max-width: 640px; }
+.watch.is-full .ctl #update { background: var(--acc); border-color: var(--acc); color: #111; }
+.watch.is-full .source-url { flex: none; max-width: 640px; }
+.watch.pseudo { position: fixed; top: 0; left: 0; z-index: 100; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; }
+body.lock { overflow: hidden; }
 #out .btn { flex: 1 1 30%; font-size: 14px; }
-.ctl { display: flex; align-items: center; gap: 10px; max-width: 400px; margin: 8px auto 0; }
-.ctl input[type=range] { flex: 1; accent-color: var(--acc); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: 400px; margin: 8px auto 0; }
+.ctl button { white-space: nowrap; }
+/* On a narrow phone the seek bar and time move to a second row instead of running off the screen. */
+.ctl input[type=range] { flex: 1 1 160px; min-width: 0; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; font-size: 13px; }
 button, .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
 button.line-title { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; color: var(--mute); font: 400 13px "Noto Sans JP",sans-serif; margin: 8px 0 4px; padding: 0; cursor: pointer; }
@@ -112,6 +125,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <section class="stage" id="stage">
+    <div id="watch" class="watch">
     <div class="frame">
       <canvas id="cv" width="1080" height="1920"></canvas>
       <button type="button" id="unmute" hidden>Tap for sound</button>
@@ -119,9 +133,11 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
     <div class="ctl">
       <button id="play" disabled>Play</button>
+      <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
+    </div>
     </div>
     <p class="music-label">Story length</p>
     <div class="music" id="paces"></div>
@@ -153,11 +169,11 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <option value="news">News</option>
         <option value="x">X posts</option>
       </select>
-      <p class="note">News plays reports, then a coffee break of odd replies. X posts skips the news and plays posts from the lineup and the accounts below. Japanese text is shown large.</p>
+      <p class="note">News plays the reports, with no comments. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below. Japanese text is shown large.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1"></textarea>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -248,7 +264,7 @@ const TRACKS = [
   { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
   { id: 'sandman', name: 'Sandman', credit: 'Music: ‘The Japanese Sandman’ – Paul Whiteman and His Ambassador Orchestra (1920), Wikimedia Commons' },
 ];
-const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0 };
+const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
 function say(msg, err) {
@@ -515,7 +531,8 @@ function coffeeReplies(it) {
   return arr(it && it.replies).slice(0, 20);
 }
 function normalize(s) {
-  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 24).map(it => {
+  /* The serious news version: comment cards (coffee break) are left out, also from older scripts. */
+  const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).filter(it => it && !it.coffee).slice(0, 24).map(it => {
     if (!it || !it.coffee) return normItem(it);
     const c = normItem({
       kw: it.kw || 'NOTE',
@@ -531,7 +548,7 @@ function normalize(s) {
     c.replies = [];
     return c;
   }), market: String(s.market || '').trim() };
-  if (s.coffee && !out.items.some(it => it.coffee)) {
+  if (false && s.coffee && !out.items.some(it => it.coffee)) {
     const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], ...s.coffee });
     c.kw = 'COMMENTS'; c.head = ['COMMENTS']; c.still = true;
     c.replies = coffeeReplies(s.coffee);
@@ -652,6 +669,7 @@ function safeUrl(u) {
 }
 function draw(T) {
   if (!S.show) return;
+  S.lastDraw = performance.now();
   const shown = Math.min(T, S.show.duration - 1 / E.FPS);
   E.drawFrame(ctx, S.show, shown, S.bgs);
   $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
@@ -772,7 +790,8 @@ function playSound(T) {
       S.audioFailed = false;
       const u = $('unmute');
       if (u) u.hidden = true;
-      if (S.playing) say(watchLine(true));
+      /* Only replace the tap-for-sound line, so a message such as No new stories stays. */
+      if (S.playing && $('caption').textContent === watchLine(false)) say(watchLine(true));
     }).catch(() => {
       if (gen !== S.audioGen || !el.paused) return;
       S.audioOn = false;
@@ -1040,31 +1059,33 @@ function topicFeeds() {
     [feedUrl(sec[0]), sec[1]],
   ];
 }
+/* Stories that have played, by headline and by link. A story that has played does not play again. */
 function seenKeys() {
   try { return new Set(JSON.parse(store.get('seen', '[]'))); } catch (e) { return new Set(); }
 }
+function storyKeys(r) {
+  const keys = [String((r && r.headline) || '').toLowerCase().slice(0, 90)];
+  const link = String((r && r.link) || '').replace(/[?#].*$/, '');
+  if (link) keys.push('u:' + link.slice(0, 160));
+  return keys.filter(Boolean);
+}
+function isSeen(r, past) { return storyKeys(r).some(k => past.has(k)); }
 function rememberKeys(keys) {
   const prev = [...seenKeys()];
-  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 80)));
+  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => k && a.indexOf(k) === i).slice(0, 2000)));
 }
-function pickFresh(rows, used, count, label) {
+function noNewError(text) {
+  const e = new Error(text || 'No new stories yet. Press Update again later.');
+  e.noNew = true;
+  return e;
+}
+function pickFresh(rows, used, count) {
   const keyOf = r => String((r && r.headline) || '').toLowerCase().slice(0, 90);
   const past = seenKeys();
-  const open = (rows || []).filter(r => {
+  return (rows || []).filter(r => {
     const key = keyOf(r);
-    return key && !used.has(key);
-  });
-  const fresh = open.filter(r => !past.has(keyOf(r)));
-  const seen = open.filter(r => past.has(keyOf(r)));
-  let list = fresh.length >= count ? fresh : fresh.concat(seen);
-  if (seen.length && fresh.length < count) {
-    const mark = 'rot.' + String(label || 'news').slice(0, 24);
-    const start = (Number(store.get(mark, '0')) || 0) % Math.max(1, seen.length);
-    store.set(mark, String(start + count));
-    const spun = seen.slice(start).concat(seen.slice(0, start));
-    list = fresh.concat(spun);
-  }
-  return list.slice(0, count);
+    return key && !used.has(key) && !isSeen(r, past);
+  }).slice(0, count);
 }
 function rssItems(xml) {
   const items = [];
@@ -1730,7 +1751,6 @@ const CHIPS = [
   { label: 'SpaceX', line: 'SpaceX, 1' },
   { label: 'Nikkei', line: 'Nikkei, 2' },
   { label: 'ABC', line: 'ABC, 1' },
-  { label: 'Coffee break', line: 'Coffee break, 1' },
 ];
 function lineupText() {
   const el = $('lineup');
@@ -2047,9 +2067,6 @@ function withCoffee(rows) {
 }
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
-  const lines = arr(comments).slice(0, 20);
-  const headlines = (sequence || []).filter(r => r && r.headline && !r.coffee).map(r => r.headline);
-  pickWeird(lines, headlines).forEach(row => items.push(coffeeTalk(row)));
   (sequence || []).forEach(row => {
     if (!row || row.coffee) return;
     items.push(storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id));
@@ -2103,7 +2120,7 @@ async function loadDetails(slots, used) {
   const take = (list, place, n) => {
     let got = 0;
     const past = seenKeys();
-    const ranked = (list || []).filter(r => r && !past.has(keyOf(r))).concat((list || []).filter(r => r && past.has(keyOf(r))));
+    const ranked = (list || []).filter(r => r && !isSeen(r, past));
     for (const r of ranked) {
       if (got >= n || rows.length >= 8) return;
       const key = keyOf(r);
@@ -2149,22 +2166,14 @@ function orderPool(slot, pool, slots) {
 async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
   const found = [];
-  commentHold = [];
-  const earlyHandles = [];
-  slots.forEach(s => { if (s && s.who) earlyHandles.push(s.who); });
-  xAccounts().forEach(h => earlyHandles.push(h));
-  const earlyP = gatherNetComments(earlyHandles, []).then(lines => {
-    if (!S.again && lines.length) paintComments(lines);
-    return lines;
-  }).catch(() => []);
   const note = label => {
     if (S.again) return;
     if (S.playing) { say('Adding ' + label); return; }
-    showWaiting('Comments', []);
+    showWaiting('News', []);
     say('Searching ' + label);
   };
-  showWaiting('Comments', []);
-  say('Searching comments');
+  showWaiting('News', []);
+  say('Searching the news');
   progress(0.08);
   let sequence = [];
   const used = new Set();
@@ -2174,15 +2183,7 @@ async function collectSlots(date, slots, reorder) {
     if (S.again || guard >= 24) break;
     const label = slot.label || slot.cat || 'News';
     note(label);
-    if (slot.type === 'coffee') {
-      const about = [...sequence].reverse().find(r => r && r.headline && !r.coffee) || null;
-      for (let n = 0; n < (slot.count || 1) && guard < 24; n++) {
-        sequence.push({ coffee: true, about });
-        guard++;
-      }
-      note(label);
-      continue;
-    }
+    if (slot.type === 'coffee') continue;
     const rows = await rowsForSlot(slot);
     const pool = pickFresh(orderPool(slot, rows, slots), used, slot.count || 1, slot.label || slot.cat || 'news');
     let added = 0;
@@ -2204,8 +2205,6 @@ async function collectSlots(date, slots, reorder) {
     const details = await loadDetails(slots, used);
     details.forEach(r => { if (r && r.headline) found.push(r); });
     sequence = insertDetails(sequence, details);
-    showWaiting('Comments', []);
-    say('Searching comments');
   }
   if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
   const firstNews = sequence.find(r => r && r.headline && !r.coffee);
@@ -2215,20 +2214,12 @@ async function collectSlots(date, slots, reorder) {
     r.about = prev || firstNews || null;
   });
   const news = sequence.filter(r => r && !r.coffee && r.headline);
-  if (!news.length) throw new Error('Could not collect those requests. Press Update to try again.');
-  rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
+  if (!news.length) throw noNewError('No new stories for this lineup yet. Press Update again later.');
+  S.pendingKeys = news.flatMap(storyKeys);
   progress(0.45);
-  const handles = earlyHandles.slice();
-  sequence.forEach(r => { if (r && r.x) handles.push(String(r.source || '').replace(/^X\s*@/i, '')); });
-  const headlines = news.map(r => r.headline);
-  const [earlyLines, comments] = await Promise.all([
-    earlyP,
-    gatherNetComments(handles, headlines),
-    fillText(sequence, lang),
-  ]);
-  const shown = comments.length ? comments : earlyLines;
-  paintComments(shown);
-  return scriptFromSequence(date, sequence, lang, country, shown);
+  say('Reading the text');
+  await fillText(news, lang);
+  return scriptFromSequence(date, news, lang, country, []);
 }
 function countsFor(genres) {
   if (genres.length === 1) return [6];
@@ -2261,7 +2252,7 @@ async function collectPosts(date) {
       say('Searching ' + label);
       let got = [];
       try { got = await rowsForSlot(slot); } catch (e) { console.warn(e); }
-      pickFresh(got, used, slot.count || 1, label).forEach(r => {
+      pickFresh(got, used, slot.count || 1).forEach(r => {
         used.add(keyOf(r));
         rows.push({ ...r, x: true, cat: slot.cat || r.cat || 'X', source: r.source || (slot.who ? ('X @' + slot.who) : 'X') });
       });
@@ -2272,10 +2263,10 @@ async function collectPosts(date) {
     say('Searching @' + names[0]);
     let got = [];
     try { got = await accountRows(names); } catch (e) { console.warn(e); }
-    pickFresh(got, used, Math.min(6, Math.max(3, names.length * 2)), 'x').forEach(r => rows.push(r));
+    pickFresh(got, used, Math.min(6, Math.max(3, names.length * 2))).forEach(r => rows.push(r));
   }
-  if (!rows.length) throw new Error('No X posts yet. Press Update to try again.');
-  rememberKeys(rows.map(r => keyOf(r)));
+  if (!rows.length) throw noNewError('No new X posts yet. Press Update again later.');
+  S.pendingKeys = rows.flatMap(storyKeys);
   progress(0.45);
   await fillText(rows, lang);
   const items = rows.filter(r => r && r.headline).map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
@@ -2291,16 +2282,12 @@ async function collect(date) {
   if (!genres.length) throw new Error('Choose at least one genre in Settings.');
   if (genres.length !== GENRES.length) return collectGenres(date, genres);
   const blocked = text => violentHidden() && VIOLENT.test(text);
+  const past = seenKeys();
   progress(0.08);
   let xrows = [];
   const names = xAccounts();
-  commentHold = [];
-  const earlyP = gatherNetComments(names, []).then(lines => {
-    if (!S.again && lines.length) paintComments(lines);
-    return lines;
-  }).catch(() => []);
-  showWaiting('Comments', []);
-  say('Searching comments');
+  showWaiting('News', []);
+  say('Searching the news');
   if (names.length) {
     if (S.playing) say('Adding @' + names[0]);
     else say('Searching @' + names[0]);
@@ -2321,12 +2308,12 @@ async function collect(date) {
     if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
     if (S.playing) say('Adding ' + name);
-    else { showWaiting('Comments', []); say('Searching ' + name); }
+    else { showWaiting('News', []); say('Searching ' + name); }
     try {
       const items = await newsRows(RSS[id], 'NEWS');
       const tagged = items.map(it => ({ ...it, source: it.source || name }));
       batches.push(tagged);
-      if (!S.playing) showWaiting('Comments', []);
+      if (!S.playing) showWaiting('News', []);
       if (!lead.length) {
         const early = [];
         const seen = new Set();
@@ -2335,7 +2322,7 @@ async function collect(date) {
           if (!sp.headline || blocked(sp.headline) || seen.has(sp.headline.toLowerCase().slice(0, 90))) return;
           if (!sp.source || sp.source === 'News') sp.source = it.source || sp.source;
           const row = { headline: sp.headline, link: it.link, pubDate: it.pubDate, cat: 'NEWS', source: sp.source, place: 'middle' };
-          if (!sourceOn(sourceId(row))) return;
+          if (!sourceOn(sourceId(row)) || isSeen(row, past)) return;
           seen.add(sp.headline.toLowerCase().slice(0, 90));
           early.push(row);
         });
@@ -2362,7 +2349,7 @@ async function collect(date) {
   } catch (e) { console.warn(e); }
   const used = new Set();
   const rows = [];
-  batches.flat().forEach(it => {
+  const addItems = list => (list || []).forEach(it => {
     const sp = splitHeadline(it.title);
     if (!sp.headline || blocked(sp.headline)) return;
     if (!sp.source || sp.source === 'News') sp.source = it.source || sp.source;
@@ -2378,13 +2365,22 @@ async function collect(date) {
     used.add(key);
     rows.push(row);
   });
-  const past = seenKeys();
+  addItems(batches.flat());
   const keyOf = r => r.headline.toLowerCase().slice(0, 90);
   const xkeys = new Set(xrows.map(keyOf));
-  const freshX = xrows.filter(r => !past.has(keyOf(r)));
-  const xpick = freshX.length ? freshX : xrows;
-  const fresh = rows.filter(r => !past.has(keyOf(r)) && !xkeys.has(keyOf(r)));
-  const pool = fresh.length >= 8 ? fresh : rows.filter(r => !xkeys.has(keyOf(r)));
+  const xpick = xrows.filter(r => !isSeen(r, past));
+  const freshRows = () => rows.filter(r => !isSeen(r, past) && !xkeys.has(keyOf(r)));
+  /* Not enough new stories: read the other papers, then topic searches, until there are enough. */
+  if (freshRows().length < 10) {
+    const more = intlFeeds.concat(jpFeeds).filter(id => !picks.includes(id)).map(id => [RSS[id], SOURCE_LABEL[id] || id]).concat(topicFeeds());
+    for (const [url, label] of more) {
+      if (S.again || freshRows().length >= 10) break;
+      if (S.playing) say('Adding ' + label);
+      else { showWaiting('News', []); say('Searching ' + label); }
+      try { addItems((await newsRows(url, 'NEWS')).map(it => ({ ...it, source: it.source || label }))); } catch (e) { console.warn(e); }
+    }
+  }
+  const pool = freshRows();
   const jpSource = id => ['nhk', 'nikkei', 'asahi', 'yomiuri'].includes(id);
   let chosen = ['intl', 'jp'].flatMap(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), 6)).slice(0, 12);
   const leadNews = lead.filter(r => r && r.headline && !r.coffee);
@@ -2404,19 +2400,13 @@ async function collect(date) {
     const keys = new Set(leadNews.map(keyOf));
     chosen = leadNews.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
   }
-  rememberKeys(chosen.filter(r => r.headline).map(r => r.headline.toLowerCase().slice(0, 90)));
-  if (!chosen.some(r => r.headline)) throw new Error('Could not collect headlines. Press Update to try again.');
+  chosen = chosen.filter(r => r && r.headline && !isSeen(r, past));
+  if (!chosen.length) throw noNewError();
+  S.pendingKeys = chosen.flatMap(storyKeys);
   progress(0.45);
-  const handles = names.slice();
-  chosen.forEach(r => { if (r && r.x) handles.push(String(r.source || '').replace(/^X\s*@/i, '')); });
-  const [earlyLines, comments] = await Promise.all([
-    earlyP,
-    gatherNetComments(handles, chosen.map(r => r.headline)),
-    fillText(chosen, lang),
-  ]);
-  const shown = comments.length ? comments : earlyLines;
-  paintComments(shown);
-  return scriptFromSequence(date, chosen, lang, country, shown);
+  say('Reading the text');
+  await fillText(chosen, lang);
+  return scriptFromSequence(date, chosen, lang, country, []);
 }
 
 /* ---------- export ---------- */
@@ -2556,15 +2546,15 @@ async function runAll(opts) {
   if (S.busy) {
     S.again = opts;
     stop();
-    showWaiting(feedMode() === 'x' ? 'X posts' : 'Comments', []);
-    say(feedMode() === 'x' ? 'Searching X' : 'Searching comments');
+    showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
+    say(feedMode() === 'x' ? 'Searching X' : 'Searching the news');
     return;
   }
-  S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
+  S.busy = true; S.grew = false; S.pendingKeys = null; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    showWaiting(feedMode() === 'x' ? 'X posts' : 'Comments', []);
-    say(feedMode() === 'x' ? 'Searching X' : 'Searching comments');
+    showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
+    say(feedMode() === 'x' ? 'Searching X' : 'Searching the news');
   }
   try {
     const date = opts.date || $('date').value || todayJST();
@@ -2574,11 +2564,20 @@ async function runAll(opts) {
       /* A newer update is waiting. Keep that search on screen. */
     } else if (!opts.sample && S.grew && S.playing && S.show) growShow(script);
     else await setScript(script, true);
+    /* Remember the stories once they are on screen, so they do not play again. */
+    if (!S.again && S.pendingKeys) { rememberKeys(S.pendingKeys); S.pendingKeys = null; }
     if (!S.again) say(watchLine(!!(S.ac && S.ac.state === 'running')));
   } catch (e) {
-    console.error(e); say(e.message || String(e), true); progress(0);
+    console.error(e); progress(0);
     S.busy = false; setBusy(false);
     if (S.again) { const next = S.again; S.again = null; return runAll(next); }
+    /* Nothing new: the current video keeps playing. */
+    if (e && e.noNew && S.show) {
+      if (WATCH) startWatch(); else draw(0);
+      say(e.message + ' This video keeps playing.');
+      return;
+    }
+    say(e.message || String(e), true);
     throw e;
   }
   S.busy = false; setBusy(false);
@@ -2617,6 +2616,109 @@ function openStudio() {
   const dock = $('backDock');
   if (dock) dock.hidden = false;
 }
+
+/* ---------- full screen ---------- */
+function realFull() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+function fullOn() { return !!(realFull() || S.pseudo || S.vfull); }
+/* The browser's Fullscreen API, when it has one that works (PC, Android, iPad). */
+function fsApi() {
+  const node = $('watch');
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  return req && allowed !== false ? req : null;
+}
+/* iPhone Safari and the X app have no Fullscreen API for a page, but a video can go full screen.
+   The canvas is copied into a muted video behind it, and Full screen opens that video in the
+   system player. The music keeps playing from the page. */
+function setupVideoFull() {
+  if (fsApi() || S.fv) return;
+  const cv = $('cv');
+  const v = document.createElement('video');
+  if (typeof v.webkitEnterFullscreen !== 'function' || typeof cv.captureStream !== 'function') return;
+  let stream = null;
+  try { stream = cv.captureStream(30); } catch (e) { console.warn(e); return; }
+  v.id = 'fsv';
+  v.muted = true;
+  v.defaultMuted = true;
+  v.playsInline = true;
+  v.setAttribute('muted', '');
+  v.setAttribute('playsinline', '');
+  v.setAttribute('webkit-playsinline', '');
+  v.setAttribute('aria-hidden', 'true');
+  v.srcObject = stream;
+  cv.parentNode.insertBefore(v, cv);
+  S.fv = v;
+  const kick = () => { if (v.paused && !S.vfull) { const r = v.play(); if (r && r.catch) r.catch(() => {}); } };
+  kick();
+  /* Low Power Mode blocks the first start; any tap on the page tries again. */
+  window.addEventListener('pointerdown', kick, true);
+  v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
+  v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
+  /* Pause and play in the system player pause and play the video and the music. */
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); say('Paused. Press Play to continue.'); } }, 300); });
+  v.addEventListener('play', () => { if (S.vfull && !S.playing && S.show) { play().catch(() => {}); playSound(currentT()); } });
+}
+function videoFull() {
+  const v = S.fv;
+  if (!v || v.readyState < 1 || typeof v.webkitEnterFullscreen !== 'function') return false;
+  try {
+    const r = v.play();
+    if (r && r.catch) r.catch(() => {});
+    v.webkitEnterFullscreen();
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+/* S.pseudo is the page's own full screen, the last resort when neither works. */
+function paintFull() {
+  const on = fullOn();
+  $('watch').classList.toggle('is-full', !!(realFull() || S.pseudo));
+  $('watch').classList.toggle('pseudo', !!S.pseudo);
+  document.body.classList.toggle('lock', !!S.pseudo);
+  $('full').textContent = on ? 'Exit' : 'Full screen';
+}
+function waitFullChange(ms) {
+  return new Promise(resolve => {
+    const done = () => { document.removeEventListener('fullscreenchange', done); document.removeEventListener('webkitfullscreenchange', done); resolve(); };
+    document.addEventListener('fullscreenchange', done);
+    document.addEventListener('webkitfullscreenchange', done);
+    setTimeout(done, ms);
+  });
+}
+async function enterFull() {
+  closeStudio();
+  const node = $('watch');
+  const req = fsApi();
+  /* iPhone: the system player. This must run inside the tap, before any await. */
+  if (!req && videoFull()) return;
+  if (req) {
+    try {
+      const r = req.call(node);
+      if (r && r.then) await r; else await waitFullChange(700);
+    } catch (e) { console.warn(e); }
+    if (realFull()) {
+      paintFull();
+      const wide = S.show && S.show.W > S.show.H;
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock(wide ? 'landscape' : 'portrait'); } catch (e) {}
+      return;
+    }
+  }
+  S.pseudo = true;
+  paintFull();
+}
+async function exitFull() {
+  if (S.pseudo) { S.pseudo = false; paintFull(); return; }
+  if (S.vfull && S.fv) {
+    try { S.fv.webkitExitFullscreen(); } catch (e) { console.warn(e); }
+    return;
+  }
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit && realFull()) {
+    try { const r = exit.call(document); if (r && r.then) await r; } catch (e) { console.warn(e); }
+  }
+  paintFull();
+}
+function toggleFull() { return fullOn() ? exitFull() : enterFull(); }
 
 /* ---------- page ---------- */
 function initUI() {
@@ -2871,73 +2973,82 @@ function keepInitTail() {
   };
   $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
-  let pull = null;
+  /* Pull down to refresh. Touch uses touch events, which keep coming while the browser scrolls;
+     a mouse uses pointer events. A pull that is cancelled or lifted ends without a refresh,
+     so it never stays half-open over the buttons. */
   const header = document.querySelector('header');
   const frame = document.querySelector('.frame');
-  const pullLabel = () => document.querySelector('header .pull');
+  const PULL_AT = 70;
+  let pull = null;
   const videoAtTop = () => {
     const cv = $('cv');
     if (!cv) return window.scrollY < 80;
     return cv.getBoundingClientRect().top <= header.offsetHeight + 12;
   };
-  const canPull = e => {
-    if (!$('studio').hidden) return false;
-    if (!videoAtTop()) return false;
-    if (e.target.closest && e.target.closest('#gear, button, a, input, select, textarea, summary')) return false;
-    return header.contains(e.target) || !!(e.target.closest && e.target.closest('#stage, canvas, main'));
+  const canPull = target => {
+    if (!$('studio').hidden || S.vfull) return false;
+    if (!fullOn() && !videoAtTop()) return false;
+    if (target && target.closest && target.closest('#gear, button, a, input, select, textarea, summary, .ctl, .music')) return false;
+    return fullOn() || header.contains(target) || !!(target && target.closest && target.closest('#stage, canvas, main'));
   };
   const markPull = dy => {
-    const label = pullLabel();
-    if (label) label.textContent = dy > 70 ? 'Release to refresh' : 'Pull down to refresh';
+    const label = document.querySelector('header .pull');
+    if (label) label.textContent = dy > PULL_AT ? 'Release to refresh' : 'Pull down to refresh';
     if (!frame) return;
     if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.45, 96) + 'px)'; }
     else { frame.classList.remove('pulling'); frame.style.transform = ''; }
   };
-  const finishPull = dy => {
-    const dead = pull && pull.dead;
+  const endPull = go => {
+    const p = pull;
     pull = null;
-    if (frame) { frame.classList.remove('pulling'); frame.style.transform = ''; }
-    const label = pullLabel();
-    if (label) label.textContent = 'Pull down to refresh';
-    if (dead || dy < 70) return;
+    markPull(0);
+    if (!go || !p || p.dead || p.dy < PULL_AT) return;
     say('Refreshing. The stories and their order change.');
     refreshMarket();
   };
-  window.addEventListener('pointerdown', e => {
-    if (!canPull(e)) return;
-    pull = { y: e.clientY, id: e.pointerId, dead: false };
-  });
-  window.addEventListener('pointermove', e => {
-    if (!pull || pull.id !== e.pointerId || pull.dead) return;
-    const dy = e.clientY - pull.y;
-    if (dy < -12) { pull.dead = true; markPull(0); return; }
-    if (dy > 0) markPull(dy);
-  });
+  const beginPull = (target, y, kind) => {
+    if (pull) endPull(false);
+    if (!canPull(target)) return;
+    pull = { y, kind, dy: 0, dead: false };
+  };
+  const movePull = y => {
+    if (!pull || pull.dead) return false;
+    pull.dy = y - pull.y;
+    if (pull.dy < -12) { pull.dead = true; markPull(0); return false; }
+    markPull(pull.dy);
+    return pull.dy > 8;
+  };
+  window.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { if (pull) endPull(false); return; }
+    beginPull(e.target, e.touches[0].clientY, 'touch');
+  }, { passive: true });
   window.addEventListener('touchmove', e => {
-    if (!pull || pull.dead) return;
-    const t = e.touches[0];
-    if (!t) return;
-    const dy = t.clientY - pull.y;
-    if (dy < -12) { pull.dead = true; markPull(0); return; }
-    if (dy > 8) {
-      markPull(dy);
-      if (e.cancelable) e.preventDefault();
-    }
+    if (!pull || pull.kind !== 'touch' || e.touches.length !== 1) return;
+    if (movePull(e.touches[0].clientY) && e.cancelable) e.preventDefault();
   }, { passive: false });
-  window.addEventListener('pointerup', e => {
-    if (!pull || pull.id !== e.pointerId) return;
-    finishPull(e.clientY - pull.y);
+  window.addEventListener('touchend', () => { if (pull && pull.kind === 'touch') endPull(true); });
+  window.addEventListener('touchcancel', () => { if (pull && pull.kind === 'touch') endPull(false); });
+  window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) beginPull(e.target, e.clientY, 'mouse'); });
+  window.addEventListener('pointermove', e => {
+    if (!pull || pull.kind !== 'mouse' || e.pointerType !== 'mouse') return;
+    if (!(e.buttons & 1)) { endPull(false); return; }
+    movePull(e.clientY);
   });
-  window.addEventListener('pointercancel', e => {
-    if (!pull || pull.id !== e.pointerId) return;
-    finishPull(e.clientY - pull.y);
-  });
-  window.addEventListener('touchend', e => {
-    if (!pull) return;
-    const t = e.changedTouches && e.changedTouches[0];
-    if (!t) return;
-    finishPull(t.clientY - pull.y);
-  });
+  window.addEventListener('pointerup', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') endPull(true); });
+  window.addEventListener('pointercancel', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') endPull(false); });
+  window.addEventListener('blur', () => { if (pull) endPull(false); });
+  /* Full screen. */
+  $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
+  document.addEventListener('fullscreenchange', paintFull);
+  document.addEventListener('webkitfullscreenchange', paintFull);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.pseudo) exitFull(); });
+  /* While the system player covers the page, the browser may stop animation frames. Keep drawing. */
+  setInterval(() => {
+    if (!S.vfull || !S.playing || performance.now() - S.lastDraw < 80) return;
+    if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    tick();
+  }, 40);
+  setupVideoFull();
   $('seek').oninput = () => {
     if (!S.show) return;
     const T = +$('seek').value / 1000 * S.show.duration;
