@@ -21,7 +21,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
-header .title { font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; }
+button.title { background: none; border: 0; border-radius: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; cursor: pointer; }
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 #gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
@@ -40,7 +40,9 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
-.music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
+button.on, .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
+.filter-row:has(input:checked), .check:has(input:checked) { color: var(--acc); }
+#lineup.live { border-color: var(--acc); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 #storyLink { color: var(--acc); }
 .caption.err { color: #ff9b8a; }
@@ -93,7 +95,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><span class="title">News Shorts</span><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
+<header><div><button type="button" id="home" class="title">News Shorts</button><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
 <main>
   <section class="stage" id="stage">
     <div class="frame">
@@ -2796,6 +2798,7 @@ async function setScript(raw, quiet) {
   S.script = s; S.show = E.prepare(s, S.format);
   sizeCanvas();
   $('json').value = JSON.stringify(s, null, 2);
+  S.jsonClean = $('json').value;
   $('sources').textContent = sourcesText(s);
   $('play').disabled = $('seek').disabled = $('exportBtn').disabled = false;
   $('seek').value = 0; draw(0);
@@ -3956,15 +3959,24 @@ function initUI() {
     $('studio').scrollTop = 0;
   };
   $('backVideo').onclick = closeStudio;
+  $('home').onclick = () => { closeStudio(); window.scrollTo(0, 0); };
   if (Q.get('edit') === '1') $('studio').hidden = false;
   const forced = Q.get('format');
   const savedLayout = store.get('layout', 'auto');
   $('layout').value = forced === 'pc' || forced === 'youtube' ? forced : (forced === 'x' ? 'phone' : (['auto', 'phone', 'x', 'youtube', 'pc'].includes(savedLayout) ? savedLayout : 'auto'));
   $('layout').onchange = () => { if (!Q.get('format')) store.set('layout', $('layout').value); applyLayout(); };
   applyLayout();
-  $('go').onclick = () => runAll({ download: false, export: $('autoExport').checked }).catch(() => {});
+  const arm = id => ['applyLine', 'apply', 'go'].forEach(x => { const el = $(x); if (el) el.classList.toggle('on', x === id); });
+  $('go').onclick = () => { arm('go'); runAll({ download: false, export: $('autoExport').checked }).catch(() => {}); };
   $('sample').onclick = () => setScript(SAMPLE).catch(e => say(e.message, true));
-  $('apply').onclick = () => { try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('Could not read the JSON: ' + e.message, true); } };
+  $('apply').onclick = () => {
+    arm('apply');
+    if ($('json').value !== (S.jsonClean || '')) {
+      try { setScript(JSON.parse($('json').value)).catch(e => say(e.message, true)); } catch (e) { say('Could not read the JSON: ' + e.message, true); }
+      return;
+    }
+    refreshMarket();
+  };
   $('exportBtn').onclick = () => exportMP4(chosenFormats()).catch(e => { console.error(e); say('Export failed: ' + e.message, true); });
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
@@ -4045,6 +4057,7 @@ function initUI() {
   const paintChips = () => {
     const keys = new Set(lineup.value.split(/\n/).map(lineName).filter(Boolean));
     document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
+    lineup.classList.toggle('live', !!lineup.value.trim());
   };
   const chips = $('genreChips');
   CHIPS.forEach(chip => {
@@ -4061,6 +4074,7 @@ function initUI() {
       lineup.value = lines.join('\n');
       store.set('lineup', lineup.value);
       paintChips();
+      arm('applyLine');
       refreshMarket();
     };
     chips.appendChild(b);
@@ -4069,14 +4083,19 @@ function initUI() {
   lineup.addEventListener('input', () => {
     store.set('lineup', lineup.value);
     paintChips();
+    $('applyLine').classList.remove('on');
     scheduleRefresh(800);
   });
   $('applyLine').onclick = () => {
     clearTimeout(refreshTimer);
     store.set('lineup', lineup.value);
     paintChips();
+    arm('applyLine');
     refreshMarket();
   };
+  const markLine = () => { if (lineup.value.trim()) arm('applyLine'); };
+  const oldRefresh = refreshMarket;
+  refreshMarket = function () { markLine(); return oldRefresh(); };
   keepInitTail();
 }
 function saveFilters() {
