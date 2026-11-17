@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f1e6">
+<title>Humor</title>
+<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@700;900&family=Tinos:wght@700&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#f7f1e6; --card:#fffaf2; --line:#e4d8c4; --ink:#1c140c; --mute:#6d6458; --acc:#9a5b12; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
+button.title { background: none; border: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; cursor: pointer; }
+header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
+a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
+main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
+.watch:fullscreen, .watch:-webkit-full-screen { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 12px 16px; box-sizing: border-box; }
+.frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
+.frame.pulling { transition: none; }
+.watch:fullscreen .frame, .watch:-webkit-full-screen .frame { flex: 1; display: flex; align-items: center; min-height: 0; }
+canvas#cv { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; background: #f4efe4; border-radius: 12px; }
+.watch:fullscreen canvas, .watch:-webkit-full-screen canvas { width: 100%; height: 100%; object-fit: contain; aspect-ratio: auto; border-radius: 0; }
+.source-url { display: block; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
+.ctl { display: flex; align-items: center; gap: 10px; margin: 10px auto 0; }
+.ctl input[type=range] { flex: 1; accent-color: var(--acc); }
+.ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; font-size: 13px; }
+button { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; }
+button:disabled { opacity: .45; cursor: default; }
+.caption { text-align: center; color: var(--mute); font-size: 13px; margin: 10px auto 0; }
+.caption.err { color: #9a3b28; }
+#prog { height: 4px; background: var(--line); border-radius: 2px; margin: 10px auto 0; max-width: 100%; overflow: hidden; }
+#prog i { display: block; height: 100%; width: 0; background: var(--acc); }
+#unmute {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 24px);
+  background: rgba(255,250,242,.9); color: var(--ink); border: 1px solid var(--acc);
+  border-radius: 999px; padding: 8px 14px; font-size: 14px;
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><a class="jump" href="../">News</a></header>
+<main>
+  <div id="watch" class="watch">
+    <div class="frame">
+      <canvas id="cv" width="1920" height="1080"></canvas>
+      <button type="button" id="unmute" hidden>Tap for sound</button>
+    </div>
+    <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
+    <div class="ctl">
+      <button id="play" disabled>Play</button>
+      <button id="full" type="button">Full screen</button>
+      <button id="update" type="button">Update</button>
+      <input type="range" id="seek" min="0" max="1000" value="0" disabled>
+      <span id="time">0.0 / 0.0</span>
+    </div>
+  </div>
+  <div id="prog"><i></i></div>
+  <p id="caption" class="caption">Opening five stories…</p>
+</main>
+<script>
+/*__ENGINE__*/
+const ASSETS = /*__ASSETS__*/;
+const E = window.NSEngine;
+const $ = id => document.getElementById(id);
+const ctx = $('cv').getContext('2d');
+const Q = new URLSearchParams(location.search);
+const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const WATCH = Q.get('watch') !== '0' && !REDUCE;
+const NEWS_COUNT = 5;
+const JOKE_COUNT = 10;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('newsShorts.humor.' + k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('newsShorts.humor.' + k, v); } catch (e) {} },
+};
+const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null };
+const FEEDS = [
+  ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
+  ['https://assets.wor.jp/rss/rdf/nikkei/news.rdf', 'Nikkei'],
+  ['https://www.asahi.com/rss/asahi/newsheadlines.rdf', 'Asahi'],
+  ['https://assets.wor.jp/rss/rdf/yomiuri/latestnews.rdf', 'Yomiuri'],
+];
+const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad2 = n => String(n).padStart(2, '0');
+function say(msg, err) {
+  const el = $('caption');
+  el.textContent = msg || '';
+  el.classList.toggle('err', !!err);
+}
+function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
+function todayJST() {
+  const d = new Date(Date.now() + 9 * 3600e3);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+function b64bytes(b64) { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function loadAssets() {
+  await Promise.all('ABCDE'.split('').map(async g => {
+    const im = new Image();
+    im.src = 'data:image/jpeg;base64,' + ASSETS['bg_' + g];
+    await im.decode();
+    S.bgs[g] = im;
+  }));
+  S.music = b64bytes(ASSETS.track);
+}
+function rssItems(xml) {
+  const items = [];
+  const re = /<item\b[^>]*>([\s\S]*?)<\/item>/g;
+  let m;
+  const decode = s => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+  while ((m = re.exec(xml))) {
+    const block = m[1];
+    const title = decode((block.match(/<title>([\s\S]*?)<\/title>/) || [])[1]);
+    const link = decode((block.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || (block.match(/<guid>([\s\S]*?)<\/guid>/) || [])[1]);
+    const pubDate = decode((block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1] || (block.match(/<dc:date>([\s\S]*?)<\/dc:date>/) || [])[1]);
+    if (title) items.push({ title, link, pubDate });
+  }
+  return items;
+}
+function splitHeadline(title) {
+  const raw = String(title || '').trim();
+  const parts = raw.split(/\s[-–—]\s/);
+  if (parts.length < 2) return raw;
+  const tail = parts[parts.length - 1].trim();
+  if (tail.length <= 32 && tail.split(/\s+/).length <= 4 && !/[.?!。]/.test(tail)) return parts.slice(0, -1).join(' - ').trim();
+  return raw;
+}
+async function loadFeed(url) {
+  try {
+    const res = await Promise.race([
+      fetch('https://r.jina.ai/' + url, { headers: { 'X-Return-Format': 'text' } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000)),
+    ]);
+    if (res.ok) {
+      const parsed = rssItems(await res.text());
+      if (parsed.length) return parsed;
+    }
+  } catch (e) { console.warn(e); }
+  try {
+    const res = await Promise.race([
+      fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(url) + '&count=12'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+    ]);
+    if (res.ok) {
+      const j = await res.json();
+      if (j && j.status === 'ok') return (j.items || []).map(it => ({ title: it.title || '', link: it.link || '', pubDate: it.pubDate || '' }));
+    }
+  } catch (e) { console.warn(e); }
+  return [];
+}
+async function toJapanese(texts) {
+  const out = texts.slice();
+  const sep = '\n###\n';
+  for (let i = 0; i < texts.length; i += 5) {
+    const slice = texts.slice(i, i + 5);
+    const need = slice.some(t => !/[\u3040-\u30ff\u4e00-\u9fff]/.test(t));
+    if (!need) continue;
+    try {
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ja&dt=t&q=' + encodeURIComponent(slice.join(sep));
+      const data = JSON.parse(await (await fetch(url)).text());
+      const joined = (data[0] || []).map(row => (row && row[0]) || '').join('');
+      const parts = joined.split(/\s*###\s*/);
+      slice.forEach((src, k) => { out[i + k] = ((parts[k] || src).trim() || src); });
+    } catch (e) { console.warn(e); }
+  }
+  return out;
+}
+function seenKeys() {
+  try { return new Set(JSON.parse(store.get('seen', '[]'))); } catch (e) { return new Set(); }
+}
+function remember(keys) {
+  const prev = [...seenKeys()];
+  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 80)));
+}
+function jaWord(text) {
+  const katas = String(text || '').match(/[\u30a0-\u30ff]{2,8}/g) || [];
+  if (katas.length) return katas.sort((a, b) => b.length - a.length)[0].slice(0, 8);
+  const kanji = String(text || '').match(/[\u4e00-\u9fff]{2,4}/);
+  if (kanji) return kanji[0];
+  const kana = String(text || '').match(/[\u3040-\u309f]{2,6}/);
+  return kana ? kana[0] : 'NEWS';
+}
+function largeJa(text) {
+  const chars = [...String(text || '').replace(/\s+/g, ' ').trim()];
+  if (!chars.length) return { head: ['NEWS'], rest: '' };
+  const cap = Math.min(chars.length, 36);
+  const take = chars.slice(0, cap);
+  const rest = chars.slice(cap).join('').trim();
+  if (take.length <= 16) return { head: [take.join('')], rest };
+  let mid = Math.ceil(take.length / 2);
+  const breaks = [];
+  for (let i = 8; i <= take.length - 6; i++) {
+    if (take[i] === ' ' || /[、。！？とでをはがに]/.test(take[i - 1])) breaks.push(i);
+  }
+  if (breaks.length) mid = breaks.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+  return { head: [take.slice(0, mid).join('').trim(), take.slice(mid).join('').trim()].filter(Boolean), rest };
+}
+function story(row) {
+  const parts = largeJa(row.ja);
+  const kw = jaWord(row.ja);
+  let md = '';
+  if (row.pubDate) {
+    const d = new Date(row.pubDate);
+    if (!Number.isNaN(d.getTime())) md = (d.getMonth() + 1) + '/' + d.getDate();
+  }
+  return {
+    kw, cat: row.cat || row.source, topic: kw,
+    head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [],
+    tags: [], src: row.source, date: md, url: row.link || '',
+  };
+}
+function keywords(headline) {
+  const chunks = String(headline || '').match(/[\u30a0-\u30ff]{2,}|[\u4e00-\u9fff]{2,}/g) || [];
+  const out = [];
+  chunks.forEach(c => {
+    const word = /[\u30a0-\u30ff]/.test(c[0]) ? c.slice(0, 8) : c.slice(0, 2);
+    if (word.length < 2 || /^(日本|今日|本日|政府|発表|首相|大統領|東京|大阪|京都|世界|会社|大学|ニュース)$/.test(word)) return;
+    if (out.indexOf(word) < 0) out.push(word);
+  });
+  return out.slice(0, 2);
+}
+function replyOf(st) {
+  const author = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
+  if (!author) return null;
+  let text = String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (VIOLENT.test(text)) return null;
+  if ((text.match(/[\u3040-\u30ff]/g) || []).length < 1) return null;
+  const at = text.search(/[\u3040-\u30ff\u4e00-\u9fff]/);
+  if (at > 0) {
+    const lead = text.slice(0, at).trim();
+    if (lead.split(/\s+/).filter(w => /[A-Za-z]{4,}/.test(w)).length >= 2) text = text.slice(at);
+  }
+  if ([...text].length < 8 || !isFunny(text)) return null;
+  if (/ご冥福|追悼|亡くな|お悔やみ|ご逝去|死去/.test(text)) return null;
+  return { handle: author, text: focusJoke(text), url: (st && st.url) || '' };
+}
+function isFunny(text) {
+  const t = String(text || '').replace(/笑顔|笑み|民草|草の根/g, '');
+  return /笑|ワロタ|ワロ[^ッ]|草草|(?:^|[\s　、。！？(（])草(?:$|[\s　、。！？)）])|ｗ{2,}|w{2,}|😂|🤣|😆|😅|面白い|冗談|ウケる/.test(t);
+}
+function focusJoke(text) {
+  const chars = [...text];
+  if (chars.length <= 42) return text;
+  const m = text.match(/笑|ワロタ|草草|ｗｗ|www|😂|🤣|😆|面白い|冗談|ウケる/);
+  const at = m ? [...text.slice(0, m.index)].length : 0;
+  const start = Math.max(0, at - 16);
+  const slice = chars.slice(start, start + 40).join('').trim();
+  return (start ? '…' : '') + slice + (start + 40 < chars.length ? '…' : '');
+}
+function humorScore(text, headlines) {
+  let score = 0;
+  const funny = /笑|草|ワロタ|ワロ|ウケ|ネタ|やば|マジ|でかっ|でっかい|かわい|面白い|ジョーク|皮肉|ｗ{2,}|w{2,}|😂|🤣|😆|😅|😭|〜|～/.test(text);
+  if (funny) score += 8;
+  if (/[！？]{2,}/.test(text)) score += 2;
+  if (/[\u30a0-\u30ff]{3,}/.test(text)) score += 2;
+  const n = [...text].length;
+  if (n >= 8 && n <= 42) score += 3;
+  else if (n > 70) score -= 5;
+  if (/市況|株価|金利|為替|首相|政府|発表しました|によると|％|パーセント/.test(text)) score -= 6;
+  const bits = text.match(/[\u30a0-\u30ff]{2,}|[\u4e00-\u9fff]{2,}/g) || [];
+  const blob = (headlines || []).join('\n');
+  let hit = 0;
+  bits.forEach(b => { if (blob.includes(b)) hit++; });
+  const over = bits.length ? hit / bits.length : 0;
+  if (over > 0.55 && !funny) score -= 6;
+  else if (over > 0.12) score += 2;
+  return score;
+}
+async function searchReplies(q) {
+  const url = 'https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' (笑 OR 草 OR ワロタ OR 面白い) filter:replies lang:ja');
+  const res = await Promise.race([
+    fetch(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 9000)),
+  ]);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data && data.results) || [];
+}
+function pickFunny(rows, n) {
+  const ranked = rows.slice().sort((a, b) => b.score - a.score || a.text.length - b.text.length);
+  const out = [];
+  const handles = new Set();
+  const take = allowSame => {
+    ranked.forEach(row => {
+      if (out.length >= n) return;
+      if (out.some(x => x.text === row.text)) return;
+      const who = row.handle.toLowerCase();
+      if (!allowSame && handles.has(who)) return;
+      handles.add(who);
+      out.push(row);
+    });
+  };
+  take(false);
+  if (out.length < n) take(true);
+  return out;
+}
+async function funnyComments(news) {
+  const headlines = news.filter(r => !/死去|訃報|お悔やみ|ご逝去|亡く/.test((r.ja || '') + (r.headline || ''))).map(r => r.ja || r.headline);
+  const queries = [];
+  headlines.forEach(h => keywords(h).forEach(q => { if (queries.indexOf(q) < 0) queries.push(q); }));
+  const lists = await Promise.all(queries.slice(0, 6).map(q => searchReplies(q).catch(() => [])));
+  const rows = [];
+  const seen = new Set();
+  lists.flat().forEach(st => {
+    const got = replyOf(st);
+    if (!got) return;
+    const key = got.text.replace(/\s/g, '').toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    got.score = humorScore(got.text, headlines);
+    rows.push(got);
+  });
+  return pickFunny(rows, JOKE_COUNT);
+}
+async function collect() {
+  const n = Number(store.get('gen', '0')) || 0;
+  store.set('gen', String(n + 1));
+  const order = FEEDS.slice(n % FEEDS.length).concat(FEEDS.slice(0, n % FEEDS.length));
+  const rows = [];
+  const seen = new Set();
+  for (let i = 0; i < order.length; i++) {
+    if (S.again) break;
+    const [url, name] = order[i];
+    say('Searching ' + name);
+    progress(0.08 + 0.08 * i);
+    let items = [];
+    try { items = await loadFeed(url); } catch (e) { console.warn(e); }
+    items.slice(0, 8).forEach(it => {
+      const headline = splitHeadline(it.title);
+      const key = headline.toLowerCase().slice(0, 90);
+      if (!headline || headline.length < 8 || seen.has(key) || VIOLENT.test(headline)) return;
+      seen.add(key);
+      rows.push({ headline, link: it.link || '', pubDate: it.pubDate || '', source: name });
+    });
+  }
+  const past = seenKeys();
+  const fresh = rows.filter(r => !past.has(r.headline.toLowerCase().slice(0, 90)));
+  const pool = fresh.length >= NEWS_COUNT ? fresh : fresh.concat(rows.filter(r => past.has(r.headline.toLowerCase().slice(0, 90))));
+  const picked = [];
+  const counts = {};
+  pool.forEach(r => {
+    if (picked.length >= NEWS_COUNT) return;
+    counts[r.source] = counts[r.source] || 0;
+    if (counts[r.source] >= 2) return;
+    counts[r.source]++;
+    picked.push(r);
+  });
+  pool.forEach(r => { if (picked.length < NEWS_COUNT && picked.indexOf(r) < 0) picked.push(r); });
+  if (!picked.length) throw new Error('Could not collect headlines. Press Update to try again.');
+  say('Reading Japanese');
+  const ja = await toJapanese(picked.map(r => r.headline));
+  picked.forEach((r, i) => { r.ja = ja[i] || r.headline; });
+  say('Searching jokes');
+  progress(0.55);
+  let jokes = [];
+  try { jokes = await funnyComments(picked); } catch (e) { console.warn(e); }
+  remember(picked.map(r => r.headline.toLowerCase().slice(0, 90)));
+  progress(0.75);
+  const items = picked.map(story).concat(jokes.map(row => story({
+    ja: row.text,
+    source: 'X @' + row.handle,
+    link: row.url || '',
+    pubDate: '',
+    cat: 'HUMOR',
+  })));
+  return { date: todayJST(), items, market: 'Japan · Japanese' };
+}
+function normalize(s) {
+  const items = (s.items || []).slice(0, 16).map(it => ({
+    kw: String(it.kw || 'NEWS').slice(0, 16),
+    cat: String(it.cat || 'NEWS'),
+    topic: String(it.topic || it.kw || ''),
+    head: (it.head || []).map(x => String(x)).filter(Boolean).slice(0, 2),
+    sub: [],
+    jp: (it.jp || []).map(x => String(x)).filter(Boolean).slice(0, 4),
+    tags: [],
+    src: String(it.src || ''),
+    date: String(it.date || ''),
+    url: String(it.url || ''),
+  }));
+  if (!items.length) throw new Error('The script has no stories');
+  return { date: s.date || todayJST(), items, market: 'Japan · Japanese' };
+}
+async function loadFonts(script) {
+  const txt = E.allText(script);
+  if (!document.fonts || !document.fonts.load) return;
+  const link = document.getElementById('gf');
+  if (link && !link.sheet) await Promise.race([new Promise(r => { link.addEventListener('load', r, { once: true }); link.addEventListener('error', r, { once: true }); }), sleep(8000)]);
+  await Promise.race([
+    Promise.all(['900 64px "Noto Serif JP"', '700 40px "Noto Serif JP"', '700 34px "Noto Sans JP"'].map(f => document.fonts.load(f, txt).catch(() => {}))).then(() => document.fonts.ready),
+    sleep(12000),
+  ]);
+}
+function sizeCanvas() {
+  const cv = $('cv');
+  if (S.show && (cv.width !== S.show.W || cv.height !== S.show.H)) { cv.width = S.show.W; cv.height = S.show.H; }
+}
+function safeUrl(u) {
+  try {
+    const x = new URL(String(u || ''), location.href);
+    return x.protocol === 'http:' || x.protocol === 'https:' ? x.href : '';
+  } catch (e) { return ''; }
+}
+function draw(T) {
+  if (!S.show) return;
+  const shown = Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS));
+  E.drawFrame(ctx, S.show, shown, S.bgs);
+  $('time').textContent = `${T.toFixed(1)} / ${S.show.duration.toFixed(1)}`;
+  const a = $('storyLink');
+  const pace = E.DUR || 3.2;
+  const i = Math.min(S.show.items.length - 1, Math.max(0, Math.floor(shown / pace)));
+  const it = S.show.items[i];
+  const url = safeUrl(it && it.url);
+  if (!url) { a.hidden = true; a.removeAttribute('href'); a.textContent = ''; return; }
+  a.hidden = false;
+  a.href = url;
+  a.textContent = url;
+}
+function currentT() {
+  if (!S.show) return 0;
+  if (S.playing) return S.origin + (performance.now() - S.t0perf) / 1000;
+  return (+$('seek').value / 1000) * (S.show.duration || 0);
+}
+function musicEl() {
+  if (S.el) return S.el;
+  const el = document.createElement('audio');
+  el.preload = 'auto';
+  el.setAttribute('playsinline', '');
+  const blob = new Blob([S.music], { type: 'audio/mp4' });
+  S.musicUrl = URL.createObjectURL(blob);
+  el.src = S.musicUrl;
+  document.body.appendChild(el);
+  S.el = el;
+  return el;
+}
+function playSound(T) {
+  if (!S.music) return;
+  const el = musicEl();
+  const dur = S.show ? S.show.duration : 0;
+  const len = el && isFinite(el.duration) ? el.duration : 40;
+  const at = Math.max(0, Math.min(Math.max(0, len - dur) + Math.max(0, T || 0), Math.max(0, len - 0.15)));
+  try { el.currentTime = at; } catch (e) {}
+  const play = el.play();
+  if (play && play.then) play.then(() => { S.audioOn = true; $('unmute').hidden = true; }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
+}
+function stop() {
+  S.playing = false;
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+  if (S.el) { try { S.el.pause(); } catch (e) {} }
+  S.audioOn = false;
+  $('play').textContent = 'Play';
+  $('unmute').hidden = true;
+}
+function beginPlayback(T0) {
+  S.origin = T0;
+  S.t0perf = performance.now();
+  S.playing = true;
+  $('play').disabled = false;
+  $('play').textContent = 'Pause';
+  $('unmute').hidden = !!S.audioOn;
+  if (!S.raf) S.raf = requestAnimationFrame(tick);
+}
+function tick() {
+  S.raf = 0;
+  if (!S.playing || !S.show) return;
+  let T = currentT();
+  if (S.show.duration > 0 && T >= S.show.duration) {
+    if (S.busy) {
+      draw(Math.max(0, S.show.duration - 1 / E.FPS));
+      $('seek').value = '1000';
+      if (S.playing) S.raf = requestAnimationFrame(tick);
+      return;
+    }
+    const over = T % S.show.duration;
+    S.origin = over;
+    S.t0perf = performance.now();
+    if (S.audioOn && S.el) { try { S.el.currentTime = Math.max(0, (isFinite(S.el.duration) ? S.el.duration : 40) - S.show.duration + over); } catch (e) {} }
+    T = over;
+  }
+  const shown = Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS));
+  draw(shown);
+  $('seek').value = String(Math.round(Math.min(Math.max(0, T), S.show.duration) / S.show.duration * 1000));
+  if (S.playing) S.raf = requestAnimationFrame(tick);
+}
+async function setScript(raw) {
+  stop();
+  const s = normalize(raw);
+  S.script = s;
+  S.show = E.prepare(s, 'wide');
+  sizeCanvas();
+  $('play').disabled = false;
+  $('seek').disabled = false;
+  $('seek').value = '0';
+  draw(0);
+  const jokes = s.items.filter(it => it.cat === 'HUMOR').length;
+  const line = 'Playing five stories, then ' + jokes + ' jokes. Tap the picture for sound.';
+  if (WATCH && !S.busy) {
+    beginPlayback(0);
+    playSound(0);
+    say(line);
+  }
+  await loadFonts(s);
+  if (S.script !== s || !S.show) return;
+  const T = S.playing ? Math.max(0, Math.min(currentT(), S.show.duration)) : 0;
+  S.show = E.prepare(s, 'wide');
+  sizeCanvas();
+  draw(S.playing ? Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)) : 0);
+}
+function setBusy(b) {
+  S.busy = b;
+  $('update').disabled = !!b;
+  $('update').textContent = b ? 'Creating…' : 'Update';
+}
+async function runAll() {
+  if (S.busy) { S.again = true; return; }
+  setBusy(true);
+  say('Searching Japanese news');
+  progress(0.05);
+  try {
+    const script = await collect();
+    if (S.again) return;
+    await setScript(script);
+    progress(1);
+    if (!S.playing) {
+      const jokes = (S.script && S.script.items || []).filter(it => it.cat === 'HUMOR').length;
+      say('Playing five stories, then ' + jokes + ' jokes. Tap the picture for sound.');
+    }
+  } catch (e) {
+    console.error(e);
+    say(e.message || String(e), true);
+    progress(0);
+  } finally {
+    const again = S.again;
+    S.again = null;
+    setBusy(false);
+    if (again) runAll();
+  }
+}
+function toggle() {
+  if (!S.show) return;
+  if (S.playing) { stop(); say('Paused. Press Play to continue.'); return; }
+  let T0 = (+$('seek').value / 1000) * S.show.duration;
+  if (T0 >= S.show.duration - 0.05) T0 = 0;
+  beginPlayback(T0);
+  playSound(T0);
+  say('Playing.');
+}
+function fullOn() { return document.fullscreenElement || document.webkitFullscreenElement; }
+async function toggleFull() {
+  const node = $('watch');
+  if (fullOn()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) await exit.call(document);
+    return;
+  }
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  if (!req) { say('This browser cannot go full screen.', true); return; }
+  await req.call(node);
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+}
+function paintFull() { $('full').textContent = fullOn() ? 'Exit' : 'Full screen'; }
+$('play').onclick = toggle;
+$('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
+document.addEventListener('fullscreenchange', paintFull);
+document.addEventListener('webkitfullscreenchange', paintFull);
+$('update').onclick = () => runAll();
+$('home').onclick = () => { window.scrollTo(0, 0); runAll(); };
+$('unmute').onclick = e => { e.stopPropagation(); if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * S.show.duration); playSound(currentT()); };
+$('cv').addEventListener('pointerdown', () => { if (!S.audioOn) { if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * (S.show.duration || 0)); playSound(S.playing ? currentT() : 0); } });
+$('seek').addEventListener('input', () => {
+  if (!S.show) return;
+  const T = (+$('seek').value / 1000) * S.show.duration;
+  if (S.playing) { S.origin = T; S.t0perf = performance.now(); if (S.audioOn && S.el) { try { S.el.currentTime = Math.max(0, (isFinite(S.el.duration) ? S.el.duration : 40) - S.show.duration + T); } catch (e) {} } }
+  draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
+});
+let pull = null;
+const frame = document.querySelector('.frame');
+window.addEventListener('pointerdown', e => {
+  if (fullOn()) return;
+  if (e.target.closest && e.target.closest('button, a, input')) return;
+  if (window.scrollY > 8) return;
+  pull = { y: e.clientY };
+});
+window.addEventListener('pointermove', e => {
+  if (!pull) return;
+  const dy = e.clientY - pull.y;
+  const label = document.querySelector('header .pull');
+  if (label) label.textContent = dy > 70 ? 'Release to refresh' : 'Pull down to refresh';
+  if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.35, 72) + 'px)'; }
+});
+window.addEventListener('pointerup', e => {
+  if (!pull) return;
+  const dy = e.clientY - pull.y;
+  pull = null;
+  frame.classList.remove('pulling');
+  frame.style.transform = '';
+  const label = document.querySelector('header .pull');
+  if (label) label.textContent = 'Pull down to refresh';
+  if (dy > 70) runAll();
+});
+window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing }) };
+E.setWallpaper('day');
+E.setMusicCredit('Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons');
+loadAssets().then(() => { window.NS.ready = true; runAll(); }).catch(e => { window.NS.ready = true; say(e.message || String(e), true); });
+</script>
+</body>
+</html>
