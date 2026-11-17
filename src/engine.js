@@ -126,7 +126,8 @@ function subWidth(line, size) {
 }
 
 /* News lines break on a slash or a newline. A line that is still too long breaks on a phrase. */
-function jpWidth(t) { return adv(t, font(P.jp.w, P.jp.size, F_SERIF)) * P.jp.sx; }
+let jpScale = 1;
+function jpWidth(t) { return adv(t, font(P.jp.w, P.jp.size * jpScale, F_SERIF)) * P.jp.sx; }
 const NO_START = '、。，．・：；？！ー）」』】〕”’ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〜…‥%％';
 const NO_END = '（「『【〔“‘';
 function wrapJp(text) {
@@ -225,12 +226,12 @@ function stackPlan(head, sub, jp, sh0, ss0) {
       last = L.sub[L.sub.length - 1].base;
       L.short = last + P.gap.subShort[0] + P.gap.subShort[1] * Ss;
     } else L.short = L.rule + 24;
-    let jt = L.short + P.gap.shortJp;
+    let jt = L.short + P.gap.shortJp * jpScale;
     jp.forEach((l, k) => {
-      if (k > 0) jt += l.para ? P.jp.para : P.jp.line;
-      L.jp.push({ t: l.t, base: jt + P.jp.ascent * P.jp.size });
+      if (k > 0) jt += (l.para ? P.jp.para : P.jp.line) * jpScale;
+      L.jp.push({ t: l.t, base: jt + P.jp.ascent * P.jp.size * jpScale });
     });
-    L.bottom = jp.length ? jt + P.jp.inkH : L.short + 3;
+    L.bottom = jp.length ? jt + P.jp.inkH * jpScale : L.short + 3;
     return L;
   };
 }
@@ -263,7 +264,9 @@ function fitPlan(place) {
   return L;
 }
 
-function layout(it) {
+function layout(it) { return layoutAt(it, 1); }
+function layoutAt(it, scale) {
+  jpScale = scale;
   const jp = [];
   (it.jp || []).forEach((p, pi) => wrapJp(p).forEach((t, li) => jp.push({ t, para: li === 0 && pi > 0 })));
   let head = (it.head && it.head.length ? it.head : [it.kw]).map(s => String(s).toUpperCase());
@@ -295,16 +298,18 @@ function layout(it) {
     L = best.L; head = hl;
   }
   /* Align the block vertically. */
+  const blockH = L.bottom;
   const off = Math.max(P.box.top, P.box.center - L.bottom / 2);
   L.head.forEach(l => l.base += off); L.sub.forEach(l => l.base += off);
   L.rule += off; L.bottom += off;
   if (P.layout === 'columns') {
     L.cxHead = P.colL.cx; L.ruleX = [P.colL.left, P.colL.right]; L.cxJp = P.colR.cx;
-    const jh = jp.length ? (jp.length - 1) * P.jp.line + jp.filter(l => l.para).length * (P.jp.para - P.jp.line) + P.jp.inkH : 0;
-    const jt = Math.max(P.box.top + P.gap.shortJp, P.box.center - (jh - P.gap.shortJp) / 2);
-    L.short = jt - P.gap.shortJp;
+    const line = P.jp.line * jpScale, para = P.jp.para * jpScale, inkH = P.jp.inkH * jpScale;
+    const jh = jp.length ? (jp.length - 1) * line + jp.filter(l => l.para).length * (para - line) + inkH : 0;
+    const jt = Math.max(P.box.top + P.gap.shortJp * jpScale, P.box.center - (jh - P.gap.shortJp * jpScale) / 2);
+    L.short = jt - P.gap.shortJp * jpScale;
     let y = jt;
-    jp.forEach((l, k) => { if (k > 0) y += l.para ? P.jp.para : P.jp.line; L.jp.push({ t: l.t, base: y + P.jp.ascent * P.jp.size }); });
+    jp.forEach((l, k) => { if (k > 0) y += l.para ? para : line; L.jp.push({ t: l.t, base: y + P.jp.ascent * P.jp.size * jpScale }); });
   } else {
     L.short += off; L.jp.forEach(l => l.base += off);
     L.cxHead = P.cx; L.ruleX = [P.left, P.right]; L.cxJp = P.cx;
@@ -322,6 +327,15 @@ function layout(it) {
     kx = P.cx - wInk / 2 + k.l * ksize / 1000 * ksx;
   }
   L.kw = { t: kw, size: ksize, sx: ksx, x: kx, base: P.kw.cy + (k.a - k.d) / 2 * ksize / 1000 };
+  L.jpSize = P.jp.size * jpScale;
+  const avail = P.box.bottom - P.box.top;
+  const jpH = P.layout === 'columns'
+    ? (jp.length ? (jp.length - 1) * P.jp.line * jpScale + P.jp.inkH * jpScale : 0)
+    : blockH;
+  if (jpH > avail + 4 && jpScale > 0.28) {
+    const next = Math.max(0.28, Math.min(jpScale - 0.02, jpScale * avail / jpH * 0.98));
+    if (next < jpScale - 0.01) return layoutAt(it, next);
+  }
   return L;
 }
 
@@ -443,7 +457,7 @@ function drawItem(ctx, show, i, t, bgs) {
   }
   if (a2 > 0) {
     ctx.globalAlpha = a2 * a1;
-    ctx.font = font(P.jp.w, P.jp.size, F_SERIF);
+    ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
   }
