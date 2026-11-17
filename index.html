@@ -2980,13 +2980,12 @@ const store = {
 };
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
 const COUNTRIES = [
-  { id: 'JP', name: 'Japan', lang: 'both' },
+  { id: 'JP', name: 'Japan', lang: 'ja' },
   { id: 'US', name: 'United States', lang: 'en' },
 ];
 const LANGS = [
   { id: 'en', name: 'English' },
   { id: 'ja', name: 'Japanese' },
-  { id: 'both', name: 'Both' },
 ];
 const WALLS = [
   { id: 'morning', name: 'Morning' },
@@ -3679,10 +3678,7 @@ const SOURCES = [
   { id: 'bbc', name: 'BBC', group: 'International' },
   { id: 'cnn', name: 'CNN', group: 'International' },
   { id: 'nyt', name: 'The New York Times', group: 'International' },
-  { id: 'nhk', name: 'NHK', group: 'Japanese media' },
   { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
-  { id: 'asahi', name: 'Asahi Shimbun', group: 'Japanese media' },
-  { id: 'yomiuri', name: 'Yomiuri Shimbun', group: 'Japanese media' },
 ];
 const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
 
@@ -3728,7 +3724,10 @@ function genreChoices() {
     };
   }).filter(g => g.on);
 }
+/* NHK, Asahi and Yomiuri were taken out of the settings: never read, and their stories are skipped. */
+const GONE = new Set(['nhk', 'asahi', 'yomiuri']);
 function sourceOn(id) {
+  if (GONE.has(id)) return false;
   const box = document.querySelector('.srcf[value="' + id + '"]');
   if (box) return box.checked;
   const saved = savedJson('sourcesOn');
@@ -3847,9 +3846,6 @@ function rssItems(xml) {
   return items;
 }
 const RSS = {
-  nhk: 'https://www.nhk.or.jp/rss/news/cat0.xml',
-  asahi: 'https://www.asahi.com/rss/asahi/newsheadlines.rdf',
-  yomiuri: 'https://assets.wor.jp/rss/rdf/yomiuri/latestnews.rdf',
   bbc: 'https://feeds.bbci.co.uk/news/rss.xml',
   abc: 'https://feeds.abcnews.com/abcnews/topstories',
   sport: 'https://feeds.bbci.co.uk/sport/rss.xml',
@@ -3861,8 +3857,7 @@ const RSS = {
   nyt: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
   nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
 };
-const RSS_ORDER = { JP: ['bbc', 'cnn', 'nyt', 'nhk', 'nikkei', 'asahi', 'yomiuri'], US: ['nyt', 'bbc', 'cnn', 'nhk', 'nikkei', 'asahi', 'yomiuri'] };
-const SOURCE_LABEL = { nhk: 'NHK', asahi: 'Asahi', yomiuri: 'Yomiuri', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
+const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', cnn: 'CNN', nyt: 'The New York Times' };
 function feedItems(list, cat) {
   return (list || []).map(it => ({ title: it.title, link: it.link, pubDate: it.pubDate, cat, source: '' })).filter(it => it.title && it.title.length > 6);
 }
@@ -4549,7 +4544,6 @@ function classifyRequest(text) {
   }
   if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
-  if (/^nhk$|ＮＨＫ/.test(low)) return { type: 'rss', rss: RSS.nhk, cat: 'NHK', source: 'NHK', label: name };
   if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: '食文化 OR food', cat: 'FOOD', source: 'The New York Times', label: name };
   if (/レストラン|^restaurant$/.test(low)) return { type: 'rss', rss: RSS.food, gdelt: 'レストラン OR restaurant', cat: 'RESTAURANT', source: 'The New York Times', label: name };
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
@@ -4568,7 +4562,7 @@ function requestForGenre(g) {
   if (g.id === 'food') return { type: 'rss', rss: RSS.food, gdelt: 'food OR 食べ物', cat: 'FOOD', source: 'The New York Times', label: name };
   if (g.id === 'restaurant') return { type: 'rss', rss: RSS.food, gdelt: 'restaurant OR レストラン', cat: 'RESTAURANT', source: 'The New York Times', label: name };
   if (g.id === 'space') return { type: 'rss', rss: RSS.science, hint: /space|nasa|rocket|satellite|telescope|宇宙|ロケット/i, gdelt: 'space OR NASA OR 宇宙', cat: 'SPACE', source: 'BBC', label: name };
-  if (g.id === 'local') return { type: 'rss', rss: country.id === 'JP' ? RSS.nhk : RSS.nyt, gdelt: q, cat: 'LOCAL', source: country.id === 'JP' ? 'NHK' : 'The New York Times', label: name };
+  if (g.id === 'local') return country.id === 'JP' ? { type: 'gdelt', q, cat: 'LOCAL', source: 'News', label: name } : { type: 'rss', rss: RSS.nyt, gdelt: q, cat: 'LOCAL', source: 'The New York Times', label: name };
   if (g.id === 'safety') return { type: 'rss', rss: RSS.bbc, hint: /police|arrest|crime|safety|security|警察|治安|逮捕/i, gdelt: q, cat: 'PUBLIC SAFETY', source: 'BBC', label: name };
   return { type: 'gdelt', q: q, cat: name.toUpperCase(), source: 'News', label: name };
 }
@@ -4594,7 +4588,7 @@ async function countryRows(cat) {
   if (market().country.id !== 'JP') return [];
   const word = JP_WORD[cat] || '';
   const out = [];
-  for (const id of ['nhk', 'asahi', 'yomiuri']) {
+  for (const id of ['nikkei']) {
     if (!RSS[id] || !sourceOn(id)) continue;
     const items = await cachedNews(RSS[id]);
     rowsFromItems(items, SOURCE_LABEL[id], cat).forEach(r => {
@@ -4648,10 +4642,7 @@ function linkFits(slot, row) {
   if (slot.rss === RSS.abc) return /abcnews\.com|abc\.go\.com|abc\.com/.test(url);
   if (slot.rss === RSS.food) return url.includes('nytimes.com');
   if (slot.rss === RSS.sport || slot.rss === RSS.bbc || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return /bbc\.co\.uk|bbc\.com/.test(url);
-  if (slot.rss === RSS.nhk) return url.includes('nhk.or.jp');
   if (slot.rss === RSS.nyt) return url.includes('nytimes.com');
-  if (slot.rss === RSS.asahi) return url.includes('asahi.com');
-  if (slot.rss === RSS.yomiuri) return url.includes('yomiuri.co.jp');
   return true;
 }
 async function rowsForSlot(slot) {
@@ -4838,9 +4829,6 @@ function restaurantText(text) {
 function slotSourceId(slot) {
   if (!slot) return 'web';
   if (slot.type === 'x') return 'x';
-  if (slot.rss === RSS.nhk) return 'nhk';
-  if (slot.rss === RSS.asahi) return 'asahi';
-  if (slot.rss === RSS.yomiuri) return 'yomiuri';
   if (slot.rss === RSS.nikkei) return 'nikkei';
   if (slot.rss === RSS.nyt || slot.rss === RSS.food) return 'nyt';
   if (slot.rss === RSS.cnn) return 'cnn';
@@ -5057,7 +5045,7 @@ async function collect(date) {
   const n = Number(store.get('gen', '0')) || 0;
   store.set('gen', String(n + 1));
   const intlFeeds = ['bbc', 'cnn', 'nyt'].filter(id => RSS[id] && sourceOn(id));
-  const jpFeeds = ['nhk', 'nikkei', 'asahi', 'yomiuri'].filter(id => RSS[id] && sourceOn(id));
+  const jpFeeds = ['nikkei'].filter(id => RSS[id] && sourceOn(id));
   const picks = [];
   if (intlFeeds.length) picks.push(intlFeeds[n % intlFeeds.length]);
   if (jpFeeds.length) picks.push(jpFeeds[n % jpFeeds.length]);
@@ -5140,7 +5128,7 @@ async function collect(date) {
     }
   }
   const pool = freshRows();
-  const jpSource = id => ['nhk', 'nikkei', 'asahi', 'yomiuri'].includes(id);
+  const jpSource = id => id === 'nikkei';
   let chosen = ['intl', 'jp'].flatMap(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), 6)).slice(0, 12);
   const leadNews = lead.filter(r => r && r.headline && !r.coffee);
   if (xrows.length) {
