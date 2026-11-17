@@ -92,6 +92,7 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .check input { width: 18px; height: 18px; accent-color: var(--acc); }
 .note { color: var(--mute); font-size: 12px; margin: 6px 0 0; }
 .filters { display: grid; gap: 6px; margin: 4px 0 8px; }
+.source-group { color: var(--mute); font-size: 12px; margin: 14px 0 0; }
 .x-add { display: flex; gap: 8px; align-items: center; }
 .x-add input { flex: 1 1 auto; width: auto; }
 .x-add button { flex: 0 0 auto; }
@@ -148,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Press a name or type a line. The video starts with the first stories and adds the rest while it plays.</p>
+      <p class="note">Press a name or type a line. The video plays after the stories are ready.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -3143,6 +3144,7 @@ function startWatch() {
   beginPlayback(0);
   say(watchLine(false));
   playSound(0);
+  closeStudio();
 }
 function resetMusicEl() {
   if (S.musicUrl) { try { URL.revokeObjectURL(S.musicUrl); } catch (e) {} }
@@ -3311,17 +3313,17 @@ const GENRES = [
   { id: 'restaurant', name: 'Restaurant', place: 'bottom', q: { JP: 'レストラン', US: 'restaurant' } },
 ];
 const SOURCES = [
-  { id: 'x', name: 'X' },
-  { id: 'nhk', name: 'NHK' },
-  { id: 'reuters', name: 'Reuters' },
-  { id: 'ap', name: 'Associated Press' },
-  { id: 'nikkei', name: 'Nikkei' },
-  { id: 'bbc', name: 'BBC' },
-  { id: 'cnn', name: 'CNN' },
-  { id: 'nyt', name: 'The New York Times' },
-  { id: 'asahi', name: 'Asahi Shimbun' },
-  { id: 'yomiuri', name: 'Yomiuri Shimbun' },
-  { id: 'web', name: 'Other web' },
+  { id: 'x', name: 'X', group: 'X and web' },
+  { id: 'web', name: 'Other web', group: 'X and web' },
+  { id: 'reuters', name: 'Reuters', group: 'International' },
+  { id: 'ap', name: 'Associated Press', group: 'International' },
+  { id: 'bbc', name: 'BBC', group: 'International' },
+  { id: 'cnn', name: 'CNN', group: 'International' },
+  { id: 'nyt', name: 'The New York Times', group: 'International' },
+  { id: 'nhk', name: 'NHK', group: 'Japanese media' },
+  { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
+  { id: 'asahi', name: 'Asahi Shimbun', group: 'Japanese media' },
+  { id: 'yomiuri', name: 'Yomiuri Shimbun', group: 'Japanese media' },
 ];
 const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
 
@@ -4215,17 +4217,6 @@ function scriptFromSequence(date, sequence, lang, country) {
   });
   return { date, items, market: country.name + ' · ' + lang.name };
 }
-async function revealSequence(date, sequence) {
-  if (S.again) return;
-  if (!sequence.some(r => r && (r.headline || r.coffee))) return;
-  const { country, lang } = market();
-  await Promise.all([
-    Promise.race([attachReplies(sequence), sleep(5000)]),
-    fillText(sequence, lang),
-  ]);
-  if (S.again) return;
-  growShow(scriptFromSequence(date, sequence, lang, country));
-}
 function restaurantText(text) {
   return /restaurant|レストラン|bistro|café|cafe|diner|ダイニング/i.test(text || '');
 }
@@ -4270,7 +4261,6 @@ async function collectSlots(date, slots, reorder) {
         guard++;
       }
       found.push({ headline: 'Coffee break' });
-      if (sequence.some(r => r && (r.headline || r.coffee))) await revealSequence(date, sequence);
       note(label);
       continue;
     }
@@ -4286,8 +4276,7 @@ async function collectSlots(date, slots, reorder) {
       added++;
     });
     if (added < (slot.count || 1)) console.warn('short lineup slot', label, added, slot.count || 1);
-    if (added) await revealSequence(date, sequence);
-    else if (slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
+    if (!added && slot.type === 'x' && slot.who) say('No posts from @' + slot.who + ' yet');
     note(label);
     await sleep(80);
   }
@@ -4346,10 +4335,7 @@ async function collect(date) {
   for (let i = 0; i < list.length && picks.length < 2; i++) picks.push(list[(n + i) % list.length]);
   const lines = [];
   let lead = [];
-  if (xrows.length) {
-    lead = withCoffee(xrows.slice(0, 4));
-    await revealSequence(date, lead);
-  }
+  if (xrows.length) lead = withCoffee(xrows.slice(0, 4));
   for (const id of picks) {
     if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
@@ -4374,7 +4360,6 @@ async function collect(date) {
           early.push(row);
         });
         lead = withCoffee(early.slice(0, 4));
-        if (lead.some(r => r.headline)) await revealSequence(date, lead);
       }
     } catch (e) { console.warn(e); }
     await sleep(120);
@@ -4857,7 +4842,15 @@ function buildFilters() {
   $('hideViolent').checked = store.get('hideViolent', '0') === '1';
   $('hideViolent').onchange = () => { saveFilters(); refreshMarket(); };
   const sbox = $('sourceFilters');
+  let group = '';
   SOURCES.forEach(s => {
+    if (s.group && s.group !== group) {
+      group = s.group;
+      const heading = document.createElement('p');
+      heading.className = 'source-group';
+      heading.textContent = group;
+      sbox.appendChild(heading);
+    }
     const lab = document.createElement('label');
     lab.className = 'check';
     const input = document.createElement('input');
