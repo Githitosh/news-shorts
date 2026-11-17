@@ -188,7 +188,9 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="applyLine" type="button">Apply lineup</button>
       <div class="music hides">
         <button type="button" id="hideViolent" aria-pressed="true">Hide violence</button>
+        <button type="button" id="hideSensitive" aria-pressed="true">Hide sensitive posts</button>
       </div>
+      <p class="note">A lit button hides those posts. With Hide sensitive posts off, couples' talk in Romance may be sexual; jokes and places stay clean. Hard news such as deaths, accidents, disasters, illness, bullying and discrimination never plays.</p>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X accounts</label>
@@ -2181,6 +2183,8 @@ const JA = {
   'Turn violence off': '暴力的な内容を出さない',
   'Hide violence': '暴力を非表示', 'Hide sensitive posts': 'センシティブを非表示',
   'A lit button hides those posts.': '色が付いたボタンの内容は表示しません。',
+  "A lit button hides those posts. With Hide sensitive posts off, couples' talk in Romance may be sexual; jokes and places stay clean. Hard news such as deaths, accidents, disasters, illness, bullying and discrimination never plays.":
+    '色が付いたボタンの内容は表示しません。「センシティブを非表示」を消すと、恋愛のカップルの会話に限って、きわどい内容や性的な内容も出ます（ジョークと観光には出ません）。死亡・事故・災害・病気・いじめ・差別などの重い話題は、設定にかかわらず出しません。',
   'Sources': '情報源', 'X and web': 'Xとウェブ', 'Other web': 'その他のウェブ', 'International': '海外', 'Japanese media': '日本のメディア',
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
@@ -3294,10 +3298,16 @@ function sourceId(row) {
   return 'web';
 }
 function violentHidden() { return $('hideViolent').classList.contains('on'); }
-/* Sensitive posts never play: posts X marks as sensitive, suggestive words and emoji, and hard news
-   (death, accidents, disasters, illness, bullying, discrimination). There is no setting for it. */
-const SENSITIVE = /🔞|🍆|🍑|😏|💋|👅|寝かさない|抱いて|抱かれ|夜這い|ベッドで|一緒にお風呂|色っぽ|セクシー|えちえち|(?:^|[^必])死(?!ぬほど|ぬかと|んだ笑)|亡くな|遺体|事故|災害|震災|地震|津波|火災|病気|闘病|入院|がん(?!ば|が)|癌|自殺|自死|いじめ|虐待|差別|\bsexy\b|\bspicy\b|\bnaughty\b|\bin bed\b|\bdied\b|\bdeath\b|\bcrash\b|\bdisaster\b|\bcancer\b|\bsuicide\b|\bbull(?:y|ied|ying)\b|\bracis/i;
-function sensitive(text, st) { return SENSITIVE.test(String(text || '')) || !!(st && (st.possibly_sensitive || st.sensitive)); }
+/* Hard news never plays in Humor, in any setting: deaths, accidents, disasters, illness, bullying, discrimination. */
+const HEAVY = /(?:^|[^必])死(?!ぬほど|ぬかと|んだ笑)|亡くな|遺体|事故|災害|震災|地震|津波|火災|病気|闘病|入院|がん(?!ば|が)|癌|自殺|自死|いじめ|虐待|差別|\bdied\b|\bdeath\b|\bcrash\b|\bdisaster\b|\bcancer\b|\bsuicide\b|\bbull(?:y|ied|ying)\b|\bracis/i;
+/* Sensitive: suggestive words and emoji, sexual words (ADULT, below) and posts X marks as sensitive.
+   Hidden while Hide sensitive posts is lit (the start). When it is off, only couples' talk may be sexual. */
+const SUGGESTIVE = /🔞|🍆|🍑|😏|💋|👅|寝かさない|抱いて|抱かれ|夜這い|ベッドで|一緒にお風呂|色っぽ|セクシー|えちえち|\bsexy\b|\bspicy\b|\bnaughty\b|\bin bed\b/i;
+function sensitiveHidden() { const b = $('hideSensitive'); return !b || b.classList.contains('on'); }
+function heavy(text) { return HEAVY.test(String(text || '')); }
+function flagged(st) { return !!(st && (st.possibly_sensitive || st.sensitive)); }
+/* Jokes, places and reports: hard news and sensitive posts never play. */
+function sensitive(text, st) { return heavy(text) || SUGGESTIVE.test(String(text || '')) || flagged(st); }
 function saveFilters() {
   const sources = {};
   SOURCES.forEach(s => {
@@ -3306,14 +3316,15 @@ function saveFilters() {
   });
   store.set('sourcesOn', JSON.stringify(sources));
   store.set('hideViolent', violentHidden() ? '1' : '0');
+  store.set('hideSensitive2', sensitiveHidden() ? '1' : '0');
 }
 function buildFilters() {
   const savedS = savedJson('sourcesOn');
-  /* Hide violence starts on, as Humor always did. */
-  [['hideViolent', '1']].forEach(([id, d]) => {
+  /* Both start on: violence and sensitive posts are hidden until the button is turned off. */
+  [['hideViolent', 'hideViolent'], ['hideSensitive', 'hideSensitive2']].forEach(([id, key]) => {
     const b = $(id);
     const paint = on => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); };
-    paint(store.get(id, d) === '1');
+    paint(store.get(key, '1') === '1');
     b.onclick = () => { paint(!b.classList.contains('on')); saveFilters(); refreshMarket(); };
   });
   const sbox = $('sourceFilters');
@@ -3652,7 +3663,13 @@ function focusJoke(text, lang) {
   return (start ? '…' : '') + slice + (start + keep < chars.length ? '…' : '');
 }
 /* Comments that never play: adult words, minors, abuse. */
-const UNSAFE = /セックス|エッチ|えっち|ｴｯﾁ|エロ|下ネタ|ヤリモク|ヤる|ヤれ|体位|下着|裸|おっぱい|乳首|ちんこ|ちんちん|まんこ|射精|中出し|勃起|ムラムラ|性欲|童貞|処女|ラブホ|風俗|パパ活|AV女優|アダルト|\bsex|nsfw|nude|naked|porn|horny|kinky|onlyfans|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
+/* Sexual words: only couples' talk may have them, and only with Hide sensitive posts off. */
+const ADULT = /セックス|エッチ|えっち|ｴｯﾁ|エロ|下ネタ|ヤる|ヤれ|体位|下着|裸|おっぱい|乳首|ちんこ|ちんちん|まんこ|射精|中出し|勃起|ムラムラ|性欲|童貞|処女|ラブホ|\bsex|nsfw|nude|naked|horny|kinky/i;
+/* Never, in any setting: minors, abuse and coercion, sex work and porn. */
+const NEVER = /ヤリモク|風俗|パパ活|ママ活|援交|AV女優|アダルト|porn|onlyfans|中学|小学|ＪＫ|ＪＣ|ＪＳ|\bJ[KCS]\b|高校生|女子高生|男子高生|未成年|ロリ|ショタ|\bteen|high school|middle school|underage|\bloli|\bshota|ＤＶ|\bDV\b|モラハラ|殴られ|abuse|レイプ|強姦|無理やり|盗撮|痴漢/i;
+/* Children: fine in everyday couple talk, never next to anything sexual. */
+const CHILD = /子供|子ども|こども|息子|娘|園児|赤ちゃん|\bkids?\b|\bchild|\bson\b|\bdaughter\b/i;
+const UNSAFE = new RegExp(ADULT.source + '|' + NEVER.source, 'i');
 function postText(st) {
   return String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -3817,7 +3834,10 @@ const LONG = { ja: 60, en: 180 };
 const UNSAFE_ROMANCE = /浮気|不倫|別れ|離婚|ブロック|死ね|殺|嫌い|最低|ストーカー|cheat|divorce|break ?up|hate you/i;
 function romanceText(st, lang) {
   const text = postText(st);
-  if (!text || UNSAFE.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || sensitive(text, st)) return '';
+  if (!text || NEVER.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || heavy(text)) return '';
+  /* Sexual couple talk plays only with Hide sensitive posts off, and never with children mentioned. */
+  const sexual = ADULT.test(text) || SUGGESTIVE.test(text) || flagged(st);
+  if (sexual && (sensitiveHidden() || CHILD.test(text))) return '';
   if (lang === 'en') {
     if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{2,}/.test(text) || text.length < 4) return '';
   } else if ((text.match(/[぀-ヿ]/g) || []).length < 1 || [...text].length < 2) return '';
