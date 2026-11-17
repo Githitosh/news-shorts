@@ -4,6 +4,7 @@
     python build.py
 """
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -27,6 +28,12 @@ def pack(html: str, engine: str, assets: dict, muxer: str = "", sample: str = ""
     )
 
 
+def stamp(html: str) -> tuple:
+    """Put the page's own build id in it; the page compares it with version.json to find a newer copy."""
+    h = hashlib.sha1(html.encode("utf-8")).hexdigest()[:12]
+    return html.replace("__BUILD_ID__", h), h
+
+
 def main() -> None:
     muxer = (ROOT / "lib" / "mp4-muxer.js").read_text(encoding="utf-8")
     engine = (ROOT / "src" / "engine.js").read_text(encoding="utf-8")
@@ -44,7 +51,7 @@ def main() -> None:
         if "</script" in code.lower():
             raise SystemExit(f"{name} contains </script")
     license_note = "/* mp4-muxer 5.2.2 (MIT License, Copyright (c) 2023 Vanilagy) — lib/mp4-muxer.LICENSE */\n"
-    out = pack((ROOT / "src" / "app.html").read_text(encoding="utf-8"), engine, assets, license_note + muxer, sample)
+    out, news_id = stamp(pack((ROOT / "src" / "app.html").read_text(encoding="utf-8"), engine, assets, license_note + muxer, sample))
     (ROOT / "index.html").write_text(out, encoding="utf-8")
     print(f"index.html {len(out.encode('utf-8')) / 1048576:.2f} MB")
     ja_assets = {"bg_" + g: assets["bg_" + g] for g in "ABCDE"}
@@ -54,11 +61,12 @@ def main() -> None:
     dest.parent.mkdir(exist_ok=True)
     dest.write_text(ja, encoding="utf-8")
     print(f"ja/index.html {len(ja.encode('utf-8')) / 1048576:.2f} MB")
-    humor = pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets, license_note + muxer)
+    humor, humor_id = stamp(pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets, license_note + muxer))
     humor_dest = ROOT / "humor" / "index.html"
     humor_dest.parent.mkdir(exist_ok=True)
     humor_dest.write_text(humor, encoding="utf-8")
     print(f"humor/index.html {len(humor.encode('utf-8')) / 1048576:.2f} MB")
+    (ROOT / "version.json").write_text(json.dumps({"news": news_id, "humor": humor_id}) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

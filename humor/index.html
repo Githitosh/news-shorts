@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#111214">
 <script>/* The chosen color, before the page draws, so it does not flash another color. */
-try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'white'; } catch (e) {}</script>
+document.documentElement.dataset.theme = 'dark';
+try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'dark'; } catch (e) {}</script>
 <title>Humor</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,7 +15,7 @@ try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.
 <style>
 /* White: the page is white and the buttons, links and lit buttons are gray. */
 :root { --bg:#ffffff; --card:#f1f2f4; --line:#d9dbe0; --ink:#16181c; --mute:#62666d; --acc:#6b7078; --field:#ffffff; --on:#ffffff; --frame:#f2f3f5; }
-/* Colors, chosen in Settings. White is the default. */
+/* Colors, chosen in Settings. Dark is the default (set on the page before it draws). */
 :root[data-theme="beige"] { --bg:#f7f1e6; --card:#fffaf2; --line:#e4d8c4; --ink:#1c140c; --mute:#6d6458; --acc:#9a5b12; --field:#ffffff; --on:#fffaf2; --frame:#f4efe4; }
 :root[data-theme="pink"] { --bg:#fff6f9; --card:#ffffff; --line:#f2d4df; --ink:#2b1620; --mute:#7c5e6a; --acc:#d6457a; --field:#ffffff; --on:#ffffff; --frame:#fdeef3; }
 :root[data-theme="sky"] { --bg:#f3f8fd; --card:#ffffff; --line:#d3e2f2; --ink:#10202f; --mute:#58697a; --acc:#2a7bc8; --field:#ffffff; --on:#ffffff; --frame:#eaf2fa; }
@@ -144,7 +145,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   <div class="music" id="counts"></div>
   <p class="music-label">Story length</p>
   <div class="music" id="paces"></div>
-  <p class="note pace-note">Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.</p>
   <p class="music-label">Wallpaper</p>
   <div class="music" id="walls"></div>
   <p class="music-label">Music</p>
@@ -165,12 +165,12 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       </select>
       <label for="theme">Color</label>
       <select id="theme">
+        <option value="dark">Dark</option>
         <option value="white">White</option>
         <option value="beige">Beige</option>
         <option value="pink">Pink</option>
         <option value="sky">Sky blue</option>
         <option value="mint">Mint</option>
-        <option value="dark">Dark</option>
       </select>
       <label for="country">Country</label>
       <select id="country"></select>
@@ -5142,8 +5142,8 @@ function initUI() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ffffff');
   };
-  const savedTheme = store.get('theme', 'white');
-  themeBox.value = [...themeBox.options].some(o => o.value === savedTheme) ? savedTheme : 'white';
+  const savedTheme = store.get('theme', 'dark');
+  themeBox.value = [...themeBox.options].some(o => o.value === savedTheme) ? savedTheme : 'dark';
   paintTheme();
   themeBox.addEventListener('change', () => { store.set('theme', themeBox.value); paintTheme(); });
   const savedPace = Number(Q.get('pace') || store.get('pace', '3.2'));
@@ -5320,7 +5320,32 @@ function initPull() {
 /* ---------- start ---------- */
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing, format: S.format }) };
 E.setMusicCredit(TRACKS[0].credit);
+/* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
+   version.json names the latest build of each page; it is read past the browser's cache. */
+function watchVersion(key, url) {
+  const BUILD = '39b30959b1fb';
+  if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
+  /* At the start it may reload at once; later it waits while a video is being made or saved. */
+  const check = first => {
+    if (!first && S.busy) { setTimeout(() => check(false), 5000); return; }
+    fetch(url + '?t=' + Date.now(), { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(v => {
+      const now = v && v[key];
+      if (!now || now === BUILD) return;
+      if (!first && S.busy) { setTimeout(() => check(false), 5000); return; }
+      try {
+        if (sessionStorage.getItem('reloaded.' + key) === now) return;
+        sessionStorage.setItem('reloaded.' + key, now);
+      } catch (e) {}
+      const u = new URL(location.href);
+      u.searchParams.set('v', now);
+      location.replace(u.href);
+    }).catch(() => {});
+  };
+  check(true);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });
+}
 initUI();
+watchVersion('humor', '../version.json');
 /* Japanese for the page's own words when Language is Japanese. */
 if (window.UIJA) {
   UIJA.start(() => $('lang').value);
