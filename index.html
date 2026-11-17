@@ -149,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Country, language, and the lineup come first. Genres, sources, and X accounts are added inside that plan. The video plays when the list is complete.</p>
+      <p class="note">Country, language, and the lineup come first. The searching screen lists comments from X and the web. The video then plays the reports.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -2368,29 +2368,31 @@ function fitPlan(place) {
   return L;
 }
 
+function layoutStill(it) {
+  const raw = (it.replies || []).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 20);
+  const lines = raw.length ? raw : ['No comments yet'];
+  const top = P.rule1 + (P.layout === 'columns' ? 16 : 28);
+  const bottom = P.rule2 - (P.layout === 'columns' ? 10 : 16);
+  const titleSize = P.layout === 'columns' ? 36 : 46;
+  const titleBase = top + titleSize * 0.82;
+  const listTop = titleBase + (P.layout === 'columns' ? 16 : 22);
+  const room = Math.max(40, bottom - listTop);
+  const step = room / lines.length;
+  const size = Math.max(18, Math.min(P.layout === 'columns' ? 28 : 34, step * 0.78));
+  const replies = lines.map((t, i) => ({ t, base: listTop + size + i * step, size }));
+  return {
+    still: true,
+    title: { t: 'COMMENTS', base: titleBase, size: titleSize },
+    replies,
+    head: [], sub: [], jp: [],
+    kw: { t: '', size: 1, sx: 1, x: 0, base: 0 },
+    Sh: 10, Ss: 10, rule: listTop, short: top,
+    ruleX: [P.left, P.right], cxHead: P.cx, cxJp: P.left,
+  };
+}
 function layout(it) {
-  const replyLines = (it.replies || []).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 2);
-  const replySize = 40;
-  const replyStep = 52;
-  const replyBand = replyLines.length ? replyLines.length * replyStep + 24 : 0;
-  const savedBottom = P.box.bottom;
-  const savedCenter = P.box.center;
-  if (replyBand) {
-    P.box.bottom = savedBottom - replyBand;
-    P.box.center = (P.box.top + P.box.bottom) / 2;
-  }
-  let L;
-  try { L = layoutAt(it, 1); }
-  finally { P.box.bottom = savedBottom; P.box.center = savedCenter; }
-  if (replyLines.length) {
-    let y = savedBottom - replyBand + replySize;
-    L.replies = replyLines.map(t => {
-      const line = { t, base: y, size: replySize };
-      y += replyStep;
-      return line;
-    });
-  }
-  return L;
+  if (it.still || it.coffee || it.kind === 'coffee') return layoutStill(it);
+  return layoutAt(it, 1);
 }
 function layoutAt(it, scale) {
   jpScale = scale;
@@ -2480,9 +2482,9 @@ function prepare(script, preset) {
   items.forEach((it, i) => {
     const no = pad2(i + 1);
     const lead = String(it.kw || it.topic || 'NOTE').toUpperCase();
-    it.catLeft = it.kind === 'coffee' ? `NOTE ${no}  /  COFFEE BREAK` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
-    it.catRight = String(it.topic || '').toUpperCase();
-    it.foot = it.kind === 'coffee' ? 'COFFEE BREAK' : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
+    it.catLeft = it.kind === 'coffee' ? `COMMENTS  ${no}` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
+    it.catRight = it.kind === 'coffee' ? '' : String(it.topic || '').toUpperCase();
+    it.foot = it.kind === 'coffee' ? 'COMMENTS' : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());
@@ -2540,7 +2542,7 @@ function drawItem(ctx, show, i, t, bgs) {
   use(show.preset);
   const it = show.items[i], L = it.L;
   ctx.textBaseline = 'alphabetic';
-  drawBg(ctx, bgs[it.bg], t, it.bg);
+  drawBg(ctx, bgs[it.bg], L.still ? 0 : t, it.bg);
   ctx.fillStyle = inkNow();
   /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
@@ -2556,6 +2558,34 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.font = font(400, cs, F_SANS);
   ctx.fillText(it.credit2, P.left, P.credit.base2 - (P.credit.size - cs) * 1.33);
   ctx.fillStyle = inkNow();
+  if (L.still) {
+    ctx.globalAlpha = 1;
+    ctx.font = font(P.cat.w, P.cat.size, F_TIMES);
+    textX(ctx, it.catLeft, P.left, P.cat.base, P.cat.sx, 'left');
+    ctx.fillRect(P.left, P.rule1, P.right - P.left, P.rule);
+    ctx.font = font(700, L.title.size, F_SANS);
+    textX(ctx, L.title.t, P.left, L.title.base, 1, 'left');
+    (L.replies || []).forEach(l => {
+      ctx.save();
+      ctx.font = font(550, l.size, F_SANS);
+      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.72)';
+      ctx.shadowBlur = 6;
+      const w = ctx.measureText(l.t).width;
+      const sx = Math.min(1, (P.right - P.left) / Math.max(1, w));
+      textX(ctx, l.t, P.left, l.base, sx, 'left');
+      ctx.restore();
+    });
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = inkNow();
+    ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
+    ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
+    textX(ctx, it.foot, P.left, P.foot.base, P.foot.sx, 'left');
+    ctx.font = font(700, P.foot.page, F_TIMES);
+    textX(ctx, it.page, P.cat.right, P.foot.base, P.foot.psx, 'right');
+    ctx.globalAlpha = 1;
+    return;
+  }
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
   /* Keyword. */
@@ -2587,16 +2617,6 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
-    (L.replies || []).forEach(l => {
-      ctx.save();
-      ctx.font = font(650, l.size, F_SANS);
-      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
-      ctx.shadowBlur = 8;
-      const w = ctx.measureText(l.t).width;
-      const sx = Math.min(P.jp.sx, (P.jp.maxW * 0.98) / Math.max(1, w));
-      textX(ctx, l.t, L.cxJp, l.base, sx, 'center');
-      ctx.restore();
-    });
   }
   if (a3 > 0 && it.tags.length) {
     ctx.globalAlpha = a3 * a1;
@@ -2619,7 +2639,7 @@ function drawFrame(ctx, show, T, bgs) {
 }
 
 function fontSpecs() {
-  return [font(900, 64, F_SERIF), font(700, 40, F_SERIF), font(P.header.w, 42, F_SERIF), font(P.jp.w, 64, F_SERIF), font(700, 40, F_TIMES), font(400, 20, F_SANS)];
+  return [font(900, 64, F_SERIF), font(700, 40, F_SERIF), font(P.header.w, 42, F_SERIF), font(P.jp.w, 64, F_SERIF), font(700, 40, F_TIMES), font(700, 46, F_SANS), font(600, 34, F_SANS), font(400, 20, F_SANS)];
 }
 function allText(script) {
   const s = [];
@@ -2746,13 +2766,18 @@ function showWaiting(title, lines) {
     if (y > H * 0.42) return;
     y = wrapCanvas(part.trim(), pad, y, W - pad * 2, wide ? 52 : 66, 2);
   });
-  y += wide ? 24 : 36;
-  ctx.font = `400 ${wide ? 30 : 38}px "Noto Sans JP", sans-serif`;
-  (lines || []).slice(-8).forEach(line => {
-    if (y > H - 90) return;
+  y += wide ? 18 : 28;
+  const list = (lines || []).slice(0, 20);
+  const bottom = H - (wide ? 64 : 84);
+  const room = Math.max(32, bottom - y);
+  const lh = Math.max(wide ? 24 : 30, Math.min(wide ? 40 : 48, room / Math.max(1, list.length)));
+  const size = Math.max(16, Math.min(wide ? 28 : 34, lh - 4));
+  ctx.font = `400 ${size}px "Noto Sans JP", sans-serif`;
+  list.forEach(line => {
+    if (y > bottom - 4) return;
     ctx.fillStyle = day ? '#141414' : '#f7f3ea';
-    y = wrapCanvas(String(line || ''), pad, y, W - pad * 2, wide ? 40 : 50, 2);
-    y += wide ? 12 : 18;
+    y = wrapCanvas(String(line || ''), pad, y, W - pad * 2, lh, list.length > 8 ? 1 : 2);
+    y += list.length > 8 ? 3 : (wide ? 10 : 14);
   });
 }
 function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
@@ -2933,21 +2958,30 @@ function normItem(it) {
     jp: arr(it.jp).slice(0, 8),
     tags: arr(it.tags).map(up).slice(0, 4),
     src: String(it.src || '').trim(), date: String(it.date || '').trim(), url: String(it.url || '').trim(),
-    replies: arr(it.replies).slice(0, 2),
+    replies: [],
   };
+}
+function coffeeReplies(it) {
+  return arr(it && it.replies).slice(0, 20);
 }
 function normalize(s) {
   const out = { date: /^\d{4}-\d{2}-\d{2}$/.test(s.date || '') ? s.date : ($('date').value || todayJST()), items: (s.items || []).slice(0, 24).map(it => {
     if (!it || !it.coffee) return normItem(it);
     const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], sub: it.sub, jp: it.jp, tags: it.tags });
-    c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK']; c.cat = 'COFFEE BREAK'; c.coffee = true;
-    if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
+    c.kw = 'COMMENTS'; c.head = ['COMMENTS']; c.cat = 'COMMENTS'; c.coffee = true; c.still = true;
+    c.replies = coffeeReplies(it);
+    c.tags = [];
+    c.jp = [];
+    c.sub = [];
     return c;
   }), market: String(s.market || '').trim() };
   if (s.coffee && !out.items.some(it => it.coffee)) {
     const c = normItem({ kw: 'COFFEE BREAK', head: ['COFFEE', 'BREAK'], ...s.coffee });
-    c.kw = 'COFFEE BREAK'; c.head = ['COFFEE', 'BREAK'];
-    if (!c.tags.length || c.tags[0] !== 'COFFEE BREAK') c.tags = ['COFFEE BREAK', ...c.tags.filter(t => t !== 'COFFEE BREAK')].slice(0, 3);
+    c.kw = 'COMMENTS'; c.head = ['COMMENTS']; c.still = true;
+    c.replies = coffeeReplies(s.coffee);
+    c.tags = [];
+    c.jp = [];
+    c.sub = [];
     out.coffee = c;
   }
   if (!out.items.length) throw new Error('The script has no stories');
@@ -3622,6 +3656,82 @@ function poolFor(handle) {
   }
   return handlePool.get(key);
 }
+function within(p, ms) {
+  return Promise.race([Promise.resolve(p).catch(() => []), new Promise(resolve => setTimeout(() => resolve([]), ms))]);
+}
+function topicQuery(headline) {
+  const raw = String(headline || '').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
+  const cjk = raw.match(/[\u3040-\u30ff\u4e00-\u9fff]{2,10}/g) || [];
+  if (cjk.length) return cjk.slice(0, 2).join(' ').slice(0, 40);
+  const stop = new Set(['this', 'that', 'with', 'from', 'have', 'will', 'news', 'says', 'said', 'after', 'before', 'about', 'their', 'there', 'would', 'could', 'into', 'over', 'than', 'then', 'them', 'they', 'were', 'been', 'what', 'when', 'your', 'just', 'more', 'some']);
+  const words = raw.split(/[^A-Za-z0-9]+/).filter(w => w.length >= 4 && !stop.has(w.toLowerCase()));
+  words.sort((a, b) => b.length - a.length);
+  return words.slice(0, 2).join(' ').slice(0, 40);
+}
+function commentsAbout(query) {
+  const q = String(query || '').trim();
+  if (q.length < 3) return Promise.resolve([]);
+  const key = 'q:' + q.toLowerCase();
+  if (!handlePool.has(key)) {
+    handlePool.set(key, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' filter:replies')).then(data => {
+      const out = [];
+      const seen = new Set();
+      for (const st of (data && data.results) || []) {
+        const got = replyLineFrom(st, '');
+        if (!got || seen.has(got.line.toLowerCase())) continue;
+        seen.add(got.line.toLowerCase());
+        out.push(got);
+      }
+      out.sort((a, b) => b.letters - a.letters);
+      return out.map(x => x.line);
+    }).catch(e => { console.warn(e); return []; }));
+  }
+  return handlePool.get(key);
+}
+async function gatherNetComments(handles, headlines) {
+  const names = [];
+  (handles || []).forEach(h => {
+    const name = String(h || '').replace(/^@+/, '');
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return;
+    if (names.some(n => n.toLowerCase() === name.toLowerCase())) return;
+    names.push(name);
+  });
+  const topics = [];
+  (headlines || []).forEach(h => {
+    const q = topicQuery(h);
+    if (!q || topics.some(t => t.toLowerCase() === q.toLowerCase())) return;
+    topics.push(q);
+  });
+  const jobs = names.slice(0, 4).map(h => within(poolFor(h), 9000))
+    .concat(topics.slice(0, 3).map(q => within(commentsAbout(q), 9000)));
+  const pools = await Promise.all(jobs);
+  const out = [];
+  const seen = new Set();
+  const idx = pools.map(() => 0);
+  let guard = 0;
+  while (out.length < 20 && guard < 80) {
+    guard++;
+    let grew = false;
+    for (let i = 0; i < pools.length && out.length < 20; i++) {
+      const list = pools[i] || [];
+      while (idx[i] < list.length && seen.has(String(list[idx[i]] || '').toLowerCase())) idx[i]++;
+      if (idx[i] >= list.length) continue;
+      const line = String(list[idx[i]++] || '').trim();
+      if (!line) continue;
+      seen.add(line.toLowerCase());
+      out.push(line);
+      grew = true;
+    }
+    if (!grew) break;
+  }
+  return out;
+}
+let commentHold = [];
+function paintComments(lines) {
+  commentHold = (lines || []).slice(0, 20);
+  if (S.playing || S.again) return;
+  showWaiting('Comments', commentHold);
+}
 const replyBatch = new Map();
 async function fillReplyBatch(rows) {
   const groups = new Map();
@@ -3914,7 +4024,6 @@ function storyFrom(raw, english, local, langId) {
     src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
     date: md,
     url: raw.link || '',
-    replies: arr(raw.replies).slice(0, 2),
   };
 }
 function shuffle(list) {
@@ -4154,66 +4263,30 @@ async function fillText(rows, lang) {
     pending.forEach(r => { if (!r._local) r._local = r.headline; });
   }
 }
-function topicBit(text) {
-  const s = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!s) return '';
-  const piece = s.split(/[、。！？!?.,]/)[0].replace(/(ので|について)$/, '').trim();
-  if (!piece) return '';
-  if (/[\u3040-\u30ff\u4e00-\u9fff]/.test(piece)) return [...piece].length <= 8 ? piece : '';
-  const words = piece.split(' ').filter(Boolean);
-  if (!words.length || words.length > 2 || piece.length > 18) return '';
-  if (/^(the|a|an|this|that|it|to|of|in|on|for|i|we|you)$/i.test(words[0])) return '';
-  return piece;
-}
-function storyKind(text) {
-  const t = String(text || '');
-  if (/restaurant|レストラン|bistro|café|cafe|diner|ダイニング/i.test(t)) return 'table';
-  if (/[0-9０-９]/.test(t) && /%|％|倍|円|ドル|万人|億|増|減|安|高|percent|billion|million/i.test(t)) return 'number';
-  if (/[「『"“]/.test(t) || /氏|首相|大統領|監督|発言|said|says|told|according/i.test(t)) return 'quote';
-  if (/出発|訪問|会談|会議|サミット|summit|visit|meet/i.test(t)) return 'visit';
-  if (/逮捕|死亡|事故|攻撃|衝突|被害|違反|killed|crash|attack/i.test(t)) return 'harm';
-  if (/発表|計画|開始|導入|発売|方針|plan|launch|announce/i.test(t)) return 'plan';
-  return 'note';
-}
-function commentCard(row, lang) {
-  const local = String((row && (row._local || row.headline)) || '').replace(/\s+/g, ' ').trim();
-  const en = String((row && (row._en || row.headline)) || '').replace(/\s+/g, ' ').trim();
-  const id = lang && lang.id;
-  const kind = storyKind((local + ' ' + en).trim());
-  const bitJa = topicBit(local || en);
-  const bitEn = topicBit(en || local);
-  const nameJa = bitJa ? '「' + bitJa + '」' : 'このニュース';
-  const nameEn = bitEn ? '"' + bitEn + '"' : 'This story';
-  const ja = {
-    table: [nameJa + 'で見るのは、店の評判より、誰がその席にたどり着けるのかです。', '話題の大きさだけでは、入れない人がいる理由は分かりません。'],
-    number: [nameJa + 'で先に見るのは、数字そのものより、いつの数字で何と比べているかです。', '増えたのか減ったのかは、基準が書かれて初めて意味を持ちます。'],
-    quote: [nameJa + 'では、誰の言葉と、確認された事実を分けて読みます。', '発言が同じ段落に並んでいても、どこまでがその人の主張なのかは別の問いです。'],
-    visit: [nameJa + 'で問うのは、日程ではなく、誰と何を確認するのかです。', '出発や開催の知らせだけでは、その場で何が決まるのかはまだ分かりません。'],
-    harm: [nameJa + 'は、起きたことと、原因として語られていることを分けて見ます。', '一つの出来事を、すぐに全体の傾向へ広げる前に、場所と時点を確認します。'],
-    plan: [nameJa + 'は、決まったことと、まだ予定のままのことを分けて読む話です。', '発表の文面より、いつから誰に届くのかが、このニュースの芯です。'],
-    note: [nameJa + 'で先に見るのは、結果の大きさではなく、誰が次に説明を求められるかです。', '見出しの出来事だけを受け取ると、まだ分かっていない部分が後ろに隠れます。'],
-  }[kind];
-  const eng = {
-    table: [nameEn + ' is about who gets through the door, not how famous the room is.', 'A crowd at the entrance does not explain who is turned away.'],
-    number: [nameEn + ' is a figure, and a figure only means something once the comparison is clear.', 'The useful question is when the number was taken, and what it is measured against.'],
-    quote: [nameEn + ' puts a claim next to a fact, and those are not the same thing.', 'The useful question is who is speaking, and how much of the claim has been shown.'],
-    visit: [nameEn + ' is a meeting on a calendar, and the calendar is not the decision.', 'What matters is who sits down, and what is actually confirmed.'],
-    harm: [nameEn + ' reports an event, and the cause being offered is a separate claim.', 'One event does not become a trend until the place and the time are clear.'],
-    plan: [nameEn + ' mixes what has been decided with what is still only a plan.', 'The useful question is when it starts, and who it actually reaches.'],
-    note: [nameEn + ' is an announcement, and the announcement is not the same as the reason.', 'What is still unexplained matters more than the size of the headline.'],
-  }[kind];
-  const jp = id === 'en' ? eng : (id === 'ja' ? ja : ja.concat(eng));
-  return { coffee: true, sub: ['A NOTE ON', 'THIS STORY'], jp, tags: ['COFFEE BREAK'] };
+function commentStill(replies) {
+  return {
+    coffee: true,
+    still: true,
+    kw: 'COMMENTS',
+    head: ['COMMENTS'],
+    sub: [],
+    jp: [],
+    tags: [],
+    replies: arr(replies).slice(0, 20),
+  };
 }
 function withCoffee(rows) {
   const news = (rows || []).filter(r => r && !r.coffee && r.headline);
   if (!news.length) return (rows || []).some(r => r && r.coffee) ? [{ coffee: true }] : [];
   return [news[0], { coffee: true, about: news[0] }, ...news.slice(1)];
 }
-function scriptFromSequence(date, sequence, lang, country) {
-  const items = sequence.map(row => {
-    if (row.coffee) return commentCard(row.about, lang);
-    return storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id);
+function scriptFromSequence(date, sequence, lang, country, comments) {
+  const items = [];
+  const lines = arr(comments).slice(0, 20);
+  if (lines.length) items.push(commentStill(lines));
+  (sequence || []).forEach(row => {
+    if (!row || row.coffee) return;
+    items.push(storyFrom(row, row._en || row.headline, row._local || row.headline, lang.id));
   });
   return { date, items, market: country.name + ' · ' + lang.name };
 }
@@ -4308,15 +4381,22 @@ function orderPool(slot, pool, slots) {
 async function collectSlots(date, slots, reorder) {
   const { country, lang } = market();
   const found = [];
+  commentHold = [];
+  const earlyHandles = [];
+  slots.forEach(s => { if (s && s.who) earlyHandles.push(s.who); });
+  xAccounts().forEach(h => earlyHandles.push(h));
+  const earlyP = gatherNetComments(earlyHandles, []).then(lines => {
+    if (!S.again && lines.length) paintComments(lines);
+    return lines;
+  }).catch(() => []);
   const note = label => {
     if (S.again) return;
-    const lines = found.map(r => (r.x ? 'X  ' : '') + r.headline);
     if (S.playing) { say('Adding ' + label); return; }
-    showWaiting(label, lines);
+    showWaiting('Comments', commentHold);
     say('Searching ' + label);
   };
-  showWaiting(country.name + ' · ' + lang.name, slots.map(s => (s.label || s.cat || 'News') + ', ' + (s.count || 1)));
-  say('Reading ' + country.name + ', ' + lang.name);
+  showWaiting('Comments', []);
+  say('Searching comments');
   progress(0.08);
   let sequence = [];
   const used = new Set();
@@ -4332,7 +4412,6 @@ async function collectSlots(date, slots, reorder) {
         sequence.push({ coffee: true, about });
         guard++;
       }
-      found.push({ headline: 'Coffee break' });
       note(label);
       continue;
     }
@@ -4357,7 +4436,8 @@ async function collectSlots(date, slots, reorder) {
     const details = await loadDetails(slots, used);
     details.forEach(r => { if (r && r.headline) found.push(r); });
     sequence = insertDetails(sequence, details);
-    showWaiting('Genres, sources, and X accounts', found.map(r => (r.x ? 'X  ' : '') + r.headline));
+    showWaiting('Comments', commentHold);
+    say('Searching comments');
   }
   if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
   const firstNews = sequence.find(r => r && r.headline && !r.coffee);
@@ -4370,8 +4450,17 @@ async function collectSlots(date, slots, reorder) {
   if (!news.length) throw new Error('Could not collect those requests. Press Update to try again.');
   rememberKeys(news.map(r => r.headline.toLowerCase().slice(0, 90)));
   progress(0.45);
-  await Promise.all([attachReplies(sequence), fillText(sequence, lang)]);
-  return scriptFromSequence(date, sequence, lang, country);
+  const handles = earlyHandles.slice();
+  sequence.forEach(r => { if (r && r.x) handles.push(String(r.source || '').replace(/^X\s*@/i, '')); });
+  const headlines = news.map(r => r.headline);
+  const [earlyLines, comments] = await Promise.all([
+    earlyP,
+    gatherNetComments(handles, headlines),
+    fillText(sequence, lang),
+  ]);
+  const shown = comments.length ? comments : earlyLines;
+  paintComments(shown);
+  return scriptFromSequence(date, sequence, lang, country, shown);
 }
 function countsFor(genres) {
   if (genres.length === 1) return [6];
@@ -4399,9 +4488,16 @@ async function collect(date) {
   progress(0.08);
   let xrows = [];
   const names = xAccounts();
+  commentHold = [];
+  const earlyP = gatherNetComments(names, []).then(lines => {
+    if (!S.again && lines.length) paintComments(lines);
+    return lines;
+  }).catch(() => []);
+  showWaiting('Comments', commentHold);
+  say('Searching comments');
   if (names.length) {
     if (S.playing) say('Adding @' + names[0]);
-    else { showWaiting(names.map(n => '@' + n).join('\n'), []); say('Searching @' + names[0]); }
+    else say('Searching @' + names[0]);
     try { xrows = (await accountRows()).filter(r => r.headline && !blocked(r.headline)); }
     catch (e) { console.warn(e); }
   }
@@ -4413,20 +4509,18 @@ async function collect(date) {
   const picks = [];
   if (intlFeeds.length) picks.push(intlFeeds[n % intlFeeds.length]);
   if (jpFeeds.length) picks.push(jpFeeds[n % jpFeeds.length]);
-  const lines = [];
   let lead = [];
-  if (xrows.length) lead = withCoffee(xrows.slice(0, 4));
+  if (xrows.length) lead = xrows.slice(0, 4);
   for (const id of picks) {
     if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
     if (S.playing) say('Adding ' + name);
-    else { showWaiting(name, lines); say('Searching ' + name); }
+    else { showWaiting('Comments', commentHold); say('Searching ' + name); }
     try {
       const items = await newsRows(RSS[id], 'NEWS');
       const tagged = items.map(it => ({ ...it, source: it.source || name }));
       batches.push(tagged);
-      rowsFromItems(tagged, name, 'NEWS').slice(0, 4).forEach(r => lines.push(r.headline));
-      if (!S.playing) showWaiting(name, lines);
+      if (!S.playing) showWaiting('Comments', commentHold);
       if (!lead.length) {
         const early = [];
         const seen = new Set();
@@ -4439,7 +4533,7 @@ async function collect(date) {
           seen.add(sp.headline.toLowerCase().slice(0, 90));
           early.push(row);
         });
-        lead = withCoffee(early.slice(0, 4));
+        lead = early.slice(0, 4);
       }
     } catch (e) { console.warn(e); }
     await sleep(120);
@@ -4502,12 +4596,19 @@ async function collect(date) {
     const keys = new Set(leadNews.map(keyOf));
     chosen = leadNews.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
   }
-  chosen = withCoffee(chosen);
   rememberKeys(chosen.filter(r => r.headline).map(r => r.headline.toLowerCase().slice(0, 90)));
   if (!chosen.some(r => r.headline)) throw new Error('Could not collect headlines. Press Update to try again.');
   progress(0.45);
-  await Promise.all([attachReplies(chosen), fillText(chosen, lang)]);
-  return scriptFromSequence(date, chosen, lang, country);
+  const handles = names.slice();
+  chosen.forEach(r => { if (r && r.x) handles.push(String(r.source || '').replace(/^X\s*@/i, '')); });
+  const [earlyLines, comments] = await Promise.all([
+    earlyP,
+    gatherNetComments(handles, chosen.map(r => r.headline)),
+    fillText(chosen, lang),
+  ]);
+  const shown = comments.length ? comments : earlyLines;
+  paintComments(shown);
+  return scriptFromSequence(date, chosen, lang, country, shown);
 }
 
 /* ---------- export ---------- */
@@ -4647,17 +4748,15 @@ async function runAll(opts) {
   if (S.busy) {
     S.again = opts;
     stop();
-    const preview = previewLabel();
-    showWaiting(preview.title, []);
-    say(preview.say);
+    showWaiting('Comments', commentHold);
+    say('Searching comments');
     return;
   }
   S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    const preview = previewLabel();
-    showWaiting(preview.title, []);
-    say(preview.say);
+    showWaiting('Comments', commentHold);
+    say('Searching comments');
   }
   try {
     const date = opts.date || $('date').value || todayJST();
@@ -5051,13 +5150,13 @@ window.NS = {
   try {
     if (Q.get('sample') !== '1' && $('update')) {
       $('update').disabled = true; $('update').textContent = 'Creating…';
-      showWaiting("Today's headlines", []);
-      say("Searching today's headlines");
+      showWaiting('Comments', []);
+      say('Searching comments');
     }
     await loadAssets();
     if (!S.script) {
       const preview = parseLineup(lineupText());
-      showWaiting(preview.length ? preview.map(s => s.label || 'News').join('\n') : "Today's headlines", []);
+      showWaiting('Comments', []);
     }
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
