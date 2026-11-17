@@ -51,11 +51,11 @@ def main() -> None:
     dest.parent.mkdir(exist_ok=True)
     dest.write_text(ja, encoding="utf-8")
     print(f"ja/index.html {len(ja.encode('utf-8')) / 1048576:.2f} MB")
-    humor = pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets)
+    # Humor stays in src/humor.html and is unpublished for now.
     humor_dest = ROOT / "humor" / "index.html"
-    humor_dest.parent.mkdir(exist_ok=True)
-    humor_dest.write_text(humor, encoding="utf-8")
-    print(f"humor/index.html {len(humor.encode('utf-8')) / 1048576:.2f} MB")
+    if humor_dest.exists():
+        humor_dest.unlink()
+        print("humor/index.html removed")
 
 
 if __name__ == "__main__":
