@@ -160,8 +160,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Romance, 3&#10;Jokes, 10"></textarea>
-      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 3 adds three couples' posts, each with a reply to it. Leave the lineup empty for the genres below.</p>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Romance, 2&#10;Jokes, 10"></textarea>
+      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a short note on who they are, a loving post, the partner's reply, and what others said. Leave the lineup empty for the genres below.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -321,7 +321,7 @@ const CHIPS = [
   { label: 'Sports', line: 'Sports, 2' },
   { label: 'Food', line: 'Food, 2' },
   { label: 'Restaurant', line: 'Restaurant, 1' },
-  { label: 'Romance', line: 'Romance, 3' },
+  { label: 'Romance', line: 'Romance, 2' },
   { label: 'Musk X', line: 'Musk X, 3' },
   { label: 'SpaceX', line: 'SpaceX, 1' },
   { label: 'Nikkei', line: 'Nikkei, 2' },
@@ -1010,24 +1010,35 @@ async function collectJokes(topics, need, opts) {
   return pickFunny(rows, need);
 }
 
-/* ---------- romance: a couple's post and a reply to it ---------- */
+/* ---------- romance: short, loving exchanges between two people, then what others said ---------- */
+/* Searches for loving replies; each one is read with the post it answers. */
 const ROMANCE_Q = {
-  ja: ['(彼氏 OR 彼女 OR 旦那 OR 嫁 OR 夫 OR 妻 OR 恋人) filter:replies', '(カップル OR 夫婦 OR 尊い OR 微笑ましい OR リア充 OR お幸せに OR ラブラブ) filter:replies'],
-  en: ['(boyfriend OR girlfriend OR husband OR wife OR "my partner") filter:replies', '(couple OR "relationship goals" OR adorable OR "get a room" OR wholesome) filter:replies'],
+  ja: ['(大好き OR 愛してる OR 会いたい OR ぎゅー OR おやすみ) filter:replies', '(💕 OR 🥰 OR 😘 OR ❤️) (好き OR すき OR かわいい OR ありがとう) filter:replies'],
+  en: ['("love you" OR "miss you" OR babe OR "my love") filter:replies', '(🥰 OR 😘 OR ❤️) (love OR cutie OR babe OR baby) filter:replies'],
 };
-const ROMANCE_WORDS = {
-  ja: /彼氏|彼女|旦那|嫁|夫|妻|恋人|カップル|夫婦|デート|付き合|プロポーズ|結婚|尊い|リア充|イチャ|ラブラブ|微笑ましい|お幸せに|爆発しろ|好きすぎ/,
-  en: /boyfriend|girlfriend|husband|wife|partner|couple|\bdate\b|dating|married|marry|propos|crush|relationship|adorable|wholesome|get a room|\bbf\b|\bgf\b/i,
+const LOVE = {
+  ja: /大好き|だいすき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|かわいい|可愛い|かっこいい|おやすみ|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😍/,
+  en: /love you|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|forever|good ?night|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😍/i,
 };
+/* What onlookers say about a couple. */
+const CHEER = {
+  ja: /尊い|てぇてぇ|可愛い|かわいい|お幸せに|末永く|リア充|爆発しろ|微笑ましい|ほっこり|うらやま|羨ましい|素敵|仲良し|笑|草|ｗｗ|ww/,
+  en: /cute|adorable|goals|wholesome|get a room|love this|so sweet|\baw+\b|lol|lmao|🥹|😭/i,
+};
+/* Short, unless one long story is allowed in the video. */
+const SHORT = { ja: 30, en: 90 };
+const LONG = { ja: 60, en: 180 };
+const UNSAFE_ROMANCE = /浮気|不倫|別れ|離婚|ブロック|死ね|殺|嫌い|最低|ストーカー|cheat|divorce|break ?up|hate you/i;
 function romanceText(st, lang) {
   const text = postText(st);
-  if (!text || UNSAFE.test(text) || VIOLENT.test(text)) return '';
+  if (!text || UNSAFE.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text)) return '';
   if (lang === 'en') {
-    if ((text.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length > 2 || !/[A-Za-z]{3,}/.test(text) || text.length < 8) return '';
-  } else if ((text.match(/[\u3040-\u30ff]/g) || []).length < 1 || [...text].length < 4) return '';
+    if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{2,}/.test(text) || text.length < 4) return '';
+  } else if ((text.match(/[぀-ヿ]/g) || []).length < 1 || [...text].length < 2) return '';
   if (/ご冥福|追悼|亡くな|お悔やみ|死去|\brip\b|passed away/i.test(text)) return '';
   return text;
 }
+const charLen = t => [...String(t || '')].length;
 /* The post a reply answers. The fxtwitter API gives it as replying_to { screen_name, status } or replying_to_status. */
 function parentOf(st) {
   const rt = st && st.replying_to;
@@ -1035,6 +1046,11 @@ function parentOf(st) {
   const who = (rt && typeof rt === 'object' && (rt.screen_name || rt.username)) || (typeof rt === 'string' ? rt : '') || '';
   return { id: /^\d+$/.test(String(id)) ? String(id) : '', who: String(who).replace(/^@+/, '') };
 }
+function statusId(st) {
+  const m = String((st && st.url) || '').match(/status(?:es)?\/(\d+)/);
+  return (st && st.id && /^\d+$/.test(String(st.id)) ? String(st.id) : '') || (m ? m[1] : '');
+}
+function handleOf(st) { return String((st && st.author && st.author.screen_name) || '').replace(/^@+/, ''); }
 async function fetchStatus(id) {
   try {
     const d = await fxJson('https://api.fxtwitter.com/2/status/' + id);
@@ -1046,71 +1062,120 @@ async function fetchStatus(id) {
   } catch (e) { console.warn(e); }
   return null;
 }
-function cutChars(text, n) { const c = [...String(text || '')]; return c.length <= n ? c.join('') : c.slice(0, n - 1).join('') + '…'; }
+function searchX(q) {
+  return fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q)).then(d => (d && d.results) || []).catch(() => []);
+}
+/* Each story: a loving post, the partner's loving reply, then up to two onlookers' comments.
+   Most posts are short; at most one story in a video has a longer post. */
 async function collectRomance(need, place) {
   if (!need || !sourceOn('x')) return [];
   const lang = jokeLang();
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
   say('Searching couples on X');
-  const lists = await Promise.all(ROMANCE_Q[lang].map(q => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' lang:' + lang + xRange())).then(d => (d && d.results) || []).catch(() => [])));
-  const keys = new Set();
+  const lists = await Promise.all(ROMANCE_Q[lang].map(q => searchX(q + ' lang:' + lang + xRange())));
+  const used = new Set();
   const cands = [];
   lists.flat().forEach(st => {
-    const handle = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
+    const handle = handleOf(st);
     const text = romanceText(st, lang);
-    if (!handle || !text) return;
     const parent = parentOf(st);
-    const url = (st && st.url) || '';
-    const row = { romance: true, handle, text: cutChars(text, lang === 'en' ? 140 : 48), url, link: url, lang, place: place || 'middle', parent };
-    const ks = jokeKeys(row).concat(parent.id ? ['id:' + parent.id] : []);
-    if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
-    ks.forEach(k => keys.add(k));
-    row.keys = ks;
-    row.score = (ROMANCE_WORDS[lang].test(text) ? 4 : 0) + (isFunny(text, lang) ? 3 : 0) + (parent.id ? 3 : 0) + Math.random() * 2;
-    cands.push(row);
+    if (!handle || !text || !parent.id || !LOVE[lang].test(text) || charLen(text) > LONG[lang]) return;
+    const id = statusId(st);
+    const tk = 't:' + squash(text).slice(0, 50);
+    if (!id || used.has(id) || used.has(tk) || past.has('id:' + id) || now.has('id:' + id) || past.has(tk) || now.has(tk) || past.has('id:' + parent.id) || now.has('id:' + parent.id)) return;
+    used.add(id);
+    used.add(tk);
+    cands.push({ b: { handle, text, url: st.url || '', id }, parent, score: (charLen(text) <= SHORT[lang] ? 4 : 0) + Math.random() * 3 });
   });
-  const ranked = cands.sort((a, b) => b.score - a.score).slice(0, need * 2);
-  /* Read the couple's post each reply answers. A reply whose post cannot be read plays alone. */
-  const parents = await Promise.all(ranked.map(r => (r.parent.id ? fetchStatus(r.parent.id) : Promise.resolve(null)).catch(() => null)));
-  const out = [];
-  ranked.forEach((r, i) => {
+  const ranked = cands.sort((x, y) => y.score - x.score).slice(0, need * 4);
+  const parents = await Promise.all(ranked.map(c => fetchStatus(c.parent.id).catch(() => null)));
+  const stories = [];
+  let longs = 0;
+  ranked.forEach((c, i) => {
+    if (stories.length >= need) return;
     const pst = parents[i];
-    const ptext = pst ? romanceText(pst, lang) : '';
-    if (ptext) {
-      r.parentText = cutChars(ptext, lang === 'en' ? 100 : 36);
-      r.parentHandle = String((pst.author && pst.author.screen_name) || r.parent.who || '').replace(/^@+/, '');
-    }
-    if (!r.parentText && !ROMANCE_WORDS[lang].test(r.text)) return;
-    out.push(r);
+    if (!pst) return;
+    const aText = romanceText(pst, lang);
+    const aHandle = handleOf(pst) || c.parent.who;
+    const atk = 't:' + squash(aText).slice(0, 50);
+    if (!aText || !aHandle || aHandle.toLowerCase() === c.b.handle.toLowerCase() || charLen(aText) > LONG[lang] || past.has(atk) || now.has(atk) || used.has(atk)) return;
+    if (!LOVE[lang].test(aText)) return;
+    const long = charLen(aText) > SHORT[lang] || charLen(c.b.text) > SHORT[lang];
+    if (long && longs >= 1) return;
+    if (long) longs++;
+    used.add(atk);
+    stories.push({ a: { handle: aHandle, text: aText, url: pst.url || ('https://x.com/' + aHandle + '/status/' + c.parent.id), id: c.parent.id }, b: c.b, cheers: [] });
   });
-  out.sort((a, b) => (b.parentText ? 1 : 0) - (a.parentText ? 1 : 0));
-  return out.slice(0, need);
+  /* What others said in the same conversation. */
+  const cheerLists = await Promise.all(stories.map(st => searchX('conversation_id:' + st.a.id + ' filter:replies')));
+  stories.forEach((st, i) => {
+    const pair = new Set([st.a.handle.toLowerCase(), st.b.handle.toLowerCase()]);
+    shuffle(cheerLists[i]).forEach(x => {
+      if (st.cheers.length >= 2) return;
+      const who = handleOf(x);
+      const text = romanceText(x, lang);
+      const id = statusId(x);
+      const tk = 't:' + squash(text).slice(0, 50);
+      if (!who || pair.has(who.toLowerCase()) || !text || !id || used.has(id) || used.has(tk) || past.has('id:' + id) || past.has(tk) || now.has(tk)) return;
+      if (!CHEER[lang].test(text) || charLen(text) > SHORT[lang]) return;
+      used.add(id);
+      used.add(tk);
+      st.cheers.push({ handle: who, text, url: x.url || '', id });
+    });
+  });
+  return stories.map(st => ({
+    romance: true, story: st, lang, place: place || 'middle',
+    keys: [st.a, st.b, ...st.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]),
+  }));
 }
-/* A romance card: the couple's post large, and the reply under it. */
-function romanceCard(r, langId) {
-  const lead = r.parentText || r.text;
-  const reply = r.parentText ? r.text : '';
-  const src = r.parentText && r.parentHandle ? `X @${r.parentHandle} → @${r.handle}` : 'X @' + r.handle;
-  let card;
-  if (CJK.test(lead) && langId !== 'en') {
-    const parts = largeJa(lead);
-    const kw = jaWord(lead);
-    const jp = [];
-    if (parts.rest) jp.push(parts.rest);
-    if (reply) jp.push('→ ' + reply);
-    card = { kw, cat: 'ROMANCE', topic: kw, head: parts.head, sub: [], jp, tags: [], src };
-  } else {
-    const words = lead.split(/\s+/).filter(Boolean);
-    const kw = storyWord(lead, '');
-    const jp = [];
-    if (words.length > 12) jp.push(words.slice(12).join(' '));
-    if (reply) jp.push('→ ' + reply);
-    card = { kw, cat: 'ROMANCE', topic: kw, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp, tags: [], src };
+/* One story becomes several cards: the background, the post, the reply, then what others said. */
+function relationWord(text, lang) {
+  if (lang === 'en') {
+    if (/boyfriend|\bbf\b/i.test(text)) return 'boyfriend';
+    if (/girlfriend|\bgf\b/i.test(text)) return 'girlfriend';
+    if (/husband/i.test(text)) return 'husband';
+    if (/wife/i.test(text)) return 'wife';
+    return 'partner';
   }
-  card.url = r.url || '';
-  card.key = r.keys || jokeKeys(r);
-  return card;
+  if (/彼氏/.test(text)) return '彼氏';
+  if (/彼女/.test(text)) return '彼女';
+  if (/旦那|夫/.test(text)) return '旦那さん';
+  if (/嫁|妻/.test(text)) return '奥さん';
+  return '恋人';
+}
+function romanceCards(r, langId) {
+  const st = r.story;
+  const ja = r.lang !== 'en';
+  const one = (text, src, url) => {
+    let card;
+    if (ja && CJK.test(text) && langId !== 'en') {
+      const parts = largeJa(text);
+      const kw = jaWord(text);
+      card = { kw, cat: 'ROMANCE', topic: kw, head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
+    } else {
+      const words = String(text).split(/\s+/).filter(Boolean);
+      const kw = storyWord(text, '');
+      card = { kw, cat: 'ROMANCE', topic: kw, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
+    }
+    card.url = url || '';
+    card.key = r.keys;
+    return card;
+  };
+  const rel = relationWord(st.a.text + ' ' + st.b.text, r.lang);
+  const intro = ja
+    ? { kw: 'カップル', cat: 'ROMANCE', topic: 'カップル', head: ['カップルの会話'], sub: [], tags: [], src: 'X @' + st.a.handle + ' / @' + st.b.handle,
+        jp: [`${rel}への投稿に、相手がこたえた、カップルらしい二人のやりとりです。` + (st.cheers.length ? 'つづいて、見ていた人の声。' : '')] }
+    : { kw: 'COUPLE', cat: 'ROMANCE', topic: 'COUPLE', head: ['A COUPLE ON X'], sub: [], tags: [], src: 'X @' + st.a.handle + ' / @' + st.b.handle,
+        jp: [`A post to a ${rel}, and the reply. They seem to be a couple.` + (st.cheers.length ? ' Then what others said.' : '')] };
+  intro.url = st.a.url;
+  intro.key = r.keys;
+  return [
+    intro,
+    one(st.a.text, 'X @' + st.a.handle, st.a.url),
+    one(st.b.text, 'X @' + st.b.handle + ' → @' + st.a.handle, st.b.url),
+    ...st.cheers.map(c => one(c.text, 'X @' + c.handle, c.url)),
+  ];
 }
 
 /* ---------- text for the picture ---------- */
@@ -1202,8 +1267,8 @@ async function cardsFrom(rows, langId) {
   const toEn = langId !== 'ja' ? plain.filter(r => CJK.test(r.headline)) : [];
   if (toJa.length) (await translateMany(toJa.map(r => r.headline), 'ja')).forEach((t, i) => { toJa[i]._ja = t; });
   if (toEn.length) (await translateMany(toEn.map(r => r.headline), 'en')).forEach((t, i) => { toEn[i]._en = t; });
-  return rows.map(r => {
-    if (r.romance) return romanceCard(r, langId);
+  return rows.flatMap(r => {
+    if (r.romance) return romanceCards(r, langId);
     const cjk = CJK.test(r.headline);
     const en = cjk ? (r._en || '') : r.headline;
     const ja = cjk ? r.headline : (r._ja || '');
@@ -1227,10 +1292,11 @@ async function collect() {
   if (jokeSlot) jokeNeed = jokeSlot.count;
   let topicWords = [];
   const topicPlace = {};
-  /* Romance: a lineup line sets the count; otherwise the Romance genre adds four couples. */
+  /* Romance: a lineup line sets the number of couples; otherwise the Romance genre adds two.
+     Each couple is about four cards: the background, the post, the reply, and what others said. */
   const romanceSlot = slots.find(s => s.type === 'romance');
   const romanceGenre = genreChoices().find(g => g.id === 'romance' && g.on);
-  const romanceNeed = romanceSlot ? romanceSlot.count : (!slots.some(s => s.type !== 'jokes' && s.type !== 'romance') && romanceGenre ? 4 : 0);
+  const romanceNeed = Math.min(4, romanceSlot ? romanceSlot.count : (!slots.some(s => s.type !== 'jokes' && s.type !== 'romance') && romanceGenre ? 2 : 0));
   const romancePlace = romanceGenre ? romanceGenre.place : 'middle';
   if (mode === 'x') {
     /* X comments only: no reports. Funny replies about the lineup, the accounts,
@@ -1239,7 +1305,7 @@ async function collect() {
     progress(0.1);
     slots.filter(s => s.type !== 'jokes' && s.type !== 'romance').forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
     const sum = slots.reduce((n, s) => n + (s.count || 0), 0);
-    jokeNeed = Math.max(0, Math.min(MAX_ITEMS, sum || 12) - romanceNeed);
+    jokeNeed = romanceSlot ? Math.max(0, sum - romanceSlot.count) : Math.max(0, 12 - romanceNeed * 2);
     if (topicWords.length < 3) {
       const chosen = shuffle(genreChoices().filter(g => g.on && g.id !== 'romance')).slice(0, 6);
       const lists = await Promise.all(chosen.map(g => searchRows(g.q[country.id] || g.q.US, up(g.name)).then(rows => rows.filter(allowedRow)).catch(() => [])));
@@ -1275,12 +1341,12 @@ async function collect() {
   const band = { top: 0, middle: 1, bottom: 2 };
   const room = MAX_ITEMS - sequence.length;
   const [found, couples] = await Promise.all([
-    collectJokes(topicWords, Math.min(jokeNeed, Math.max(0, room - romanceNeed)), { headlines }),
+    collectJokes(topicWords, Math.min(jokeNeed, Math.max(0, room - romanceNeed * 4)), { headlines }),
     collectRomance(Math.min(romanceNeed, room), romancePlace).catch(e => { console.warn(e); return []; }),
   ]);
   const jokes = found
     .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
-    .concat(couples.map(r => ({ ...r, headline: r.parentText || r.text, joke: true })))
+    .concat(couples.map(r => ({ ...r, headline: r.story.a.text, joke: true })))
     .sort((a, b) => band[a.place] - band[b.place]);
   if (S.again) return null;
   if (!sequence.length && !jokes.length) return { empty: true };
