@@ -1,9 +1,16 @@
-/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story. */
+/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story, or 4.2 / 5.2. */
 (function (global) {
 'use strict';
 
-const FPS = 30, DUR = 3.2;
+const FPS = 30;
+let DUR = 3.2;
+function setDuration(seconds) {
+  const n = Math.round(Number(seconds) * 10) / 10;
+  DUR = n === 4.2 || n === 5.2 ? n : 3.2;
+  return DUR;
+}
 const INK = '#F5F1E9';
+const INK_DAY = '#141414';
 const F_SERIF = '"Noto Serif JP","Noto Serif CJK JP","Source Han Serif JP","Hiragino Mincho ProN","Yu Mincho",serif';
 const F_TIMES = '"Tinos","Liberation Serif","Times New Roman",Times,serif';
 const F_SANS = '"Noto Sans JP","Noto Sans CJK JP","Source Han Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
@@ -81,10 +88,14 @@ let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
 const WALLPAPERS = {
   morning: '',
+  bright: 'brightness(1.85) saturate(1.14) contrast(1.05)',
+  day: 'brightness(2.35) saturate(0.55) contrast(1.08)',
   evening: 'brightness(0.72) saturate(1.35) sepia(0.45)',
   night: 'brightness(0.38) saturate(0.5)',
   pop: 'brightness(1.65) saturate(1.85) contrast(1.04)',
 };
+function inkNow() { return wallpaper === 'day' ? INK_DAY : INK; }
+function creditNow() { return wallpaper === 'day' ? 'rgba(20,20,20,0.62)' : P.credit.color; }
 let wallpaper = 'morning';
 function setWallpaper(id) { wallpaper = Object.prototype.hasOwnProperty.call(WALLPAPERS, id) ? id : 'morning'; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
@@ -374,6 +385,12 @@ function drawBg(ctx, img, t, key) {
   if (wallpaper === 'evening') {
     ctx.fillStyle = 'rgba(140,48,0,0.18)';
     ctx.fillRect(0, 0, W, H);
+  } else if (wallpaper === 'bright') {
+    ctx.fillStyle = 'rgba(255,236,214,0.16)';
+    ctx.fillRect(0, 0, W, H);
+  } else if (wallpaper === 'day') {
+    ctx.fillStyle = 'rgba(255,250,240,0.5)';
+    ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
 }
@@ -383,13 +400,13 @@ function drawItem(ctx, show, i, t, bgs) {
   const it = show.items[i], L = it.L;
   ctx.textBaseline = 'alphabetic';
   drawBg(ctx, bgs[it.bg], t, it.bg);
-  ctx.fillStyle = INK;
+  ctx.fillStyle = inkNow();
   /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
   ctx.font = font(P.header.w, P.header.size, F_SERIF);
   textX(ctx, show.header, P.header.cx, P.header.base, P.header.sx, 'center');
   ctx.font = font(400, P.credit.size, F_SANS);
-  ctx.fillStyle = P.credit.color; ctx.textAlign = 'left';
+  ctx.fillStyle = creditNow(); ctx.textAlign = 'left';
   const mw = ctx.measureText(musicCredit).width, ms = Math.min(P.credit.size, P.credit.size * P.credit.maxW1 / mw);
   ctx.font = font(400, ms, F_SANS);
   ctx.fillText(musicCredit, P.left, P.credit.base1 - (P.credit.size - ms) * 1.33);
@@ -397,7 +414,7 @@ function drawItem(ctx, show, i, t, bgs) {
   const cw = ctx.measureText(it.credit2).width, cs = Math.min(P.credit.size, P.credit.size * P.credit.maxW / cw);
   ctx.font = font(400, cs, F_SANS);
   ctx.fillText(it.credit2, P.left, P.credit.base2 - (P.credit.size - cs) * 1.33);
-  ctx.fillStyle = INK;
+  ctx.fillStyle = inkNow();
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
   /* Keyword. */
@@ -462,5 +479,5 @@ function allText(script) {
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, DUR, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
+global.NSEngine = { FPS, get DUR() { return DUR; }, setDuration, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
 })(window);
