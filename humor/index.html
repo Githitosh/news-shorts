@@ -3458,8 +3458,8 @@ function focusJoke(text, lang) {
   const slice = chars.slice(start, start + keep).join('').trim();
   return (start ? '…' : '') + slice + (start + keep < chars.length ? '…' : '');
 }
-/* Comments that never play: sexual content, minors, abuse. */
-const UNSAFE = /セックス|エッチ|えっち|ヤリモク|体位|下着|裸|おっぱい|ちんこ|まんこ|射精|中出し|風俗|パパ活|\bsex|nsfw|nude|porn|horny|onlyfans|18\+|xxx|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
+/* Comments that never play: adult words, minors, abuse. */
+const UNSAFE = /セックス|エッチ|えっち|ｴｯﾁ|エロ|下ネタ|ヤリモク|ヤる|ヤれ|体位|下着|裸|おっぱい|乳首|ちんこ|ちんちん|まんこ|射精|中出し|勃起|ムラムラ|性欲|童貞|処女|ラブホ|風俗|パパ活|AV女優|アダルト|🍆|🍑|🔞|\bsex|nsfw|nude|naked|porn|horny|kinky|onlyfans|18\+|xxx|中学|小学|ＪＫ|ＪＣ|\bJ[KC]\b|高校生|女子高生|男子高生|未成年|\bteen|high school|middle school|ＤＶ|\bDV\b|モラハラ|殴られ|abuse/i;
 function postText(st) {
   return String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃]\S+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -3575,12 +3575,20 @@ async function collectJokes(topics, need, opts) {
 /* ---------- romance: short, loving exchanges between two people, then what others said ---------- */
 /* Searches for loving replies; each one is read with the post it answers. */
 const ROMANCE_Q = {
-  ja: ['(大好き OR 愛してる OR 会いたい OR ぎゅー OR おやすみ) filter:replies', '(💕 OR 🥰 OR 😘 OR ❤️) (好き OR すき OR かわいい OR ありがとう) filter:replies'],
-  en: ['("love you" OR "miss you" OR babe OR "my love") filter:replies', '(🥰 OR 😘 OR ❤️) (love OR cutie OR babe OR baby) filter:replies'],
+  ja: [
+    '(おやすみ OR おはよう OR おつかれ OR お疲れ OR ただいま OR おかえり) (😘 OR 🥰 OR ❤️ OR 💕 OR 💤 OR ☺️) filter:replies',
+    '(大好き OR 会いたい OR ぎゅー OR すき OR ありがとう) (😘 OR 🥰 OR ❤️ OR 💕) filter:replies',
+    '(彼氏 OR 彼女 OR 旦那 OR 嫁) (おやすみ OR おはよう OR ありがとう OR 気をつけて) filter:replies',
+  ],
+  en: [
+    '("good night" OR goodnight OR "good morning" OR "sleep well" OR "home safe") (😘 OR 🥰 OR ❤️ OR 💤) filter:replies',
+    '("love you" OR "miss you" OR babe OR "my love") filter:replies',
+  ],
 };
+/* Everyday couple talk: greetings, thanks, missing each other, and love. */
 const LOVE = {
-  ja: /大好き|だいすき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|かわいい|可愛い|かっこいい|おやすみ|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😍/,
-  en: /love you|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|forever|good ?night|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😍/i,
+  ja: /大好き|だいすき|好き|すき|愛して|あいして|会いたい|あいたい|ぎゅ|ちゅ|かわいい|可愛い|かっこいい|おやすみ|おはよ|おつかれ|お疲れ|ただいま|おかえり|いってらっしゃ|いってきます|気をつけて|ありがと|ずっと一緒|一緒に|ハグ|彼氏|彼女|旦那|嫁|❤|♥|💕|💗|💓|💖|💘|💞|🥰|😘|😚|😍|🤗|💤|😴|☺/,
+  en: /love you|luv u|\bily\b|miss you|my love|\bbabe\b|\bbaby\b|honey|sweetheart|cutie|handsome|beautiful|xoxo|forever|good ?night|good ?morning|sleep well|sweet dreams|home safe|take care|thank you|boyfriend|girlfriend|husband|wife|❤|♥|💕|💗|🥰|😘|😚|😍|🤗|💤|😴/i,
 };
 /* What onlookers say about a couple. */
 const CHEER = {
@@ -3654,15 +3662,26 @@ async function collectRomance(need, place) {
   const parents = await Promise.all(ranked.map(c => fetchStatus(c.parent.id).catch(() => null)));
   const stories = [];
   let longs = 0;
-  ranked.forEach((c, i) => {
+  /* A post that is itself a reply to the partner means the two are talking: those stories come first. */
+  const order = ranked.map((c, i) => {
+    const pst = parents[i];
+    const back = pst ? parentOf(pst) : { who: '' };
+    const mutual = !!back.who && back.who.toLowerCase() === c.b.handle.toLowerCase();
+    return { i, w: (mutual ? 6 : 0) + c.score };
+  }).sort((x, y) => y.w - x.w).map(x => x.i);
+  const mutualOf = i => { const back = parents[i] ? parentOf(parents[i]) : { who: '' }; return !!back.who && back.who.toLowerCase() === ranked[i].b.handle.toLowerCase(); };
+  /* A famous account's post with a fan's reply is not a couple. */
+  const famous = st => { const a = st && st.author; const n = a && (a.followers ?? a.followers_count); return typeof n === 'number' && n > 20000; };
+  order.forEach(i => {
+    const c = ranked[i];
     if (stories.length >= need) return;
     const pst = parents[i];
-    if (!pst) return;
+    if (!pst || famous(pst)) return;
     const aText = romanceText(pst, lang);
     const aHandle = handleOf(pst) || c.parent.who;
     const atk = 't:' + squash(aText).slice(0, 50);
     if (!aText || !aHandle || aHandle.toLowerCase() === c.b.handle.toLowerCase() || charLen(aText) > LONG[lang] || past.has(atk) || now.has(atk) || used.has(atk)) return;
-    if (!LOVE[lang].test(aText)) return;
+    if (!LOVE[lang].test(aText) && !mutualOf(i) && charLen(aText) > (lang === 'en' ? 40 : 16)) return;
     const long = charLen(aText) > SHORT[lang] || charLen(c.b.text) > SHORT[lang];
     if (long && longs >= 1) return;
     if (long) longs++;
