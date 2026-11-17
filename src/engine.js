@@ -488,7 +488,10 @@ function prepare(script, preset, opts) {
   if (OPT.uniform) uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
-    header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
+    /* The line at the top: Japanese only, English only, or both when the page does not say. */
+    header: OPT.lang === 'ja' ? `${y}年${mo}月${da}日 速報ニュース`
+      : OPT.lang === 'en' ? `${pad2(da)}-${pad2(mo)}-${y} News Shorts`
+      : `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
   };
 }
 
