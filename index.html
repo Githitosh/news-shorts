@@ -21,6 +21,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
+a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP", sans-serif; text-decoration: none; }
 button.title { background: none; border: 0; border-radius: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; cursor: pointer; }
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 #gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
@@ -107,7 +108,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">News Shorts</button><span class="pull">Pull down to refresh</span></div><button type="button" id="gear" aria-label="Settings">*</button></header>
+<header><div><button type="button" id="home" class="title">News Shorts</button><span class="pull">Pull down to refresh</span></div><a class="jump" href="humor/">Humor</a><button type="button" id="gear" aria-label="Settings">*</button></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <section class="stage" id="stage">
