@@ -264,29 +264,31 @@ function fitPlan(place) {
   return L;
 }
 
+function layoutStill(it) {
+  const raw = (it.replies || []).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 20);
+  const lines = raw.length ? raw : ['No comments yet'];
+  const top = P.rule1 + (P.layout === 'columns' ? 16 : 28);
+  const bottom = P.rule2 - (P.layout === 'columns' ? 10 : 16);
+  const titleSize = P.layout === 'columns' ? 36 : 46;
+  const titleBase = top + titleSize * 0.82;
+  const listTop = titleBase + (P.layout === 'columns' ? 16 : 22);
+  const room = Math.max(40, bottom - listTop);
+  const step = room / lines.length;
+  const size = Math.max(18, Math.min(P.layout === 'columns' ? 28 : 34, step * 0.78));
+  const replies = lines.map((t, i) => ({ t, base: listTop + size + i * step, size }));
+  return {
+    still: true,
+    title: { t: 'COMMENTS', base: titleBase, size: titleSize },
+    replies,
+    head: [], sub: [], jp: [],
+    kw: { t: '', size: 1, sx: 1, x: 0, base: 0 },
+    Sh: 10, Ss: 10, rule: listTop, short: top,
+    ruleX: [P.left, P.right], cxHead: P.cx, cxJp: P.left,
+  };
+}
 function layout(it) {
-  const replyLines = (it.replies || []).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 2);
-  const replySize = 40;
-  const replyStep = 52;
-  const replyBand = replyLines.length ? replyLines.length * replyStep + 24 : 0;
-  const savedBottom = P.box.bottom;
-  const savedCenter = P.box.center;
-  if (replyBand) {
-    P.box.bottom = savedBottom - replyBand;
-    P.box.center = (P.box.top + P.box.bottom) / 2;
-  }
-  let L;
-  try { L = layoutAt(it, 1); }
-  finally { P.box.bottom = savedBottom; P.box.center = savedCenter; }
-  if (replyLines.length) {
-    let y = savedBottom - replyBand + replySize;
-    L.replies = replyLines.map(t => {
-      const line = { t, base: y, size: replySize };
-      y += replyStep;
-      return line;
-    });
-  }
-  return L;
+  if (it.still || it.coffee || it.kind === 'coffee') return layoutStill(it);
+  return layoutAt(it, 1);
 }
 function layoutAt(it, scale) {
   jpScale = scale;
@@ -376,9 +378,9 @@ function prepare(script, preset) {
   items.forEach((it, i) => {
     const no = pad2(i + 1);
     const lead = String(it.kw || it.topic || 'NOTE').toUpperCase();
-    it.catLeft = it.kind === 'coffee' ? `NOTE ${no}  /  COFFEE BREAK` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
-    it.catRight = String(it.topic || '').toUpperCase();
-    it.foot = it.kind === 'coffee' ? 'COFFEE BREAK' : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
+    it.catLeft = it.kind === 'coffee' ? `COMMENTS  ${no}` : `${lead} ${no}  /  ${String(it.cat || lead).toUpperCase()}`;
+    it.catRight = it.kind === 'coffee' ? '' : String(it.topic || '').toUpperCase();
+    it.foot = it.kind === 'coffee' ? 'COMMENTS' : `${it.src || ''}${it.date ? '\u2006｜\u2006' + it.date : ''}`;
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());
@@ -436,7 +438,7 @@ function drawItem(ctx, show, i, t, bgs) {
   use(show.preset);
   const it = show.items[i], L = it.L;
   ctx.textBaseline = 'alphabetic';
-  drawBg(ctx, bgs[it.bg], t, it.bg);
+  drawBg(ctx, bgs[it.bg], L.still ? 0 : t, it.bg);
   ctx.fillStyle = inkNow();
   /* Lines that stay on screen. */
   ctx.globalAlpha = 1;
@@ -452,6 +454,34 @@ function drawItem(ctx, show, i, t, bgs) {
   ctx.font = font(400, cs, F_SANS);
   ctx.fillText(it.credit2, P.left, P.credit.base2 - (P.credit.size - cs) * 1.33);
   ctx.fillStyle = inkNow();
+  if (L.still) {
+    ctx.globalAlpha = 1;
+    ctx.font = font(P.cat.w, P.cat.size, F_TIMES);
+    textX(ctx, it.catLeft, P.left, P.cat.base, P.cat.sx, 'left');
+    ctx.fillRect(P.left, P.rule1, P.right - P.left, P.rule);
+    ctx.font = font(700, L.title.size, F_SANS);
+    textX(ctx, L.title.t, P.left, L.title.base, 1, 'left');
+    (L.replies || []).forEach(l => {
+      ctx.save();
+      ctx.font = font(550, l.size, F_SANS);
+      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.72)';
+      ctx.shadowBlur = 6;
+      const w = ctx.measureText(l.t).width;
+      const sx = Math.min(1, (P.right - P.left) / Math.max(1, w));
+      textX(ctx, l.t, P.left, l.base, sx, 'left');
+      ctx.restore();
+    });
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = inkNow();
+    ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
+    ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
+    textX(ctx, it.foot, P.left, P.foot.base, P.foot.sx, 'left');
+    ctx.font = font(700, P.foot.page, F_TIMES);
+    textX(ctx, it.page, P.cat.right, P.foot.base, P.foot.psx, 'right');
+    ctx.globalAlpha = 1;
+    return;
+  }
 
   const T = TIMING, a1 = smooth(T.t1, T.t1 + T.fade, t), a2 = smooth(T.t2, T.t2 + T.fade, t), a3 = smooth(T.t3, T.t3 + T.fade, t);
   /* Keyword. */
@@ -483,16 +513,6 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
-    (L.replies || []).forEach(l => {
-      ctx.save();
-      ctx.font = font(650, l.size, F_SANS);
-      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
-      ctx.shadowBlur = 8;
-      const w = ctx.measureText(l.t).width;
-      const sx = Math.min(P.jp.sx, (P.jp.maxW * 0.98) / Math.max(1, w));
-      textX(ctx, l.t, L.cxJp, l.base, sx, 'center');
-      ctx.restore();
-    });
   }
   if (a3 > 0 && it.tags.length) {
     ctx.globalAlpha = a3 * a1;
@@ -515,7 +535,7 @@ function drawFrame(ctx, show, T, bgs) {
 }
 
 function fontSpecs() {
-  return [font(900, 64, F_SERIF), font(700, 40, F_SERIF), font(P.header.w, 42, F_SERIF), font(P.jp.w, 64, F_SERIF), font(700, 40, F_TIMES), font(400, 20, F_SANS)];
+  return [font(900, 64, F_SERIF), font(700, 40, F_SERIF), font(P.header.w, 42, F_SERIF), font(P.jp.w, 64, F_SERIF), font(700, 40, F_TIMES), font(700, 46, F_SANS), font(600, 34, F_SANS), font(400, 20, F_SANS)];
 }
 function allText(script) {
   const s = [];
