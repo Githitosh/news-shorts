@@ -11,7 +11,9 @@ const JA = {
   'Humor': 'ユーモア', 'News': 'ニュース', 'Pull down to refresh': '引っ張って更新', 'Release to refresh': '離すと更新',
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
-  'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽',
+  'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
+  'Download': 'ダウンロード', 'Making MP4…': 'MP4を作成中…', 'Save': '保存',
+  'The MP4 is ready. Press Save to keep it.': 'MP4ができました。「保存」を押すと保存できます。',
   'Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.': '1話は3.2秒です。4.2秒と5.2秒は1〜2秒長くなります。',
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
   // Wallpapers and music
@@ -30,8 +32,10 @@ const JA = {
   "X comments only (the default) plays funny replies on X about today's news in the genres you choose, the lineup, and the accounts below. News, then comments plays the reports first. A comment or story that has played does not play again. Japanese text is shown large.":
     'Xのコメントだけ（初期設定）は、選んだジャンルの今日のニュース、ラインナップ、下のアカウントについての、Xのおもしろい返信を流します。ニュースのあとにコメントを選ぶと、先にニュースを流します。一度流したコメントやニュースは二度と流しません。日本語は大きな文字で表示します。',
   'Genres': 'ジャンル', 'Lineup': 'ラインナップ', 'Apply lineup': 'ラインナップを反映',
-  "One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Leave the lineup empty for the genres below.":
-    '1行に1つ、内容と本数を書きます。「Jokes, 10」でジョークを入れる位置と本数を決めます。「Romance, 2」でカップル2組（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。空にすると下のジャンルから選びます。',
+  'One request on each line. The number of stories comes from Items under the video.':
+    '1行に1つずつ書きます。本数は動画の下の「表示数」で決まります。',
+  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
+    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
   'Space': '宇宙', 'Politics': '政治', 'Science': '科学', 'Culture': '文化', 'Local': '地域', 'Entertainment': 'エンタメ',
   'Public safety': '治安', 'Sports': 'スポーツ', 'Food': '食', 'Restaurant': 'レストラン', 'Romance': '恋愛',
   'Musk X': 'マスク氏のX', 'SpaceX': 'SpaceX', 'Nikkei': '日経', 'ABC': 'ABC', 'Jokes': 'ジョーク',
@@ -91,6 +95,7 @@ const PATTERNS = [
   [/^Exporting (.+)… (\d+)%$/, m => `${tr(m[1])}を書き出し中… ${m[2]}%`],
   [/^Recording… (\d+)%$/, m => `録画中… ${m[1]}%`],
   [/^Exported: (.*)$/, m => `書き出しました：${m[1]}`],
+  [/^Downloaded (.+)$/, m => `${m[1]}をダウンロードしました`],
   [/^Could not load news \((\d+)\)\.$/, m => `ニュースを読み込めませんでした（${m[1]}）。`],
   [/^Could not load (.+?)\.?$/, m => `${tr(m[1])}を読み込めませんでした。`],
   [/^Script loaded \((\d+) stories, ([\d.]+)s\)\.$/, m => `スクリプトを読み込みました（${m[1]}本、${m[2]}秒）。`],
@@ -145,7 +150,7 @@ function placeholders(ja) {
     const en = el.dataset.phEn;
     el.setAttribute('placeholder', ja ? en.split('\n').map(line => {
       const m = line.match(/^(.*?),\s*(\d+)$/);
-      return m ? `${tr(m[1])}, ${m[2]}` : line;
+      return m ? `${tr(m[1])}, ${m[2]}` : tr(line);
     }).join('\n') : en);
   });
 }

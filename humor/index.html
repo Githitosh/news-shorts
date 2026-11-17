@@ -120,12 +120,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="sound" type="button" aria-pressed="false">Sound</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
+      <button id="dl" type="button" disabled>Download</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
   </div>
   <div id="prog"><i></i></div>
   <p id="caption" class="caption">Opening the humor video…</p>
+  <p class="music-label">Items</p>
+  <div class="music" id="counts"></div>
   <p class="music-label">Story length</p>
   <div class="music" id="paces"></div>
   <p class="note pace-note">Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.</p>
@@ -160,8 +163,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics, 1&#10;Sports, 2&#10;Romance, 2&#10;Jokes, 10"></textarea>
-      <p class="note">One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Leave the lineup empty for the genres below.</p>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics&#10;Sports&#10;Romance&#10;Jokes"></textarea>
+      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
@@ -2123,7 +2126,9 @@ const JA = {
   'Humor': 'ユーモア', 'News': 'ニュース', 'Pull down to refresh': '引っ張って更新', 'Release to refresh': '離すと更新',
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
-  'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽',
+  'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
+  'Download': 'ダウンロード', 'Making MP4…': 'MP4を作成中…', 'Save': '保存',
+  'The MP4 is ready. Press Save to keep it.': 'MP4ができました。「保存」を押すと保存できます。',
   'Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.': '1話は3.2秒です。4.2秒と5.2秒は1〜2秒長くなります。',
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
   // Wallpapers and music
@@ -2142,8 +2147,10 @@ const JA = {
   "X comments only (the default) plays funny replies on X about today's news in the genres you choose, the lineup, and the accounts below. News, then comments plays the reports first. A comment or story that has played does not play again. Japanese text is shown large.":
     'Xのコメントだけ（初期設定）は、選んだジャンルの今日のニュース、ラインナップ、下のアカウントについての、Xのおもしろい返信を流します。ニュースのあとにコメントを選ぶと、先にニュースを流します。一度流したコメントやニュースは二度と流しません。日本語は大きな文字で表示します。',
   'Genres': 'ジャンル', 'Lineup': 'ラインナップ', 'Apply lineup': 'ラインナップを反映',
-  "One request and a count on each line. Jokes, 10 sets where the jokes play and how many. Romance, 2 adds two couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Leave the lineup empty for the genres below.":
-    '1行に1つ、内容と本数を書きます。「Jokes, 10」でジョークを入れる位置と本数を決めます。「Romance, 2」でカップル2組（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。空にすると下のジャンルから選びます。',
+  'One request on each line. The number of stories comes from Items under the video.':
+    '1行に1つずつ書きます。本数は動画の下の「表示数」で決まります。',
+  "One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. The number of items comes from Items under the video. Leave the lineup empty for the genres below.":
+    '1行に1つずつ書きます。「ジョーク」はジョークを入れる位置を決めます。「恋愛」はカップル（甘い投稿、相手の返事、まわりのコメント。右上に「恋愛」と表示）を入れます。本数は動画の下の「表示数」で決まります。空にすると下のジャンルから選びます。',
   'Space': '宇宙', 'Politics': '政治', 'Science': '科学', 'Culture': '文化', 'Local': '地域', 'Entertainment': 'エンタメ',
   'Public safety': '治安', 'Sports': 'スポーツ', 'Food': '食', 'Restaurant': 'レストラン', 'Romance': '恋愛',
   'Musk X': 'マスク氏のX', 'SpaceX': 'SpaceX', 'Nikkei': '日経', 'ABC': 'ABC', 'Jokes': 'ジョーク',
@@ -2203,6 +2210,7 @@ const PATTERNS = [
   [/^Exporting (.+)… (\d+)%$/, m => `${tr(m[1])}を書き出し中… ${m[2]}%`],
   [/^Recording… (\d+)%$/, m => `録画中… ${m[1]}%`],
   [/^Exported: (.*)$/, m => `書き出しました：${m[1]}`],
+  [/^Downloaded (.+)$/, m => `${m[1]}をダウンロードしました`],
   [/^Could not load news \((\d+)\)\.$/, m => `ニュースを読み込めませんでした（${m[1]}）。`],
   [/^Could not load (.+?)\.?$/, m => `${tr(m[1])}を読み込めませんでした。`],
   [/^Script loaded \((\d+) stories, ([\d.]+)s\)\.$/, m => `スクリプトを読み込みました（${m[1]}本、${m[2]}秒）。`],
@@ -2257,7 +2265,7 @@ function placeholders(ja) {
     const en = el.dataset.phEn;
     el.setAttribute('placeholder', ja ? en.split('\n').map(line => {
       const m = line.match(/^(.*?),\s*(\d+)$/);
-      return m ? `${tr(m[1])}, ${m[2]}` : line;
+      return m ? `${tr(m[1])}, ${m[2]}` : tr(line);
     }).join('\n') : en);
   });
 }
@@ -2962,8 +2970,8 @@ const store = {
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pad2 = n => String(n).padStart(2, '0');
-const NEWS_COUNT = 5;
-const JOKE_COUNT = 10;
+/* Items: how many cards one video plays. Chosen under the video. */
+const COUNTS = [5, 10, 20];
 const MAX_ITEMS = 24;
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size. */
 const LOOK = { uniform: true, jp: 2 };
@@ -2988,6 +2996,18 @@ const WALLS = [
   { id: 'night', name: 'Night' },
   { id: 'pop', name: 'Pop' },
 ];
+function total() {
+  const n = Number(store.get('count', '10'));
+  return COUNTS.includes(n) ? n : 10;
+}
+/* Split n over k lines: as even as possible, the first lines get the extra ones. */
+function shares(n, k) {
+  return Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0));
+}
+/* Lineup lines are names only; an old count after the name is dropped. */
+function noCount(line) {
+  return String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').replace(/\s*[,、]?\s*\d+\s*(?:個|件|本)?\s*$/, '').trim();
+}
 const PACES = [
   { sec: 3.2, name: '3.2s' },
   { sec: 4.2, name: '4.2s' },
@@ -3044,22 +3064,22 @@ const HOME_TOPICS = {
   US: ['news', 'politics', 'business', 'sports', 'technology', 'world', 'science', 'entertainment', 'odd news', 'animals', 'food', 'travel'],
 };
 const CHIPS = [
-  { label: 'Space', line: 'Space, 1' },
-  { label: 'Politics', line: 'Politics, 2' },
-  { label: 'Science', line: 'Science, 1' },
-  { label: 'Culture', line: 'Culture, 1' },
-  { label: 'Local', line: 'Local, 1' },
-  { label: 'Entertainment', line: 'Entertainment, 1' },
-  { label: 'Public safety', line: 'Public safety, 1' },
-  { label: 'Sports', line: 'Sports, 2' },
-  { label: 'Food', line: 'Food, 2' },
-  { label: 'Restaurant', line: 'Restaurant, 1' },
-  { label: 'Romance', line: 'Romance, 2' },
-  { label: 'Musk X', line: 'Musk X, 3' },
-  { label: 'SpaceX', line: 'SpaceX, 1' },
-  { label: 'Nikkei', line: 'Nikkei, 2' },
-  { label: 'ABC', line: 'ABC, 1' },
-  { label: 'Jokes', line: 'Jokes, 10' },
+  { label: 'Space', line: 'Space' },
+  { label: 'Politics', line: 'Politics' },
+  { label: 'Science', line: 'Science' },
+  { label: 'Culture', line: 'Culture' },
+  { label: 'Local', line: 'Local' },
+  { label: 'Entertainment', line: 'Entertainment' },
+  { label: 'Public safety', line: 'Public safety' },
+  { label: 'Sports', line: 'Sports' },
+  { label: 'Food', line: 'Food' },
+  { label: 'Restaurant', line: 'Restaurant' },
+  { label: 'Romance', line: 'Romance' },
+  { label: 'Musk X', line: 'Musk X' },
+  { label: 'SpaceX', line: 'SpaceX' },
+  { label: 'Nikkei', line: 'Nikkei' },
+  { label: 'ABC', line: 'ABC' },
+  { label: 'Jokes', line: 'Jokes' },
 ];
 const SMALL = new Set(['to', 'and', 'of', 'on', 'for', 'from', 'in', 'at', 'by', 'with', 'the', 'a', 'an', 'into', 'vs']);
 const STOP = new Set(['NEWS','REPORT','LATEST','SAYS','SAID','AFTER','AMID','OVER','INTO','ITS','HIS','HER','ONE','TWO','NEW','WORLD','UPDATE','LIVE','VIDEO','TODAY','YEAR','JAPAN','OFFICIALS','GOVERNMENT','PEOPLE','ABOUT','THEIR','THEY','BEEN','WERE','WAS','ARE','HAS','HAD','NOT','BUT','YOU','WHO','WHAT','WHEN','WHERE','WHICH','ALSO','MORE','THAN','JUST','MAY','CAN','NOW','WILL','HAVE','FROM','WITH','THAT','THIS','AND','THE','FOR','HEADLINE','BREAKING','HOW','VIEW','SEE','LOOK','HERE','COMING','SOON','LIKE','GET','GOT','OUT','OUR','YOUR','BACK','NEXT','FIRST','EVER','WATCH']);
@@ -3476,19 +3496,9 @@ function lineName(line) { return String(line || '').replace(/^\s*\d+\s*[\.\)、]
 function parseLineup(text) {
   const slots = [];
   String(text || '').split(/\n/).forEach(raw => {
-    let s = raw.replace(/^\s*\d+\s*[\.\)、]\s*/, '').trim();
+    const s = noCount(raw);
     if (!s) return;
-    let count = 1;
-    const pair = s.match(/^(.*?)[,、]\s*(\d+)\s*(?:個|件|本)?\s*$/) || s.match(/^(.*?)\s+(\d+)\s*(?:個|件|本)?\s*$/);
-    if (pair) { s = pair[1].trim(); count = parseInt(pair[2], 10) || 0; }
-    else {
-      const tail = s.match(/(\d+)\s*(?:個|件|本)\s*$/);
-      if (tail) { count = parseInt(tail[1], 10) || 0; s = s.slice(0, tail.index).replace(/[,、]\s*$/, '').trim(); }
-    }
-    const req = classifyRequest(s);
-    count = Math.max(0, Math.min(req.type === 'jokes' ? 16 : 6, count));
-    if (!s || !count) return;
-    slots.push(Object.assign({ count }, req));
+    slots.push(Object.assign({ count: 1 }, classifyRequest(s)));
   });
   return slots.slice(0, 12);
 }
@@ -3503,8 +3513,8 @@ function chipKey(line) {
   return enName(String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0]).toLowerCase();
 }
 function chipLine(chip) {
-  if (!window.UIJA || $('lang').value !== 'ja') return chip.line;
-  return UIJA.tr(chip.label) + ', ' + chip.line.split(',').pop().trim();
+  if (!window.UIJA || $('lang').value !== 'ja') return chip.label;
+  return UIJA.tr(chip.label);
 }
 function classifyRequest(text) {
   const name = enName(text);
@@ -4070,46 +4080,51 @@ async function collect() {
   beginCollect();
   const { country, lang } = market();
   const mode = feedMode();
+  const N = total();
   const slots = parseLineup(lineupText());
+  const topicSlots = slots.filter(s => s.type !== 'jokes' && s.type !== 'romance');
   const used = new Set();
   let sequence = [];
   let jokeAt = -1;
-  let jokeNeed = JOKE_COUNT;
-  const jokeSlot = slots.find(s => s.type === 'jokes');
-  if (jokeSlot) jokeNeed = jokeSlot.count;
   let topicWords = [];
   const topicPlace = {};
-  /* Romance: a lineup line sets the number of couples; otherwise the Romance genre adds two.
-     Each couple is about three cards: the post, the reply, and what others said. */
+  /* Items (5, 10 or 20) is the number of cards. News, then comments gives about 40% to the reports.
+     Romance: a lineup line, or the Romance genre when the lineup has no topics, adds couples;
+     each couple is about three cards: the post, the reply, and what others said.
+     A lineup of Romance only plays couples only. */
   const romanceSlot = slots.find(s => s.type === 'romance');
   const romanceGenre = genreChoices().find(g => g.id === 'romance' && g.on);
-  const romanceNeed = Math.min(4, romanceSlot ? romanceSlot.count : (!slots.some(s => s.type !== 'jokes' && s.type !== 'romance') && romanceGenre ? 2 : 0));
+  const romanceOnly = !!romanceSlot && slots.every(s => s.type === 'romance');
+  const newsNeed = mode === 'x' ? 0 : Math.max(1, Math.round(N * 0.4));
+  const romanceNeed = romanceOnly ? Math.min(7, Math.ceil((N - newsNeed) / 3))
+    : (romanceSlot || (!topicSlots.length && romanceGenre)) ? Math.max(1, Math.round(N / 6)) : 0;
   const romancePlace = romanceGenre ? romanceGenre.place : 'middle';
   if (mode === 'x') {
     /* X comments only: no reports. Funny replies about the lineup, the accounts,
        and today's news in each chosen genre, in the genres' Top, Middle, Bottom order. */
     say('Searching X');
     progress(0.1);
-    slots.filter(s => s.type !== 'jokes' && s.type !== 'romance').forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
-    const sum = slots.reduce((n, s) => n + (s.count || 0), 0);
-    jokeNeed = romanceSlot ? Math.max(0, sum - romanceSlot.count) : Math.max(0, 12 - romanceNeed * 2);
-    if (topicWords.length < 3) {
+    topicSlots.forEach(s => topicWords.push(s.who ? 'to:' + s.who : (s.topic || s.q || s.gdelt || s.label)));
+    if (topicWords.length < 3 && !romanceOnly) {
       const chosen = shuffle(genreChoices().filter(g => g.on && g.id !== 'romance')).slice(0, 6);
       const lists = await Promise.all(chosen.map(g => searchRows(g.q[country.id] || g.q.US, up(g.name)).then(rows => rows.filter(allowedRow)).catch(() => [])));
       chosen.forEach((g, i) => {
         lists[i].slice(0, 3).forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => { topicWords.push(w); topicPlace[w] = g.place; }));
       });
     }
-    if (topicWords.length < 3) {
+    if (topicWords.length < 3 && !romanceOnly) {
       const news = await homeNews(new Set(), 8).catch(() => []);
       news.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
     }
     jokeAt = 0;
-  } else if (slots.some(s => s.type !== 'jokes' && s.type !== 'romance')) {
+  } else if (topicSlots.length) {
+    const parts = shares(newsNeed, topicSlots.length);
+    topicSlots.forEach((s, i) => { s.count = parts[i]; });
     for (const slot of slots) {
       if (S.again || sequence.length >= MAX_ITEMS) break;
       if (slot.type === 'jokes') { jokeAt = sequence.length; continue; }
       if (slot.type === 'romance') { if (jokeAt < 0) jokeAt = sequence.length; continue; }
+      if (!slot.count) continue;
       say('Searching ' + (slot.label || slot.cat || 'news'));
       progress(0.08 + 0.4 * slots.indexOf(slot) / slots.length);
       let rows = freshRows(await rowsForSlot(slot), used);
@@ -4117,29 +4132,37 @@ async function collect() {
       takeRows(shuffle(rows), used, slot.count, 0).forEach(r => sequence.push(r));
     }
   } else {
-    sequence = await homeNews(used, NEWS_COUNT);
+    sequence = await homeNews(used, newsNeed);
   }
   if (S.again) return null;
+  sequence = sequence.slice(0, N);
   if (jokeAt < 0) jokeAt = sequence.length;
   const headlines = sequence.map(r => r.headline);
   if (mode !== 'x') sequence.forEach(r => keywordsFor(r.headline, jokeLang()).forEach(w => topicWords.push(w)));
   say('Searching jokes');
   progress(0.55);
   const band = { top: 0, middle: 1, bottom: 2 };
-  const room = MAX_ITEMS - sequence.length;
+  /* Jokes fill whatever the couples leave, so ask for enough to fill the rest on their own. */
+  const left0 = Math.max(0, N - sequence.length);
   const [found, couples] = await Promise.all([
-    collectJokes(topicWords, Math.min(jokeNeed, Math.max(0, room - romanceNeed * 4)), { headlines }),
-    collectRomance(Math.min(romanceNeed, room), romancePlace).catch(e => { console.warn(e); return []; }),
+    collectJokes(topicWords, romanceOnly ? 0 : left0, { headlines }),
+    collectRomance(romanceNeed, romancePlace).catch(e => { console.warn(e); return []; }),
   ]);
   /* A comment found both as a joke and under a couple plays once, as the joke. */
   const jokeKeySet = new Set(found.flatMap(j => jokeKeys({ text: j.text, link: j.url })));
+  /* Fit the cards to Items: couples first (two cards and the cheers that fit), then jokes. */
+  let left = left0;
+  const keptCouples = [];
   couples.forEach(r => {
-    r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50)));
+    if (left < 2) return;
+    r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50))).slice(0, left - 2);
     r.keys = [r.story.a, r.story.b, ...r.story.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
+    left -= 2 + r.story.cheers.length;
+    keptCouples.push(r);
   });
-  const jokes = found
+  const jokes = found.slice(0, left)
     .map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, place: topicPlace[j.topic] || 'middle' }))
-    .concat(couples.map(r => ({ ...r, headline: r.story.a.text, joke: true })))
+    .concat(keptCouples.map(r => ({ ...r, headline: r.story.a.text, joke: true })))
     .sort((a, b) => band[a.place] - band[b.place]);
   if (S.again) return null;
   if (!sequence.length && !jokes.length) return { empty: true };
@@ -4329,6 +4352,7 @@ async function setScript(raw, autoplay) {
   $('play').disabled = false;
   $('seek').disabled = false;
   $('exportBtn').disabled = false;
+  resetDownload();
   $('seek').value = '0';
   draw(0);
   if (autoplay && WATCH) {
@@ -4348,7 +4372,7 @@ function setBusy(b) {
   S.busy = b;
   $('update').disabled = !!b;
   $('update').textContent = b ? 'Creating…' : 'Update';
-  ['go', 'apply', 'exportBtn'].forEach(id => { $(id).disabled = !!b || (id === 'exportBtn' && !S.show); });
+  ['go', 'apply', 'exportBtn', 'dl'].forEach(id => { $(id).disabled = !!b || ((id === 'exportBtn' || id === 'dl') && !S.show); });
 }
 async function runAll(opts) {
   opts = opts || {};
@@ -4645,7 +4669,7 @@ async function recordRealtime(show) {
 function addOut(fmt, blob) {
   const name = fileName(S.script.date, fmt).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
   const url = URL.createObjectURL(blob);
-  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url });
+  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script });
   const box = $('out'); box.innerHTML = '';
   const order = ['x', 'youtube', 'pc'];
   S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
@@ -4687,6 +4711,54 @@ async function exportMP4(formats) {
     $('seek').value = '0';
     setBusy(false);
   }
+}
+
+/* Download: the video on screen as an MP4 in the current layout.
+   Phones open the share sheet (Save Video); computers download the file. */
+const PHONE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+function shareable(out) {
+  if (!PHONE || !navigator.canShare) return null;
+  const file = new File([out.blob], out.name, { type: out.blob.type });
+  try { return navigator.canShare({ files: [file] }) ? file : null; } catch (e) { return null; }
+}
+function resetDownload() {
+  const b = $('dl');
+  if (!b) return;
+  b.textContent = 'Download';
+  delete b.dataset.ready;
+  b.disabled = !S.show || !!S.busy;
+}
+function saveOut(out) {
+  const file = shareable(out);
+  if (file) navigator.share({ files: [file], title: 'Humor' }).catch(() => {});
+  else {
+    const a = document.createElement('a');
+    a.href = out.url; a.download = out.name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    say(`Downloaded ${out.name}`);
+  }
+  resetDownload();
+}
+async function download() {
+  if (!S.script || S.busy) return;
+  const fmt = S.format;
+  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script);
+  if (mine()) { saveOut(mine()); return; }
+  const was = S.playing;
+  const b = $('dl');
+  b.textContent = 'Making MP4…';
+  try { await exportMP4([fmt]); }
+  catch (e) { console.error(e); resetDownload(); say(e.message || String(e), true); return; }
+  const out = mine();
+  resetDownload();
+  if (!out) return;
+  if (was && !S.playing) toggle();
+  if (shareable(out)) {
+    /* Making the MP4 took a while, so the share sheet needs one more tap. */
+    b.textContent = 'Save';
+    b.dataset.ready = '1';
+    say('The MP4 is ready. Press Save to keep it.');
+  } else saveOut(out);
 }
 
 /* ---------- full screen ---------- */
@@ -4874,6 +4946,22 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     $('paces').appendChild(b);
   });
+  const countBox = $('counts');
+  const paintCounts = () => countBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === total()));
+  COUNTS.forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.n = String(n);
+    b.textContent = String(n);
+    b.onclick = () => {
+      if (total() === n) return;
+      store.set('count', String(n));
+      paintCounts();
+      scheduleRefresh(0);
+    };
+    countBox.appendChild(b);
+  });
+  paintCounts();
   const savedPace = Number(Q.get('pace') || store.get('pace', '3.2'));
   usePace(PACES.some(p => p.sec === savedPace) ? savedPace : 3.2);
   const countryBox = $('country');
@@ -4917,7 +5005,8 @@ function initUI() {
     setTimeout(() => { $('forget').checked = false; }, 1200);
   };
   const lineup = $('lineup');
-  lineup.value = store.get('lineup', '');
+  lineup.value = store.get('lineup', '').split(/\n/).map(noCount).filter(Boolean).join('\n');
+  store.set('lineup', lineup.value);
   const paintChips = () => {
     const keys = new Set(lineup.value.split(/\n/).map(chipKey).filter(Boolean));
     document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
@@ -4961,6 +5050,7 @@ function initUI() {
   $('applyLine').onclick = applyLineup;
   $('lineupGo').onclick = applyLineup;
   $('play').onclick = toggle;
+  $('dl').onclick = () => download();
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
   $('sound').onclick = () => toggleSound();
