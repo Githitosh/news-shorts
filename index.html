@@ -2184,6 +2184,26 @@ const PRESETS = {
     bgFocus: { A: 1200, B: 700, C: 800, D: 900, E: 950 },
     zoom: 0.022,
   },
+  wide: {
+    name: 'wide', W: 1920, H: 1080, layout: 'stack', wrap: true,
+    left: 110, right: 1810, cx: 960,
+    header: { base: 70, size: 34, w: 600, sx: 0.742, cx: 960 },
+    cat: { base: 114, size: 30, w: 700, sx: 0.965, right: 1810 },
+    rule: 3,
+    rule1: 132, rule2: 948,
+    box: { top: 164, bottom: 880, center: 522 },
+    head: { sx: 0.6, lh: 0.95, max: [188, 156, 124, 100], maxW: 1580, cap: 0.74, topPad: 0.1, oneLine: 118 },
+    sub: { sx: 0.6, lh: 0.93, ratio: 0, max: 70, maxW: 1480, small: 0.62, lines: 2, fexp: 0.32, bal: 0.55 },
+    gap: { headRule: [6, 0.1], ruleSub: [12, 0.16], subShort: [10, 0.08], shortJp: 22 },
+    short: { w: 200 },
+    jp: { size: 54, sx: 0.7, w: 700, line: 64, para: 82, maxW: 1540, ascent: 0.86, inkH: 52 },
+    tags: { base: 972, size: 26, w: 600, gap: 24, sx: 0.85, maxW: 1500 },
+    foot: { base: 1004, size: 28, w: 600, sx: 0.77, page: 26, psx: 0.965 },
+    credit: { base1: 1036, base2: 1058, size: 15, maxW: 1580, maxW1: 1660, color: 'rgba(28,20,12,0.58)' },
+    kw: { sx: 0.28, maxH: 500, cy: 500, w: 1500, left: 150 },
+    bgFocus: { A: 900, B: 520, C: 640, D: 700, E: 760 },
+    zoom: 0.018,
+  },
 };
 const TIMING = { fade: 0.2, t1: 23 / 30, t2: 47 / 30, t3: 71 / 30 };
 let P = PRESETS.youtube;
@@ -2201,9 +2221,11 @@ const WALLPAPERS = {
   evening: 'brightness(0.72) saturate(1.35) sepia(0.45)',
   night: 'brightness(0.38) saturate(0.5)',
   pop: 'brightness(1.65) saturate(1.85) contrast(1.04)',
+  festive: 'brightness(1.7) saturate(1.9) contrast(1.06) sepia(0.06)',
 };
-function inkNow() { return wallpaper === 'day' ? INK_DAY : INK; }
-function creditNow() { return wallpaper === 'day' ? 'rgba(20,20,20,0.62)' : P.credit.color; }
+function lightWall() { return wallpaper === 'day' || wallpaper === 'festive'; }
+function inkNow() { return lightWall() ? INK_DAY : INK; }
+function creditNow() { return lightWall() ? 'rgba(28,20,12,0.62)' : P.credit.color; }
 let wallpaper = 'morning';
 function setWallpaper(id) { wallpaper = Object.prototype.hasOwnProperty.call(WALLPAPERS, id) ? id : 'morning'; }
 const CREDIT_PHOTO = 'Photos: U.S. National Park Service & NOAA (Glacier, Yellowstone, Lake Mead, SE Alaska), public domain';
@@ -2538,6 +2560,13 @@ function drawBg(ctx, img, t, key) {
   } else if (wallpaper === 'day') {
     ctx.fillStyle = 'rgba(255,250,240,0.5)';
     ctx.fillRect(0, 0, W, H);
+  } else if (wallpaper === 'festive') {
+    const wash = ctx.createLinearGradient(0, 0, W, H);
+    wash.addColorStop(0, 'rgba(255, 210, 120, 0.24)');
+    wash.addColorStop(0.5, 'rgba(255, 248, 230, 0.06)');
+    wash.addColorStop(1, 'rgba(255, 96, 150, 0.16)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
 }
@@ -2572,7 +2601,7 @@ function drawItem(ctx, show, i, t, bgs) {
     (L.replies || []).forEach(l => {
       ctx.save();
       ctx.font = font(550, l.size, F_SANS);
-      ctx.shadowColor = wallpaper === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.72)';
+      ctx.shadowColor = lightWall() ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.72)';
       ctx.shadowBlur = 6;
       const w = ctx.measureText(l.t).width;
       const sx = Math.min(1, (P.right - P.left) / Math.max(1, w));
