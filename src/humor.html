@@ -18,15 +18,26 @@ button.title { background: none; border: 0; padding: 0; color: var(--ink); font:
 header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
 main { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 1100px; margin: 0 auto; }
-.watch:fullscreen, .watch:-webkit-full-screen { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 12px 16px; box-sizing: border-box; }
 .frame { position: relative; max-width: 100%; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
-.watch:fullscreen .frame, .watch:-webkit-full-screen .frame { flex: 1; display: flex; align-items: center; min-height: 0; }
 canvas#cv { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; background: #f4efe4; border-radius: 12px; }
-.watch:fullscreen canvas, .watch:-webkit-full-screen canvas { width: 100%; height: 100%; object-fit: contain; aspect-ratio: auto; border-radius: 0; }
+/* Full screen: the class is set for the browser's full screen and for the page's own full screen (iPhone, in-app browsers). */
+.watch.is-full { background: var(--bg); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+.watch.is-full .frame { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
+.watch.is-full canvas#cv { width: 100%; height: 100%; object-fit: contain; aspect-ratio: auto; border-radius: 0; }
+.watch.is-full .ctl { flex: none; width: 100%; }
+.watch.is-full .source-url { flex: none; }
+.watch.pseudo { position: fixed; top: 0; left: 0; z-index: 100; width: 100vw; height: 100vh; width: 100dvw; height: 100dvh; transform-origin: 0 0; }
+/* A phone held upright: turn the picture sideways so it fills the screen. */
+@media (orientation: portrait) {
+  .watch.pseudo { width: 100vh; height: 100vw; width: 100dvh; height: 100dvw; transform: translateX(100vw) rotate(90deg); transform: translateX(100dvw) rotate(90deg); }
+}
+body.lock { overflow: hidden; }
 .source-url { display: block; margin: 8px auto 0; color: var(--acc); font-size: 13px; line-height: 1.35; text-align: center; word-break: break-all; text-decoration: underline; }
-.ctl { display: flex; align-items: center; gap: 10px; margin: 10px auto 0; }
-.ctl input[type=range] { flex: 1; accent-color: var(--acc); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px auto 0; }
+.ctl button { white-space: nowrap; }
+/* On a narrow phone the seek bar and time move to a second row instead of running off the screen. */
+.ctl input[type=range] { flex: 1 1 200px; min-width: 0; accent-color: var(--acc); }
 .ctl span { color: var(--mute); font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; font-size: 13px; }
 button { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
@@ -78,7 +89,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('newsShorts.humor.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('newsShorts.humor.' + k, v); } catch (e) {} },
 };
-const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null };
+const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false };
+const TAP = ' Tap the picture for sound.';
 const FEEDS = [
   ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
   ['https://assets.wor.jp/rss/rdf/nikkei/news.rdf', 'Nikkei'],
@@ -446,7 +458,15 @@ function playSound(T) {
   const at = Math.max(0, Math.min(Math.max(0, len - dur) + Math.max(0, T || 0), Math.max(0, len - 0.15)));
   try { el.currentTime = at; } catch (e) {}
   const play = el.play();
-  if (play && play.then) play.then(() => { S.audioOn = true; $('unmute').hidden = true; }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
+  if (play && play.then) play.then(() => {
+    S.audioOn = true;
+    $('unmute').hidden = true;
+    if (S.playing && $('caption').textContent.endsWith(TAP)) say(watchLine());
+  }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
+}
+function watchLine() {
+  const jokes = ((S.script && S.script.items) || []).filter(it => it.cat === 'HUMOR').length;
+  return 'Playing five stories, then ' + jokes + ' jokes.' + (S.audioOn ? '' : TAP);
 }
 function stop() {
   S.playing = false;
@@ -487,7 +507,7 @@ function tick() {
   $('seek').value = String(Math.round(Math.min(Math.max(0, T), S.show.duration) / S.show.duration * 1000));
   if (S.playing) S.raf = requestAnimationFrame(tick);
 }
-async function setScript(raw) {
+async function setScript(raw, autoplay) {
   stop();
   const s = normalize(raw);
   S.script = s;
@@ -497,12 +517,14 @@ async function setScript(raw) {
   $('seek').disabled = false;
   $('seek').value = '0';
   draw(0);
-  const jokes = s.items.filter(it => it.cat === 'HUMOR').length;
-  const line = 'Playing five stories, then ' + jokes + ' jokes. Tap the picture for sound.';
-  if (WATCH && !S.busy) {
+  if (autoplay && WATCH) {
+    /* Start the new video at once. The fonts finish loading while it plays. */
     beginPlayback(0);
+    say(watchLine());
     playSound(0);
-    say(line);
+  } else {
+    const jokes = s.items.filter(it => it.cat === 'HUMOR').length;
+    say('Ready: five stories, then ' + jokes + ' jokes. Press Play.');
   }
   await loadFonts(s);
   if (S.script !== s || !S.show) return;
@@ -521,24 +543,26 @@ async function runAll() {
   setBusy(true);
   say('Searching Japanese news');
   progress(0.05);
+  let script = null;
   try {
-    const script = await collect();
-    if (S.again) return;
-    await setScript(script);
+    script = await collect();
+  } catch (e) {
+    console.error(e);
+    if (!S.again) { say(e.message || String(e), true); progress(0); }
+  }
+  const again = S.again;
+  S.again = null;
+  setBusy(false);
+  /* A refresh came in while collecting: collect again instead of showing the older result. */
+  if (again) return runAll();
+  if (!script) return;
+  try {
     progress(1);
-    if (!S.playing) {
-      const jokes = (S.script && S.script.items || []).filter(it => it.cat === 'HUMOR').length;
-      say('Playing five stories, then ' + jokes + ' jokes. Tap the picture for sound.');
-    }
+    await setScript(script, true);
   } catch (e) {
     console.error(e);
     say(e.message || String(e), true);
     progress(0);
-  } finally {
-    const again = S.again;
-    S.again = null;
-    setBusy(false);
-    if (again) runAll();
   }
 }
 function toggle() {
@@ -550,24 +574,58 @@ function toggle() {
   playSound(T0);
   say('Playing.');
 }
-function fullOn() { return document.fullscreenElement || document.webkitFullscreenElement; }
-async function toggleFull() {
-  const node = $('watch');
-  if (fullOn()) {
-    const exit = document.exitFullscreen || document.webkitExitFullscreen;
-    if (exit) await exit.call(document);
-    return;
-  }
-  const req = node.requestFullscreen || node.webkitRequestFullscreen;
-  if (!req) { say('This browser cannot go full screen.', true); return; }
-  await req.call(node);
-  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+function realFull() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+function fullOn() { return !!(realFull() || S.pseudo); }
+/* S.pseudo is the page's own full screen, for browsers without the Fullscreen API
+   (iPhone Safari, the X app). The CSS for .pseudo fills the screen. */
+function paintFull() {
+  const on = fullOn();
+  $('watch').classList.toggle('is-full', on);
+  $('watch').classList.toggle('pseudo', !!S.pseudo);
+  document.body.classList.toggle('lock', !!S.pseudo);
+  $('full').textContent = on ? 'Exit' : 'Full screen';
 }
-function paintFull() { $('full').textContent = fullOn() ? 'Exit' : 'Full screen'; }
+function waitFullChange(ms) {
+  return new Promise(resolve => {
+    const done = () => { document.removeEventListener('fullscreenchange', done); document.removeEventListener('webkitfullscreenchange', done); resolve(); };
+    document.addEventListener('fullscreenchange', done);
+    document.addEventListener('webkitfullscreenchange', done);
+    setTimeout(done, ms);
+  });
+}
+async function enterFull() {
+  const node = $('watch');
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  if (req && allowed !== false) {
+    try {
+      const r = req.call(node);
+      if (r && r.then) await r; else await waitFullChange(700);
+    } catch (e) { console.warn(e); }
+    if (realFull()) {
+      paintFull();
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+      return;
+    }
+  }
+  S.pseudo = true;
+  paintFull();
+}
+async function exitFull() {
+  if (S.pseudo) { S.pseudo = false; paintFull(); return; }
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit && realFull()) {
+    try { const r = exit.call(document); if (r && r.then) await r; } catch (e) { console.warn(e); }
+  }
+  paintFull();
+}
+function toggleFull() { return fullOn() ? exitFull() : enterFull(); }
 $('play').onclick = toggle;
 $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
 document.addEventListener('fullscreenchange', paintFull);
 document.addEventListener('webkitfullscreenchange', paintFull);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.pseudo) exitFull(); });
 $('update').onclick = () => runAll();
 $('home').onclick = () => { window.scrollTo(0, 0); runAll(); };
 $('unmute').onclick = e => { e.stopPropagation(); if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * S.show.duration); playSound(currentT()); };
@@ -578,31 +636,56 @@ $('seek').addEventListener('input', () => {
   if (S.playing) { S.origin = T; S.t0perf = performance.now(); if (S.audioOn && S.el) { try { S.el.currentTime = Math.max(0, (isFinite(S.el.duration) ? S.el.duration : 40) - S.show.duration + T); } catch (e) {} } }
   draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
 });
-let pull = null;
+/* Pull down to refresh. Touch uses touch events, which keep coming while the browser scrolls;
+   a mouse uses pointer events. A pull that is cancelled or lifted ends without a refresh,
+   so it never stays half-open over the buttons. */
+const PULL_AT = 70;
 const frame = document.querySelector('.frame');
-window.addEventListener('pointerdown', e => {
-  if (fullOn()) return;
-  if (e.target.closest && e.target.closest('button, a, input')) return;
-  if (window.scrollY > 8) return;
-  pull = { y: e.clientY };
-});
-window.addEventListener('pointermove', e => {
-  if (!pull) return;
-  const dy = e.clientY - pull.y;
+let pull = null;
+function pullShow(dy) {
   const label = document.querySelector('header .pull');
-  if (label) label.textContent = dy > 70 ? 'Release to refresh' : 'Pull down to refresh';
+  if (label) label.textContent = dy > PULL_AT ? 'Release to refresh' : 'Pull down to refresh';
   if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.35, 72) + 'px)'; }
-});
-window.addEventListener('pointerup', e => {
-  if (!pull) return;
-  const dy = e.clientY - pull.y;
+  else { frame.classList.remove('pulling'); frame.style.transform = ''; }
+}
+function pullEnd(go) {
+  const p = pull;
   pull = null;
-  frame.classList.remove('pulling');
-  frame.style.transform = '';
-  const label = document.querySelector('header .pull');
-  if (label) label.textContent = 'Pull down to refresh';
-  if (dy > 70) runAll();
+  pullShow(0);
+  if (go && p && !p.dead && p.dy > PULL_AT) runAll();
+}
+function pullBegin(target, y, kind) {
+  if (pull) pullEnd(false);
+  if (fullOn() || window.scrollY > 8) return;
+  if (target && target.closest && target.closest('button, a, input, .ctl')) return;
+  pull = { y, kind, dy: 0, dead: false };
+}
+function pullMove(y) {
+  if (!pull || pull.dead) return false;
+  pull.dy = y - pull.y;
+  if (pull.dy < -12) { pull.dead = true; pullShow(0); return false; }
+  pullShow(pull.dy);
+  return pull.dy > 8;
+}
+window.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1) { if (pull) pullEnd(false); return; }
+  pullBegin(e.target, e.touches[0].clientY, 'touch');
+}, { passive: true });
+window.addEventListener('touchmove', e => {
+  if (!pull || pull.kind !== 'touch' || e.touches.length !== 1) return;
+  if (pullMove(e.touches[0].clientY) && e.cancelable) e.preventDefault();
+}, { passive: false });
+window.addEventListener('touchend', () => { if (pull && pull.kind === 'touch') pullEnd(true); });
+window.addEventListener('touchcancel', () => { if (pull && pull.kind === 'touch') pullEnd(false); });
+window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) pullBegin(e.target, e.clientY, 'mouse'); });
+window.addEventListener('pointermove', e => {
+  if (!pull || pull.kind !== 'mouse' || e.pointerType !== 'mouse') return;
+  if (!(e.buttons & 1)) { pullEnd(false); return; }
+  pullMove(e.clientY);
 });
+window.addEventListener('pointerup', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') pullEnd(true); });
+window.addEventListener('pointercancel', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') pullEnd(false); });
+window.addEventListener('blur', () => { if (pull) pullEnd(false); });
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing }) };
 E.setWallpaper('day');
 E.setMusicCredit('Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons');
