@@ -2256,6 +2256,10 @@ function subWidth(line, size) {
   return w * P.sub.sx;
 }
 
+/* Options from prepare(script, preset, opts). News passes none.
+   uniform: one headline size and one news-line size for every story in the video.
+   jp: the news-line size, as a multiple of the preset (2 = twice as large). */
+let OPT = {};
 /* News lines break on a slash or a newline. A line that is still too long breaks on a phrase. */
 let jpScale = 1;
 function jpWidth(t) { return adv(t, font(P.jp.w, P.jp.size * jpScale, F_SERIF)) * P.jp.sx; }
@@ -2419,9 +2423,71 @@ function layoutStill(it) {
 }
 function layout(it) {
   if (it.still && !(it.jp && it.jp.length)) return layoutStill(it);
-  return layoutAt(it, 1);
+  return layoutAt(it, OPT.jp || 1);
 }
-function layoutAt(it, scale) {
+/* A headline split into n lines. Japanese breaks between words, English between words with spaces. */
+const CJK_HEAD = /[\u3040-\u30ff\u4e00-\u9fff]/;
+function headText(it) {
+  const lines = (it.head && it.head.length ? it.head : [it.kw]).map(x => String(x).toUpperCase().trim()).filter(Boolean);
+  return lines.some(l => CJK_HEAD.test(l)) ? lines.join('') : lines.join(' ');
+}
+function splitHead(text, n) {
+  if (!CJK_HEAD.test(text)) return splitWords(text.split(/\s+/).filter(Boolean), n, headW);
+  if (n <= 1) return [text.trim()];
+  const pts = breakPoints(text);
+  const memo = new Map();
+  const w = (a, b) => { const k = a + ':' + b; if (!memo.has(k)) memo.set(k, headW(text.slice(a, b).trim())); return memo.get(k); };
+  let best = null;
+  const rec = (start, left, acc) => {
+    if (left === 1) {
+      const cuts = [...acc, text.length];
+      let prev = 0, max = 0, sq = 0;
+      for (const c of cuts) { const x = w(prev, c); max = Math.max(max, x); sq += x * x; prev = c; }
+      if (!best || max < best.max - 0.005 || (Math.abs(max - best.max) <= 0.005 && sq < best.sq)) best = { max, sq, cuts };
+      return;
+    }
+    for (const p of pts) if (p > start && pts.filter(q => q > p).length >= left - 2) rec(p, left - 1, [...acc, p]);
+  };
+  rec(0, Math.min(n, pts.length + 1), []);
+  if (!best) return [text.trim()];
+  const out = [];
+  let prev = 0;
+  for (const c of best.cuts) { out.push(text.slice(prev, c).trim()); prev = c; }
+  return out.filter(Boolean);
+}
+/* Every story in the video gets the same headline size and the same news-line size.
+   The news lines stay at OPT.jp, and the headline stays larger than them. The headline size is the
+   largest at which every headline fits in four lines or fewer and every story still fits its box. */
+function uniformLayout(items) {
+  const avail = P.box.bottom - P.box.top;
+  const sizeOf = lines => Math.min(P.head.max[Math.min(lines.length, P.head.max.length) - 1], P.head.maxW / Math.max(...lines.map(headW)));
+  const choices = items.map(it => {
+    const text = headText(it) || String(it.kw || 'NEWS');
+    const list = [];
+    for (let n = 1; n <= 4; n++) {
+      const lines = splitHead(text, n);
+      if (n > 1 && lines.length < n) break;
+      list.push({ lines, size: sizeOf(lines) });
+    }
+    return list;
+  });
+  const pick = (list, S) => list.find(c => c.size >= S - 0.5) || list.reduce((a, b) => (b.size > a.size ? b : a));
+  const S0 = Math.min(...choices.map(list => Math.max(...list.map(c => c.size))));
+  const J0 = OPT.jp || 1;
+  let S = S0, J = J0;
+  for (let k = 0; k < 120; k++) {
+    const Ls = items.map((it, i) => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); });
+    if (Ls.every(L => L.blockH <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
+    /* The news lines keep their size first. The headline gives way, but stays larger than the news lines;
+       past that point both get smaller together. */
+    const floor = Math.max(S0 * 0.6, J * P.jp.size * 1.12);
+    if (S * 0.95 >= floor) S *= 0.95;
+    else if (J > 0.6) { J *= 0.95; S = Math.max(Math.min(S, S0), Math.min(S0, J * P.jp.size * 1.12)); }
+    else S *= 0.95;
+  }
+  items.forEach(it => { it.L = layoutAt(it, J0); });
+}
+function layoutAt(it, scale, forced) {
   jpScale = scale;
   const jp = [];
   (it.jp || []).forEach((p, pi) => wrapJp(p).forEach((t, li) => jp.push({ t, para: li === 0 && pi > 0 })));
@@ -2430,7 +2496,15 @@ function layoutAt(it, scale) {
   const plan = P.layout === 'columns' ? columnPlan : stackPlan;
   const hSize = lines => Math.min(P.head.max[Math.min(lines.length, P.head.max.length) - 1], P.head.maxW / Math.max(...lines.map(headW)));
   let L;
-  if (!P.wrap) {
+  if (forced) {
+    /* A size chosen for the whole video: no shrinking per story. */
+    head = forced.lines;
+    const sw = sub.join(' ').split(/\s+/).filter(Boolean);
+    const sl = sw.length ? splitSub(sw, Math.min(P.sub.lines || 3, Math.max(1, Math.ceil(sw.length / 5)))) : [];
+    const ss0 = Math.min(P.sub.max, sl.length ? P.sub.maxW / Math.max(...sl.map(subW)) : P.sub.max, P.sub.ratio ? P.sub.ratio * forced.Sh : 1e9);
+    L = plan(head, sl, jp, forced.Sh, ss0)(1);
+    L.f = 1;
+  } else if (!P.wrap) {
     const sh0 = hSize(head);
     const ss0 = Math.min(P.sub.max, sub.length ? P.sub.maxW / Math.max(...sub.map(subW)) : P.sub.max, P.sub.ratio ? P.sub.ratio * sh0 : 1e9);
     L = fitPlan(plan(head, sub, jp, sh0, ss0));
@@ -2455,6 +2529,7 @@ function layoutAt(it, scale) {
   }
   /* Align the block vertically. */
   const blockH = L.bottom;
+  L.blockH = blockH;
   const off = Math.max(P.box.top, P.box.center - L.bottom / 2);
   L.head.forEach(l => l.base += off); L.sub.forEach(l => l.base += off);
   L.rule += off; L.bottom += off;
@@ -2488,7 +2563,7 @@ function layoutAt(it, scale) {
   const jpH = P.layout === 'columns'
     ? (jp.length ? (jp.length - 1) * P.jp.line * jpScale + P.jp.inkH * jpScale : 0)
     : blockH;
-  if (jpH > avail + 4 && jpScale > 0.28) {
+  if (!forced && jpH > avail + 4 && jpScale > 0.28) {
     const next = Math.max(0.28, Math.min(jpScale - 0.02, jpScale * avail / jpH * 0.98));
     if (next < jpScale - 0.01) return layoutAt(it, next);
   }
@@ -2496,8 +2571,9 @@ function layoutAt(it, scale) {
 }
 
 /* Script to the drawing sequence. */
-function prepare(script, preset) {
+function prepare(script, preset, opts) {
   use(preset || 'youtube');
+  OPT = opts || {};
   const d = new Date((script.date || '') + 'T12:00:00+09:00');
   const ok = !isNaN(d);
   const y = ok ? d.getFullYear() : 2026, mo = ok ? d.getMonth() + 1 : 1, da = ok ? d.getDate() : 1;
@@ -2515,8 +2591,9 @@ function prepare(script, preset) {
     it.page = `${no} / ${pad2(total)}`;
     it.credit2 = it.kind === 'coffee' ? (it.bgCredit || CREDIT_COFFEE) : CREDIT_PHOTO;
     it.tags = (it.tags || []).map(s => String(s).toUpperCase());
-    it.L = layout(it);
+    if (!(OPT.uniform && it.kind === 'news' && P.layout === 'stack')) it.L = layout(it);
   });
+  if (OPT.uniform && P.layout === 'stack') uniformLayout(items.filter(it => it.kind === 'news' && !(it.still && !(it.jp && it.jp.length))));
   return {
     P, W, H, preset: P.name, items, total, duration: total * DUR,
     header: `${pad2(da)}-${pad2(mo)}-${y} News Shorts｜${y}年${mo}月${da}日 速報ニュース`,
