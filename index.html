@@ -149,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="lang"></select>
       <p class="note">English, Japanese, or both. The picture keeps the original text size. Sources stay on the small credit line.</p>
       <label>Genres</label>
-      <p class="note">Country, language, and the lineup come first. The searching screen lists comments from X and the web. The video then plays the reports.</p>
+      <p class="note">Update plays the next stories. Comments are one video. Japanese shows Japanese replies, English shows English replies, and Both mixes them.</p>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X, 3&#10;SpaceX, 1&#10;Nikkei, 2&#10;ABC, 1&#10;Sports, 2&#10;Food, 2&#10;Restaurant, 1&#10;Coffee break, 1"></textarea>
@@ -3484,7 +3484,26 @@ function seenKeys() {
 }
 function rememberKeys(keys) {
   const prev = [...seenKeys()];
-  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 60)));
+  store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => a.indexOf(k) === i).slice(0, 80)));
+}
+function pickFresh(rows, used, count, label) {
+  const keyOf = r => String((r && r.headline) || '').toLowerCase().slice(0, 90);
+  const past = seenKeys();
+  const open = (rows || []).filter(r => {
+    const key = keyOf(r);
+    return key && !used.has(key);
+  });
+  const fresh = open.filter(r => !past.has(keyOf(r)));
+  const seen = open.filter(r => past.has(keyOf(r)));
+  let list = fresh.length >= count ? fresh : fresh.concat(seen);
+  if (seen.length && fresh.length < count) {
+    const mark = 'rot.' + String(label || 'news').slice(0, 24);
+    const start = (Number(store.get(mark, '0')) || 0) % Math.max(1, seen.length);
+    store.set(mark, String(start + count));
+    const spun = seen.slice(start).concat(seen.slice(0, start));
+    list = fresh.concat(spun);
+  }
+  return list.slice(0, count);
 }
 function rssItems(xml) {
   const items = [];
@@ -3628,24 +3647,53 @@ function clipReply(text) {
   if (chars.length <= limit) return s;
   return chars.slice(0, limit - 1).join('').replace(/\s+$/, '') + '…';
 }
-function replyLineFrom(st, handle) {
+function replyLang(st, text) {
+  const code = String((st && st.lang) || '').toLowerCase();
+  if (code === 'ja' || code.startsWith('ja-') || /[\u3040-\u30ff]/.test(text)) return 'ja';
+  if (code === 'en' || code.startsWith('en-')) return 'en';
+  const latin = (text.match(/[A-Za-z]/g) || []).length;
+  const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  if (latin >= 8 && latin > cjk) return 'en';
+  return '';
+}
+function replyLineFrom(st, handle, mode) {
   const author = String((st && st.author && st.author.screen_name) || '').replace(/^@+/, '');
   if (!author || (handle && author.toLowerCase() === handle.toLowerCase())) return null;
   const text = String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
   const letters = (text.match(/[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
   if (letters < 10 || (violentHidden() && VIOLENT.test(text))) return null;
-  return { line: clipReply('@' + author + '  ' + text), letters };
+  const lang = replyLang(st, text);
+  if (mode && lang !== mode) return null;
+  let body = text;
+  if (mode === 'ja') {
+    const at = body.search(/[\u3040-\u30ff\u4e00-\u9fff「『【（]/);
+    if (at > 0) body = body.slice(at);
+  }
+  const line = clipReply('@' + author + '  ' + body);
+  const shown = line.replace(/^@\S+\s+/, '');
+  const latin = (shown.match(/[A-Za-z]/g) || []).length;
+  const kana = (shown.match(/[\u3040-\u30ff]/g) || []).length;
+  const cjk = (shown.match(/[\u4e00-\u9fff]/g) || []).length;
+  if (mode === 'ja' && kana < 1) return null;
+  if (mode === 'en' && (kana > 0 || latin < 8)) return null;
+  return { line, letters, lang };
+}
+function commentModes() {
+  const id = (market().lang && market().lang.id) || 'both';
+  return id === 'ja' || id === 'en' ? [id] : ['ja', 'en'];
 }
 const handlePool = new Map();
-function poolFor(handle) {
+function poolFor(handle, mode) {
   const key = String(handle || '').toLowerCase();
+  const want = mode === 'ja' || mode === 'en' ? mode : 'en';
   if (!key) return Promise.resolve([]);
-  if (!handlePool.has(key)) {
-    handlePool.set(key, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent('to:' + handle + ' filter:replies')).then(data => {
+  const cache = key + ':' + want;
+  if (!handlePool.has(cache)) {
+    handlePool.set(cache, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent('to:' + handle + ' filter:replies lang:' + want)).then(data => {
       const out = [];
       const seen = new Set();
       for (const st of (data && data.results) || []) {
-        const got = replyLineFrom(st, handle);
+        const got = replyLineFrom(st, handle, want);
         if (!got || seen.has(got.line.toLowerCase())) continue;
         seen.add(got.line.toLowerCase());
         out.push(got);
@@ -3654,7 +3702,7 @@ function poolFor(handle) {
       return out.map(x => x.line);
     }).catch(e => { console.warn(e); return []; }));
   }
-  return handlePool.get(key);
+  return handlePool.get(cache);
 }
 function within(p, ms) {
   return Promise.race([Promise.resolve(p).catch(() => []), new Promise(resolve => setTimeout(() => resolve([]), ms))]);
@@ -3668,16 +3716,17 @@ function topicQuery(headline) {
   words.sort((a, b) => b.length - a.length);
   return words.slice(0, 2).join(' ').slice(0, 40);
 }
-function commentsAbout(query) {
+function commentsAbout(query, mode) {
   const q = String(query || '').trim();
+  const want = mode === 'ja' || mode === 'en' ? mode : 'en';
   if (q.length < 3) return Promise.resolve([]);
-  const key = 'q:' + q.toLowerCase();
+  const key = 'q:' + want + ':' + q.toLowerCase();
   if (!handlePool.has(key)) {
-    handlePool.set(key, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' filter:replies')).then(data => {
+    handlePool.set(key, fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(q + ' filter:replies lang:' + want)).then(data => {
       const out = [];
       const seen = new Set();
       for (const st of (data && data.results) || []) {
-        const got = replyLineFrom(st, '');
+        const got = replyLineFrom(st, '', want);
         if (!got || seen.has(got.line.toLowerCase())) continue;
         seen.add(got.line.toLowerCase());
         out.push(got);
@@ -3702,8 +3751,10 @@ async function gatherNetComments(handles, headlines) {
     if (!q || topics.some(t => t.toLowerCase() === q.toLowerCase())) return;
     topics.push(q);
   });
-  const jobs = names.slice(0, 4).map(h => within(poolFor(h), 9000))
-    .concat(topics.slice(0, 3).map(q => within(commentsAbout(q), 9000)));
+  const modes = commentModes();
+  const jobs = [];
+  names.slice(0, 3).forEach(h => modes.forEach(m => jobs.push(within(poolFor(h, m), 9000))));
+  topics.slice(0, 2).forEach(q => modes.forEach(m => jobs.push(within(commentsAbout(q, m), 9000))));
   const pools = await Promise.all(jobs);
   const out = [];
   const seen = new Set();
@@ -3729,8 +3780,6 @@ async function gatherNetComments(handles, headlines) {
 let commentHold = [];
 function paintComments(lines) {
   commentHold = (lines || []).slice(0, 20);
-  if (S.playing || S.again) return;
-  showWaiting('Comments', commentHold);
 }
 const replyBatch = new Map();
 async function fillReplyBatch(rows) {
@@ -3742,7 +3791,7 @@ async function fillReplyBatch(rows) {
     groups.get(key).rows.push(r);
   });
   await Promise.all([...groups.values()].map(async group => {
-    const pool = await poolFor(group.handle);
+    const pool = await poolFor(group.handle, commentModes()[0]);
     const pending = group.rows.filter(r => !(r.replies && r.replies.length));
     pending.forEach((r, idx) => {
       const out = [];
@@ -3854,14 +3903,14 @@ async function accountRows(only) {
   const names = (only || xAccounts()).map(cleanHandle).filter(validHandle);
   if (!names.length) return [];
   const lists = await Promise.all(names.map(async name => {
-    try { return await userPosts(name, 3); } catch (e) { console.warn(e); return []; }
+    try { return await userPosts(name, 6); } catch (e) { console.warn(e); return []; }
   }));
   const rows = [];
   const seen = new Set();
   const missed = [];
   lists.forEach((list, i) => {
     const name = names[i];
-    const got = (list || []).filter(r => r && r.headline).slice(0, 3);
+    const got = (list || []).filter(r => r && r.headline).slice(0, 6);
     if (!got.length) missed.push(name);
     got.forEach(r => {
       const key = String(r.headline).toLowerCase().slice(0, 90);
@@ -4208,7 +4257,7 @@ async function rowsForSlot(slot) {
   let rows = [];
   try {
     if (slot.type === 'x') {
-      if (slot.who) rows = await userPosts(slot.who, need);
+      if (slot.who) rows = await userPosts(slot.who, Math.max(need, 6));
       if (rows.length < need) {
         const more = await searchPosts(slot.q);
         const mine = slot.who ? more.filter(r => String(r.source || '').toLowerCase() === 'x @' + String(slot.who).toLowerCase()) : more;
@@ -4336,7 +4385,9 @@ async function loadDetails(slots, used) {
   const keyOf = r => String(r.headline || '').toLowerCase().slice(0, 90);
   const take = (list, place, n) => {
     let got = 0;
-    for (const r of list || []) {
+    const past = seenKeys();
+    const ranked = (list || []).filter(r => r && !past.has(keyOf(r))).concat((list || []).filter(r => r && past.has(keyOf(r))));
+    for (const r of ranked) {
       if (got >= n || rows.length >= 8) return;
       const key = keyOf(r);
       if (!r || !key || used.has(key) || rows.some(x => keyOf(x) === key)) continue;
@@ -4392,7 +4443,7 @@ async function collectSlots(date, slots, reorder) {
   const note = label => {
     if (S.again) return;
     if (S.playing) { say('Adding ' + label); return; }
-    showWaiting('Comments', commentHold);
+    showWaiting('Comments', []);
     say('Searching ' + label);
   };
   showWaiting('Comments', []);
@@ -4416,9 +4467,9 @@ async function collectSlots(date, slots, reorder) {
       continue;
     }
     const rows = await rowsForSlot(slot);
-    const pool = orderPool(slot, rows.filter(r => !used.has(keyOf(r))), slots);
+    const pool = pickFresh(orderPool(slot, rows, slots), used, slot.count || 1, slot.label || slot.cat || 'news');
     let added = 0;
-    pool.slice(0, slot.count).forEach(r => {
+    pool.forEach(r => {
       if (guard >= 24) return;
       used.add(keyOf(r));
       sequence.push({ ...r, place: slot.place || r.place || 'middle' });
@@ -4436,7 +4487,7 @@ async function collectSlots(date, slots, reorder) {
     const details = await loadDetails(slots, used);
     details.forEach(r => { if (r && r.headline) found.push(r); });
     sequence = insertDetails(sequence, details);
-    showWaiting('Comments', commentHold);
+    showWaiting('Comments', []);
     say('Searching comments');
   }
   if (reorder && !S.playing) sequence = orderStories(sequence.filter(r => r && !r.coffee && r.headline), 12);
@@ -4493,7 +4544,7 @@ async function collect(date) {
     if (!S.again && lines.length) paintComments(lines);
     return lines;
   }).catch(() => []);
-  showWaiting('Comments', commentHold);
+  showWaiting('Comments', []);
   say('Searching comments');
   if (names.length) {
     if (S.playing) say('Adding @' + names[0]);
@@ -4515,12 +4566,12 @@ async function collect(date) {
     if (S.again) break;
     const name = SOURCE_LABEL[id] || id;
     if (S.playing) say('Adding ' + name);
-    else { showWaiting('Comments', commentHold); say('Searching ' + name); }
+    else { showWaiting('Comments', []); say('Searching ' + name); }
     try {
       const items = await newsRows(RSS[id], 'NEWS');
       const tagged = items.map(it => ({ ...it, source: it.source || name }));
       batches.push(tagged);
-      if (!S.playing) showWaiting('Comments', commentHold);
+      if (!S.playing) showWaiting('Comments', []);
       if (!lead.length) {
         const early = [];
         const seen = new Set();
@@ -4575,13 +4626,15 @@ async function collect(date) {
   const past = seenKeys();
   const keyOf = r => r.headline.toLowerCase().slice(0, 90);
   const xkeys = new Set(xrows.map(keyOf));
+  const freshX = xrows.filter(r => !past.has(keyOf(r)));
+  const xpick = freshX.length ? freshX : xrows;
   const fresh = rows.filter(r => !past.has(keyOf(r)) && !xkeys.has(keyOf(r)));
   const pool = fresh.length >= 8 ? fresh : rows.filter(r => !xkeys.has(keyOf(r)));
   const jpSource = id => ['nhk', 'nikkei', 'asahi', 'yomiuri'].includes(id);
   let chosen = ['intl', 'jp'].flatMap(group => orderStories(pool.filter(r => (jpSource(sourceId(r)) ? 'jp' : 'intl') === group), 6)).slice(0, 12);
   const leadNews = lead.filter(r => r && r.headline && !r.coffee);
   if (xrows.length) {
-    const head = xrows.slice(0, 8);
+    const head = xpick.slice(0, 8);
     const keys = new Set(head.map(keyOf));
     chosen = head.concat(chosen.filter(r => !keys.has(keyOf(r)))).slice(0, 12);
   } else if (leadNews.length) {
@@ -4748,14 +4801,14 @@ async function runAll(opts) {
   if (S.busy) {
     S.again = opts;
     stop();
-    showWaiting('Comments', commentHold);
+    showWaiting('Comments', []);
     say('Searching comments');
     return;
   }
   S.busy = true; S.grew = false; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    showWaiting('Comments', commentHold);
+    showWaiting('Comments', []);
     say('Searching comments');
   }
   try {
