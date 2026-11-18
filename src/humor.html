@@ -637,6 +637,8 @@ function jokeKeys(row) {
   const keys = ['t:' + squash(row.text || row.headline).slice(0, 50)];
   const id = String(row.link || row.url || '').match(/status(?:es)?\/(\d+)/);
   if (id) keys.push('id:' + id[1]);
+  const link = String(row.link || row.url || '').replace(/[?#].*$/, '');
+  if (link) keys.push('u:' + link.slice(0, 160));
   return keys;
 }
 function playingKeys() {
@@ -905,6 +907,15 @@ async function homeNews(used, need) {
 
 /* ---------- jokes ---------- */
 const FUNNY_Q = { ja: '(笑 OR 草 OR ワロタ OR 面白い)', en: '(lol OR lmao OR haha OR hilarious)' };
+const HUMOR_CONVERSATION_TARGET = 2000;
+const X_POOL_QUERIES = 96;
+const X_CONVERSATION_QUERIES = 30;
+const BSKY_POOL_QUERIES = 24;
+const BSKY_LIMIT = 100;
+const BSKY_FUNNY = {
+  ja: ['笑', '草', '面白い', '爆笑', 'ワロタ', 'ネタ'],
+  en: ['lol', 'lmao', 'haha', 'hilarious', 'funny', 'joke'],
+};
 function isFunny(text, lang) {
   if (lang === 'en') return /\b(lol|lmao|lmfao|rofl|haha\w*|hilarious|i'?m dead|dying)\b|😂|🤣|💀|😆/i.test(text);
   const t = String(text || '').replace(/笑顔|笑み|民草|草の根/g, '');
@@ -1006,48 +1017,205 @@ function pickFunny(rows, n) {
   const ranked = rows.slice().sort((a, b) => b.score - a.score || a.text.length - b.text.length);
   const out = [];
   const handles = new Set();
+  const sources = {};
   const take = allowSame => ranked.forEach(row => {
     if (out.length >= n || out.indexOf(row) >= 0) return;
-    const who = row.handle.toLowerCase();
+    const src = row.api || 'X';
+    const cap = Math.max(1, Math.ceil(n * 0.7));
+    if (!allowSame && (sources[src] || 0) >= cap) return;
+    const who = (src + ':' + row.handle).toLowerCase();
     if (!allowSame && handles.has(who)) return;
     handles.add(who);
+    sources[src] = (sources[src] || 0) + 1;
     out.push(row);
   });
   take(false);
   if (out.length < n) take(true);
   return out;
 }
-/* Funny posts about the topics. Jokes that played before are skipped, and more searches run until enough are new. */
+function uniqueQueries(list) {
+  const out = [];
+  const seen = new Set();
+  list.forEach(q => {
+    const s = String(q || '').replace(/\s+/g, ' ').trim();
+    const key = s.toLowerCase();
+    if (!s || seen.has(key)) return;
+    seen.add(key);
+    out.push(s);
+  });
+  return out;
+}
+function uniqueForms(forms) {
+  const out = [];
+  const seen = new Set();
+  (forms || []).forEach(f => {
+    const q = String((f && f.q) || '').replace(/\s+/g, ' ').trim();
+    const key = q.toLowerCase();
+    if (!q || seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...f, q });
+  });
+  return out;
+}
+function jokeSeeds(topics, lang) {
+  const queries = [];
+  const addQ = q => { if (q) queries.push(q); };
+  (topics || []).forEach(t => addQ(String(t).trim()));
+  xAccounts().forEach(h => addQ('to:' + h));
+  (lang === 'en' ? ['news', 'today', 'trending', 'weird', 'animals', 'sports', 'food'] : ['ニュース', '今日', '話題', 'トレンド', '動物', 'スポーツ', 'グルメ']).forEach(addQ);
+  return uniqueQueries(queries);
+}
+function xConversationId(st) {
+  const own = statusId(st);
+  const parent = parentOf(st);
+  return String((st && (st.conversation_id || st.conversationId || st.conversation)) || (parent && parent.id) || own || '');
+}
+async function collectXJokePool(queries, lang, replies, target) {
+  if (!target || !sourceOn('x')) return [];
+  const reaction = lang === 'en' ? '(bruh OR omg OR "I can\'t" OR "this is too")' : '(爆笑 OR ｗｗ OR www OR それは草 OR これは草)';
+  const forms = [];
+  queries.forEach(q => {
+    const reply = replies && !/^to:/i.test(q) ? ' filter:replies ' : ' ';
+    forms.push({ q: `${q} ${FUNNY_Q[lang]}${reply}lang:${lang}${xRange()}`, topic: q, api: 'X search' });
+    forms.push({ q: `${q} ${reaction}${reply}lang:${lang}${xRange()}`, topic: q, api: 'X reactions' });
+    if (!/^to:/i.test(q)) forms.push({ q: `${q} filter:replies lang:${lang}${xRange()}`, topic: q, api: 'X replies' });
+  });
+  const searches = uniqueForms(forms).slice(0, X_POOL_QUERIES);
+  const raw = [];
+  const ids = new Set();
+  const add = (st, q, api) => {
+    const id = statusId(st) || ('t:' + squash(postText(st)).slice(0, 80));
+    if (!id || ids.has(id)) return;
+    ids.add(id);
+    raw.push({ st, q, api });
+  };
+  for (let i = 0; i < searches.length && raw.length < target; i += 6) {
+    if (S.again) break;
+    const batch = searches.slice(i, i + 6);
+    const lists = await Promise.all(batch.map(f => searchX(f.q).then(list => ({ f, list })).catch(() => ({ f, list: [] }))));
+    lists.forEach(({ f, list }) => (list || []).forEach(st => add(st, f.topic, f.api)));
+  }
+  /* A second API shape: search by conversation_id for the threads behind the best raw hits. */
+  const convs = uniqueQueries(raw.map(x => xConversationId(x.st)).filter(Boolean)).slice(0, Math.min(X_CONVERSATION_QUERIES, Math.ceil(Math.max(0, target - raw.length) / 20)));
+  for (let i = 0; i < convs.length && raw.length < target; i += 6) {
+    if (S.again) break;
+    const batch = convs.slice(i, i + 6);
+    const lists = await Promise.all(batch.map(id => searchX(`conversation_id:${id} filter:replies`).then(list => ({ id, list })).catch(() => ({ id, list: [] }))));
+    lists.forEach(({ id, list }) => (list || []).forEach(st => add(st, id, 'X conversation')));
+  }
+  return raw.slice(0, target);
+}
+function bskyParams(q, lang, sort, cursor) {
+  const p = new URLSearchParams({ q, sort, limit: String(BSKY_LIMIT) });
+  p.set('lang', lang);
+  const day = pastDay();
+  if (day) {
+    p.set('since', day + 'T00:00:00Z');
+    p.set('until', addDays(day, 1) + 'T00:00:00Z');
+  }
+  if (cursor) p.set('cursor', cursor);
+  return p;
+}
+function bskyText(post) {
+  return String((post && post.record && post.record.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@[A-Za-z0-9_.-]+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function bskyLink(post) {
+  const handle = String((post && post.author && post.author.handle) || '').replace(/^@+/, '');
+  const m = String((post && post.uri) || '').match(/\/app\.bsky\.feed\.post\/([^/]+)$/);
+  return handle && m ? 'https://bsky.app/profile/' + handle + '/post/' + m[1] : '';
+}
+function bskyJokeOf(post, lang) {
+  const handle = String((post && post.author && post.author.handle) || '').replace(/^@+/, '');
+  let text = bskyText(post);
+  if (!handle || UNSAFE.test(text) || (violentHidden() && VIOLENT.test(text)) || sensitive(text)) return null;
+  if (lang === 'en') {
+    if ((text.match(/[぀-ヿ一-鿿]/g) || []).length > 2 || !/[A-Za-z]{3,}/.test(text) || text.length < 12) return null;
+  } else {
+    if ((text.match(/[぀-ヿ]/g) || []).length < 1) return null;
+    const at = text.search(/[぀-ヿ一-鿿]/);
+    if (at > 0) {
+      const lead = text.slice(0, at).trim();
+      if (lead.split(/\s+/).filter(w => /[A-Za-z]{4,}/.test(w)).length >= 2) text = text.slice(at);
+    }
+    if ([...text].length < 8 || /ご冥福|追悼|亡くな|お悔やみ|ご逝去|死去/.test(text)) return null;
+  }
+  if (!isFunny(text, lang)) return null;
+  const url = bskyLink(post);
+  return { handle, text: focusJoke(text, lang), url, link: url, lang, api: 'Bluesky', source: 'Bluesky @' + handle };
+}
+async function bskySearch(q, lang, sort) {
+  const url = 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?' + bskyParams(q, lang, sort || 'latest');
+  const data = await fxJson(url).catch(() => null);
+  return (data && data.posts) || [];
+}
+async function collectBskyJokePool(queries, lang, target) {
+  if (!target || !sourceOn('web')) return [];
+  const terms = BSKY_FUNNY[lang] || BSKY_FUNNY.en;
+  const forms = [];
+  queries.filter(q => !/^to:/i.test(q)).forEach(q => {
+    terms.slice(0, 4).forEach(t => forms.push({ q: q + ' ' + t, topic: q, sort: 'latest' }));
+  });
+  terms.forEach(t => forms.push({ q: t, topic: t, sort: 'latest' }));
+  const searches = uniqueForms(forms).slice(0, BSKY_POOL_QUERIES);
+  const raw = [];
+  const ids = new Set();
+  const add = (post, q) => {
+    const id = String((post && post.uri) || '') || ('t:' + squash(bskyText(post)).slice(0, 80));
+    if (!id || ids.has(id)) return;
+    ids.add(id);
+    raw.push({ post, q, api: 'Bluesky search' });
+  };
+  for (let i = 0; i < searches.length && raw.length < target; i += 4) {
+    if (S.again) break;
+    const batch = searches.slice(i, i + 4);
+    const lists = await Promise.all(batch.map(f => bskySearch(f.q, lang, f.sort).then(list => ({ f, list })).catch(() => ({ f, list: [] }))));
+    lists.forEach(({ f, list }) => (list || []).forEach(post => add(post, f.topic)));
+  }
+  return raw.slice(0, target);
+}
+/* Funny conversations about the topics. About 2,000 candidates are gathered from public APIs first,
+   then duplicate, unsafe and already-played posts are removed before scoring the final picks. */
 async function collectJokes(topics, need, opts) {
-  if (!need || !sourceOn('x')) return [];
+  if (!need || (!sourceOn('x') && !sourceOn('web'))) return [];
   const lang = jokeLang();
   const replies = !(opts && opts.posts);
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  const queries = [];
-  const addQ = q => { if (q && queries.indexOf(q) < 0) queries.push(q); };
-  topics.forEach(t => addQ(String(t).trim()));
-  xAccounts().forEach(h => addQ('to:' + h));
-  (lang === 'en' ? ['news', 'today', 'trending', 'weird'] : ['ニュース', '今日', '話題', 'トレンド']).forEach(addQ);
-  const build = q => `${q} ${FUNNY_Q[lang]} ${replies && !/^to:/.test(q) ? 'filter:replies ' : ''}lang:${lang}${xRange()}`;
+  const queries = jokeSeeds(topics, lang);
   const headlines = (opts && opts.headlines) || [];
   const rows = [];
   const keys = new Set();
-  for (let i = 0; i < queries.length && rows.length < need * 2 && i < 24; i += 6) {
-    if (S.again) break;
-    const batch = queries.slice(i, i + 6);
-    const lists = await Promise.all(batch.map(q => fxJson('https://api.fxtwitter.com/2/search?q=' + encodeURIComponent(build(q))).then(d => ((d && d.results) || []).map(st => ({ st, q }))).catch(() => [])));
-    lists.flat().forEach(({ st, q }) => {
-      const got = replyOf(st, lang);
-      if (!got) return;
-      got.topic = q;
-      const ks = jokeKeys(got);
-      if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
-      ks.forEach(k => keys.add(k));
-      got.score = humorScore(got.text, headlines, lang);
-      rows.push(got);
-    });
-  }
+  const target = Math.max(HUMOR_CONVERSATION_TARGET, need * 100);
+  const useX = sourceOn('x');
+  const useWeb = sourceOn('web');
+  const xTarget = useX ? (useWeb ? Math.ceil(target * 0.65) : target) : 0;
+  const bskyTarget = useWeb ? target - xTarget : 0;
+  const [xPool, bskyPool] = await Promise.all([
+    collectXJokePool(queries, lang, replies, xTarget),
+    collectBskyJokePool(queries, lang, bskyTarget),
+  ]);
+  const addGot = got => {
+    const ks = jokeKeys(got);
+    if (ks.some(k => past.has(k) || now.has(k) || keys.has(k))) return;
+    ks.forEach(k => keys.add(k));
+    got.score = humorScore(got.text, headlines, lang) + (got.api === 'Bluesky' ? 0.5 : 0);
+    rows.push(got);
+  };
+  xPool.forEach(({ st, q, api }) => {
+    const got = replyOf(st, lang);
+    if (!got) return;
+    got.topic = q;
+    got.api = api || 'X';
+    got.source = 'X @' + got.handle;
+    addGot(got);
+  });
+  bskyPool.forEach(({ post, q }) => {
+    const got = bskyJokeOf(post, lang);
+    if (!got) return;
+    got.topic = q;
+    addGot(got);
+  });
+  say('Selecting jokes from ' + (xPool.length + bskyPool.length) + ' conversations');
   return pickFunny(rows, need);
 }
 
@@ -1604,7 +1772,7 @@ async function collect() {
     r.story.cheers = r.story.cheers.filter(c => !jokeKeySet.has('id:' + c.id) && !jokeKeySet.has('t:' + squash(c.text).slice(0, 50)));
     r.keys = coupleKeys(r);
   });
-  const jokeRows = found.map(j => ({ headline: j.text, text: j.text, link: j.url, source: 'X @' + j.handle, x: true, cat: 'HUMOR', joke: true, topic: j.topic, place: topicPlace[j.topic] || 'middle' }));
+  const jokeRows = found.map(j => ({ headline: j.text, text: j.text, link: j.url, source: j.source || ('X @' + j.handle), x: !j.source || /^X\b/.test(j.source), cat: 'HUMOR', joke: true, topic: j.topic, place: topicPlace[j.topic] || 'middle' }));
   const coupleRows = couples.map(r => ({ ...r, headline: r.story.a.text, joke: true }));
   if (S.again) return null;
   if (!sequence.length && !jokeRows.length && !coupleRows.length && !trips.length) return { empty: true };
