@@ -177,7 +177,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X&#10;SpaceX&#10;Nikkei&#10;ABC&#10;Sports&#10;Food&#10;Restaurant"></textarea>
+      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X&#10;SpaceX&#10;ABC&#10;Sports&#10;Food&#10;Restaurant"></textarea>
       <p class="note">One request on each line. The number of stories comes from Items under the video.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
@@ -959,7 +959,6 @@ const SOURCES = [
   { id: 'bbc', name: 'BBC', group: 'International' },
   { id: 'abc', name: 'ABC', group: 'International' },
   { id: 'reuters', name: 'Reuters', group: 'International' },
-  { id: 'nikkei', name: 'Nikkei', group: 'Japanese media' },
 ];
 const GTX = { ja: 'ja', en: 'en', fr: 'fr', de: 'de', es: 'es', pt: 'pt', ko: 'ko', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
 
@@ -1135,9 +1134,8 @@ const RSS = {
   science: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
   politics: 'https://feeds.bbci.co.uk/news/politics/rss.xml',
   culture: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
-  nikkei: 'https://assets.wor.jp/rss/rdf/nikkei/news.rdf',
 };
-const SOURCE_LABEL = { nikkei: 'Nikkei', bbc: 'BBC', abc: 'ABC', reuters: 'Reuters' };
+const SOURCE_LABEL = { bbc: 'BBC', abc: 'ABC', reuters: 'Reuters' };
 /* Reuters has no open feed: its stories come from a news search limited to reuters.com. */
 function feedOf(id) {
   if (id !== 'reuters') return RSS[id];
@@ -1774,7 +1772,6 @@ const CHIPS = [
   { label: 'Restaurant', line: 'Restaurant' },
   { label: 'Musk X', line: 'Musk X' },
   { label: 'SpaceX', line: 'SpaceX' },
-  { label: 'Nikkei', line: 'Nikkei' },
   { label: 'ABC', line: 'ABC' },
 ];
 function lineupText() {
@@ -1818,7 +1815,6 @@ function classifyRequest(text) {
     const topic = name.replace(/\s*(?:on\s+)?(?:x|twitter|エックス)\s*$/i, '').trim();
     return { type: 'x', q: topic || 'news', cat: 'X', label: name };
   }
-  if (/日経|nikkei/.test(low)) return { type: 'rss', rss: RSS.nikkei, gdelt: '日経 OR nikkei', cat: 'NIKKEI', source: 'Nikkei', label: name };
   if (/^abc$|abc news/.test(low)) return { type: 'rss', rss: RSS.abc, gdelt: 'ABC news', cat: 'ABC', source: 'ABC', label: name };
   if (/食文化|food culture|^food$|食べ物/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? '食べ物' : 'food', cat: 'FOOD', source: 'News', label: name };
   if (/レストラン|^restaurant$/.test(low)) return { type: 'gdelt', q: market().country.id === 'JP' ? 'レストラン' : 'restaurant', cat: 'RESTAURANT', source: 'News', label: name };
@@ -1864,7 +1860,8 @@ async function countryRows(cat) {
   if (market().country.id !== 'JP') return [];
   const word = JP_WORD[cat] || '';
   const out = [];
-  for (const id of ['nikkei']) {
+  /* No fixed Japanese feeds. */
+  for (const id of []) {
     if (!RSS[id] || !sourceOn(id)) continue;
     const items = await cachedNews(RSS[id]);
     rowsFromItems(items, SOURCE_LABEL[id], cat).forEach(r => {
@@ -1914,7 +1911,6 @@ function linkFits(slot, row) {
     const who = String(slot.who).toLowerCase();
     return url.includes('://x.com/' + who + '/') || url.includes('://twitter.com/' + who + '/') || url.includes('://www.x.com/' + who + '/');
   }
-  if (slot.rss === RSS.nikkei) return url.includes('nikkei.com');
   if (slot.rss === RSS.abc) return /abcnews\.com|abc\.go\.com|abc\.com/.test(url);
   if (slot.rss === RSS.sport || slot.rss === RSS.bbc || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return /bbc\.co\.uk|bbc\.com/.test(url);
   return true;
@@ -2104,7 +2100,6 @@ function restaurantText(text) {
 function slotSourceId(slot) {
   if (!slot) return 'web';
   if (slot.type === 'x') return 'x';
-  if (slot.rss === RSS.nikkei) return 'nikkei';
   if (slot.rss === RSS.abc) return 'abc';
   if (slot.rss === RSS.bbc || slot.rss === RSS.sport || slot.rss === RSS.science || slot.rss === RSS.politics || slot.rss === RSS.culture) return 'bbc';
   return 'web';
@@ -2321,7 +2316,7 @@ async function collect(date) {
   const n = Number(store.get('gen', '0')) || 0;
   store.set('gen', String(n + 1));
   const intlFeeds = ['bbc', 'abc', 'reuters'].filter(id => feedOf(id) && sourceOn(id));
-  const jpFeeds = ['nikkei'].filter(id => RSS[id] && sourceOn(id));
+  const jpFeeds = [];
   const picks = [];
   if (intlFeeds.length) picks.push(intlFeeds[n % intlFeeds.length]);
   if (jpFeeds.length) picks.push(jpFeeds[n % jpFeeds.length]);

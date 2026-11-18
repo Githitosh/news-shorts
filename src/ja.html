@@ -73,9 +73,7 @@ const store = {
 const S = { bgs: {}, music: null, show: null, script: null, playing: false, raf: 0, origin: 0, t0perf: 0, audioOn: false, el: null, musicUrl: '', busy: false, again: null };
 const FEEDS = [
   ['https://www.nhk.or.jp/rss/news/cat0.xml', 'NHK'],
-  ['https://assets.wor.jp/rss/rdf/nikkei/news.rdf', 'Nikkei'],
   ['https://www.asahi.com/rss/asahi/newsheadlines.rdf', 'Asahi'],
-  ['https://assets.wor.jp/rss/rdf/yomiuri/latestnews.rdf', 'Yomiuri'],
 ];
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
