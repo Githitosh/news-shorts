@@ -7,7 +7,7 @@
 <script>/* The chosen color, before the page draws, so it does not flash another color. */
 document.documentElement.dataset.theme = 'dark';
 try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'dark'; } catch (e) {}</script>
-<title>Humor</title>
+<title>Reply News</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -133,7 +133,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
+<header><div><button type="button" id="home" class="title">Reply News</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <div id="watch" class="watch">
@@ -1335,7 +1335,6 @@ async function collectRomance(need, place) {
   const lang = jokeLang();
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  say('Searching couples on X');
   const queries = ROMANCE_Q[lang].concat(sensitiveHidden() ? [] : FLIRT_Q[lang]);
   const lists = await Promise.all(queries.map(q => searchX(q + ' lang:' + lang + xRange())));
   const used = new Set();

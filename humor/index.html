@@ -7,7 +7,7 @@
 <script>/* The chosen color, before the page draws, so it does not flash another color. */
 document.documentElement.dataset.theme = 'dark';
 try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'dark'; } catch (e) {}</script>
-<title>Humor</title>
+<title>Reply News</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -133,7 +133,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
+<header><div><button type="button" id="home" class="title">Reply News</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <div id="watch" class="watch">
@@ -2159,7 +2159,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 
 const JA = {
   // Header and buttons
-  'Humor': 'ユーモア', 'News': 'ニュース', 'Pull down to refresh': '引っ張って更新', 'Release to refresh': '離すと更新',
+  'Humor': 'ユーモア', 'Reply News': 'リプライニュース', 'News': 'ニュース', 'Pull down to refresh': '引っ張って更新', 'Release to refresh': '離すと更新',
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
@@ -4090,7 +4090,6 @@ async function collectRomance(need, place) {
   const lang = jokeLang();
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  say('Searching couples on X');
   const queries = ROMANCE_Q[lang].concat(sensitiveHidden() ? [] : FLIRT_Q[lang]);
   const lists = await Promise.all(queries.map(q => searchX(q + ' lang:' + lang + xRange())));
   const used = new Set();
@@ -5574,7 +5573,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'dbc5d9eeac48';
+  const BUILD = '495bc3edcaa5';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
