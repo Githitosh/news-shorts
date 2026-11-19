@@ -41,7 +41,7 @@ Music, under the picture:
 **In Japan the News page plays replies.** Each card is one reply to a piece of news on X, and under it the
 card says which news the reply is about. The replies are collected ahead of time by
 [githito.xapi](https://github.com/Githitosh/githito.xapi) (`news.mjs`, three runs a day, up to 2000 replies
-kept for 48 hours) and read from `v1/news-ja.json`, so a video starts in about a second and Update answers
+kept for 72 hours) and read from `v1/news-ja.json`, so a video starts in about a second and Update answers
 at once. A genre chip plays the replies of that genre.
 
 - Replies are collected for light news only: entertainment, sports, culture, food, science, weather.
