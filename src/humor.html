@@ -245,6 +245,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </main>
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
+<script>/*__MUSIC__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>
 (() => {
@@ -433,6 +434,7 @@ async function loadAssets() {
     S.bgs[g] = im;
   }));
   S.music = S.tracks[TRACKS[0].id] = b64bytes(ASSETS.track);
+  NSMusic.setSong(S.music, TRACKS[0].loop);
 }
 
 /* ---------- settings: market, accounts, filters ---------- */
@@ -2113,33 +2115,19 @@ function currentT() {
   if (S.playing) return S.origin + (performance.now() - S.t0perf) / 1000;
   return (+$('seek').value / 1000) * (S.show.duration || 0);
 }
-function musicEl() {
-  if (S.el) return S.el;
-  const el = document.createElement('audio');
-  el.preload = 'auto';
-  el.loop = true;
-  el.setAttribute('playsinline', '');
-  S.musicUrl = URL.createObjectURL(new Blob([S.music], { type: 'audio/mp4' }));
-  el.src = S.musicUrl;
-  document.body.appendChild(el);
-  S.el = el;
-  return el;
-}
 /* The music plays on its own and is not tied to the video: a new video, Update, the video repeating, Pause,
    the story length, the seek bar and exporting leave it playing where it is. The Sound button turns it off
    and on. This starts it if it is not playing, from where it was; it never moves the music. */
 function playSound() {
   if (!S.music || S.mute) return;
-  const el = musicEl();
-  if (!el.paused && S.audioOn) return;
-  const play = el.play();
-  if (play && play.then) play.then(() => {
-    if (S.mute) { try { el.pause(); } catch (e) {} S.audioOn = false; paintSound(); return; }
-    S.audioOn = true;
+  NSMusic.play().then(ok => {
+    if (S.mute) { NSMusic.pause(); S.audioOn = false; paintSound(); return; }
+    S.audioOn = ok;
     paintSound();
-    if ($('caption').textContent.endsWith(TAP)) say(watchLine());
-  }).catch(() => { S.audioOn = false; paintSound(); });
+    if (ok && $('caption').textContent.endsWith(TAP)) say(watchLine());
+  });
 }
+NSMusic.onchange = heard => { S.audioOn = heard && !S.mute; paintSound(); };
 function paintSound() {
   const b = $('sound');
   b.classList.toggle('on', !!S.audioOn);
@@ -2150,7 +2138,7 @@ function paintSound() {
 function toggleSound() {
   if (S.audioOn) {
     S.mute = true;
-    if (S.el) { try { S.el.pause(); } catch (e) {} }
+    NSMusic.pause();
     S.audioOn = false;
     paintSound();
     if (S.playing) say('Sound off. Press Sound to hear the music.');
@@ -2379,20 +2367,12 @@ async function useTrack(id) {
   E.setMusicCredit(t.credit);
   if (S.script) $('sources').textContent = sourcesText(S.script);
   redraw();
-  if (!S.el) return;
-  /* The same audio element keeps playing, so iPhone still allows it after the change. */
+  /* The sound stays allowed when the song changes: the same Web Audio player starts the new song from its top. */
   const was = S.audioOn;
-  try { S.el.pause(); } catch (e) {}
-  if (S.musicUrl) { try { URL.revokeObjectURL(S.musicUrl); } catch (e) {} }
-  S.musicUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/mp4' }));
-  S.el.src = S.musicUrl;
-  try { S.el.load(); } catch (e) {}
+  NSMusic.setSong(bytes, t.loop);
   S.audioOn = false;
   paintSound();
-  if (was && !S.mute) {
-    await new Promise(r => { S.el.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 3000); });
-    if (S.wantTrack === t.id && !S.mute) playSound();
-  }
+  if (was && !S.mute) playSound();
 }
 
 /* ---------- MP4 export (as on the News page) ---------- */

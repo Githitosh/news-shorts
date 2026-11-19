@@ -239,6 +239,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
+<script>/*__MUSIC__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>
 const ASSETS = /*__ASSETS__*/;
@@ -474,15 +475,14 @@ function useTrack(id) {
   store.set('music', t.id);
   document.querySelectorAll('#music button').forEach(b => b.classList.toggle('on', b.dataset.m === t.id));
   S.audioGen++;
-  if (S.src) { try { S.src.stop(); } catch (e) {} S.src = null; }
-  resetMusicEl();
+  NSMusic.setSong(S.music, t.loop);
   S.audioOn = false;
   if (S.script) $('sources').textContent = sourcesText(S.script);
   if (S.show) {
     const T = S.playing ? currentT() : (+$('seek').value / 1000) * (S.show.duration || 0);
     draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
   }
-  if (wasAudible) playSound(S.playing ? currentT() : 0);
+  if (wasAudible) playSound();
   else if (S.playing && !S.audioFailed) {
     const u = $('unmute');
     if (u) { u.hidden = false; u.textContent = 'Tap for sound'; }
@@ -729,15 +729,6 @@ function currentT() {
   if (S.playing) return S.origin + (performance.now() - S.t0perf) / 1000;
   return (+$('seek').value / 1000) * (S.show.duration || 0);
 }
-function userUnlock() {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return Promise.resolve(false);
-  try {
-    if (!S.ac) S.ac = new AC();
-    if (S.ac.state === 'running') return Promise.resolve(true);
-    return Promise.resolve(S.ac.resume()).then(() => S.ac.state === 'running').catch(() => false);
-  } catch (e) { return Promise.resolve(false); }
-}
 function beginPlayback(T0) {
   S.origin = T0;
   S.t0perf = performance.now();
@@ -785,25 +776,6 @@ function startWatch() {
   playSound(0);
   closeStudio();
 }
-function resetMusicEl() {
-  if (S.musicUrl) { try { URL.revokeObjectURL(S.musicUrl); } catch (e) {} }
-  S.musicUrl = '';
-  if (S.el) { try { S.el.pause(); } catch (e) {} S.el.removeAttribute('src'); S.el = null; }
-}
-function musicEl() {
-  if (S.el) return S.el;
-  const el = document.createElement('audio');
-  el.preload = 'auto';
-  el.loop = true;
-  el.setAttribute('playsinline', '');
-  el.volume = 1;
-  const blob = new Blob([S.music], { type: 'audio/mp4' });
-  S.musicUrl = URL.createObjectURL(blob);
-  el.src = S.musicUrl;
-  document.body.appendChild(el);
-  S.el = el;
-  return el;
-}
 function soundOn() {
   S.audioOn = true;
   S.audioFailed = false;
@@ -812,25 +784,22 @@ function soundOn() {
   /* Only replace the tap-for-sound line, so a message such as No new stories stays. */
   if (S.playing && $('caption').textContent === watchLine(false)) say(watchLine(true));
 }
-/* Start the music if it is not playing, from where it was. It never moves the music. */
+function soundOff() {
+  S.audioOn = false;
+  const u = $('unmute');
+  if (u && S.playing) { u.hidden = false; u.textContent = 'Tap for sound'; }
+}
+/* Start the music if it is not playing, from where it was. It never moves the music. It plays through
+   Web Audio (src/music.js), which repeats the song without a gap. */
 function playSound() {
   if (!S.music) return;
-  const el = musicEl();
-  if (!el.paused && S.audioOn) { soundOn(); return; }
   const gen = ++S.audioGen;
-  const pending = el.play();
-  if (pending && pending.then) {
-    pending.then(() => {
-      if (gen !== S.audioGen || el.paused) return;
-      soundOn();
-    }).catch(() => {
-      if (gen !== S.audioGen || !el.paused) return;
-      S.audioOn = false;
-      const u = $('unmute');
-      if (u && S.playing) { u.hidden = false; u.textContent = 'Tap for sound'; }
-    });
-  }
+  NSMusic.play().then(ok => {
+    if (gen !== S.audioGen) return;
+    if (ok) soundOn(); else soundOff();
+  });
 }
+NSMusic.onchange = heard => { if (heard) soundOn(); else soundOff(); };
 async function play() {
   if (!S.show) return;
   if (S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); return; }
@@ -841,7 +810,7 @@ async function play() {
 }
 function pauseMusic() {
   S.audioGen++;
-  if (S.el) { try { S.el.pause(); } catch (e) {} }
+  NSMusic.pause();
   S.audioOn = false;
 }
 /* Stops the video. The music goes on (pauseMusic stops it). */
