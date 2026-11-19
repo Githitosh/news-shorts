@@ -2336,6 +2336,28 @@ function englishParts(en) {
   const tags = names.concat(longs).filter((t, k, a) => t && a.indexOf(t) === k).slice(0, 3);
   return { kw, head: head || kw, sub, tags };
 }
+/* The English of headlines, kept in the browser (the newest 800), so a headline is asked for once. */
+function englishKept() { try { return JSON.parse(store.get('news.en', '{}')) || {}; } catch (e) { return {}; } }
+let englishAsking = Promise.resolve();
+function englishFor(list) {
+  /* One request after another, five headlines each; what is already kept is not asked again. */
+  const run = englishAsking.then(async () => {
+    const kept = englishKept();
+    const todo = list.filter(x => x && x.key && x.text && !kept[x.key]);
+    for (let i = 0; i < todo.length; i += 5) {
+      const slice = todo.slice(i, i + 5);
+      let got = [];
+      try { got = await translateMany(slice.map(x => x.text.replace(/【[^】]*】/g, ' ').trim() || x.text), 'en'); } catch (e) { console.warn(e); break; }
+      slice.forEach((x, k) => { const t = String(got[k] || '').trim(); if (t && /[A-Za-z]{3}/.test(t) && !/[\u3040-\u30ff]/.test(t)) kept[x.key] = t; });
+    }
+    const keys = Object.keys(kept);
+    if (keys.length > 800) keys.slice(0, keys.length - 800).forEach(k => { delete kept[k]; });
+    try { store.set('news.en', JSON.stringify(kept)); } catch (e) {}
+    return kept;
+  });
+  englishAsking = run.catch(() => {});
+  return run;
+}
 /* A headline from X as the first News videos showed one: the English headline large with the rest of
    it under, the Japanese lines below, tags at the foot. githito.xapi sends the English with the headline. */
 function bothCard(row) {
@@ -2507,11 +2529,18 @@ async function preparedScript(date, slots, room) {
   S.pendingKeys = rows.flatMap(storyKeys);
   if (lang.id === 'ja') {
     rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
-    /* A headline githito.xapi has not put into English yet: the page asks for it, briefly. Without it the card is Japanese only. */
+    /* A headline that came without its English (githito.xapi is refused by the translator where it runs):
+       the page has it from an earlier video, or asks for it now, briefly. Without it the card is Japanese only. */
     const lack = rows.filter(r => !r.reply && !r.en);
-    if (lack.length) {
-      try { (await timed(translateMany(lack.map(r => r.headline.replace(/【[^】]*】/g, ' ').trim() || r.headline), 'en'), 4000)).forEach((t, i) => { if (t && /[A-Za-z]{3}/.test(t) && !/[\u3040-\u30ff]/.test(t)) lack[i].en = t; }); }
-      catch (e) { console.warn(e); }
+    const known = englishKept();
+    lack.forEach(r => { if (known[r.link]) r.en = known[r.link]; });
+    const ask = lack.filter(r => !r.en);
+    if (ask.length) await timed(englishFor(ask.map(r => ({ key: r.link, text: r.headline }))), 4500).then(got => ask.forEach(r => { if (got[r.link]) r.en = got[r.link]; })).catch(e => console.warn(e));
+    /* The headlines that come next are asked for in the background, so the next video does not wait. */
+    if (prep.play) {
+      const headById = new Map(prep.heads.map(x => [String(x.id), x]));
+      const next = (prep.play.news || []).map(e => headById.get(String(e).slice(1))).filter(x => x && !x.e && !seen(x) && !known[replyLink(x)] && !rows.some(r => r.link === replyLink(x))).slice(0, 30);
+      if (next.length) englishFor(next.map(x => ({ key: replyLink(x), text: String(x.t) }))).catch(() => {});
     }
   }
   else {
