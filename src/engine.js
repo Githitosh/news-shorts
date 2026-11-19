@@ -608,10 +608,9 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.fillRect(P.left, P.rule1, P.right - P.left, P.rule);
     ctx.font = font(900, L.Sh, F_SERIF);
     L.head.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.head.sx, 'center'));
-    ctx.fillRect(L.ruleX[0], L.rule, L.ruleX[1] - L.ruleX[0], P.rule);
+    /* No rules in the middle of the card: only the one under the top line and the one above the foot. */
     L.sub.forEach(l => subLine(ctx, l.t, L.Ss, l.base, L.cxHead));
     if (P.layout === 'columns') ctx.fillRect(P.divider - 1, P.box.top + 10, 2, P.box.bottom - P.box.top - 20);
-    else ctx.fillRect(P.cx - P.short.w / 2, L.short, P.short.w, P.rule);
     ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
     ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
     textX(ctx, it.foot, P.left, P.foot.base, P.foot.sx, 'left');
@@ -621,7 +620,6 @@ function drawItem(ctx, show, i, t, bgs) {
   if (a2 > 0) {
     ctx.globalAlpha = a2 * a1;
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
-    if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
   }
   if (a3 > 0 && it.tags.length) {

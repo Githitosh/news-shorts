@@ -51,6 +51,7 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 #lineup.live { border-color: var(--acc); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 #storyLink { color: var(--acc); }
+.caption:empty { display: none; }
 .caption.err { color: #ff9b8a; }
 #unmute {
   position: absolute; z-index: 2; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -148,7 +149,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="music" id="walls"></div>
     <p class="music-label">Music</p>
     <div class="music" id="music"></div>
-    <p id="caption" class="caption">Opening the news video…</p>
+    <p id="caption" class="caption"></p>
   </section>
 
   <div id="studio" class="studio" hidden>
@@ -292,9 +293,13 @@ const LOOK = { uniform: true, jp: 2, get lang() { const el = document.getElement
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
+/* What is being searched ("Searching the news", "Reading the text"…) is not shown under the video: the
+   Update button already says that a video is being made. It still shows on the Settings page. With
+   nothing to say, the line under the video takes no room. */
+const PROGRESS = /^(?:Searching|Selecting|Reading|Opening|Adding|Loading)\b/;
 function say(msg, err) {
   $('status').textContent = msg; $('status').classList.toggle('err', !!err);
-  const c = $('caption'); if (c) { c.textContent = msg; c.classList.toggle('err', !!err); }
+  const c = $('caption'); if (c) { c.textContent = !err && PROGRESS.test(msg || '') ? '' : (msg || ''); c.classList.toggle('err', !!err); }
   console.log('[news-shorts]', msg);
 }
 function wrapCanvas(text, x, y, width, lineH, maxLines) {

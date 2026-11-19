@@ -28,6 +28,7 @@ canvas#cv { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; bac
 button { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: 700 15px "Noto Sans JP",sans-serif; padding: 11px 14px; border-radius: 10px; cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 10px auto 0; }
+.caption:empty { display: none; }
 .caption.err { color: #ff9b8a; }
 #prog { height: 4px; background: var(--line); border-radius: 2px; margin: 10px auto 0; max-width: 100%; overflow: hidden; }
 #prog i { display: block; height: 100%; width: 0; background: var(--acc); }
@@ -55,7 +56,7 @@ button:disabled { opacity: .45; cursor: default; }
     <span id="time">0.0 / 0.0</span>
   </div>
   <div id="prog"><i></i></div>
-  <p id="caption" class="caption">Opening the news video…</p>
+  <p id="caption" class="caption"></p>
 </main>
 <script>
 /* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story, or 4.2 / 5.2. */
@@ -668,10 +669,9 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.fillRect(P.left, P.rule1, P.right - P.left, P.rule);
     ctx.font = font(900, L.Sh, F_SERIF);
     L.head.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.head.sx, 'center'));
-    ctx.fillRect(L.ruleX[0], L.rule, L.ruleX[1] - L.ruleX[0], P.rule);
+    /* No rules in the middle of the card: only the one under the top line and the one above the foot. */
     L.sub.forEach(l => subLine(ctx, l.t, L.Ss, l.base, L.cxHead));
     if (P.layout === 'columns') ctx.fillRect(P.divider - 1, P.box.top + 10, 2, P.box.bottom - P.box.top - 20);
-    else ctx.fillRect(P.cx - P.short.w / 2, L.short, P.short.w, P.rule);
     ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
     ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
     textX(ctx, it.foot, P.left, P.foot.base, P.foot.sx, 'left');
@@ -681,7 +681,6 @@ function drawItem(ctx, show, i, t, bgs) {
   if (a2 > 0) {
     ctx.globalAlpha = a2 * a1;
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
-    if (P.layout === 'columns' && L.jp.length) ctx.fillRect(L.cxJp - P.short.w / 2, L.short, P.short.w, P.rule);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
   }
   if (a3 > 0 && it.tags.length) {
@@ -738,9 +737,11 @@ const FEEDS = [
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pad2 = n => String(n).padStart(2, '0');
+/* What is being searched is not shown under the video; the button already says a video is being made. */
+const PROGRESS = /^(?:Searching|Selecting|Reading|Opening|Adding|Loading)\b/;
 function say(msg, err) {
   const el = $('caption');
-  el.textContent = msg || '';
+  el.textContent = !err && PROGRESS.test(msg || '') ? '' : (msg || '');
   el.classList.toggle('err', !!err);
 }
 function progress(p) { $('prog').firstElementChild.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
