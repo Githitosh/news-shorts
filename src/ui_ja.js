@@ -8,7 +8,7 @@
 
 const JA = {
   // Header and buttons
-  'Humor': 'ユーモア', 'News': 'ニュース', 'To Reply News': 'リプライニュースへ',
+  'Humor': 'ユーモア', 'News': 'ニュース', 'To Reply News': 'リプライニュースへ', 'Reply News': 'リプライニュース', 'Terms of Use': '利用規約',
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
@@ -19,7 +19,10 @@ const JA = {
   // Wallpapers and music
   'Morning': '朝', 'Bright': '明るい', 'Day': '昼', 'Evening': '夕方', 'Night': '夜', 'Pop': 'ポップ',
   // Settings
-  'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
+  'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定', 'Reply News settings': 'リプライニュースの設定',
+  'These settings are for News only. Reply News keeps its own.': 'この設定はニュース専用です。リプライニュースには別の設定があります。',
+  'These settings are for Reply News only. News keeps its own.': 'この設定はリプライニュース専用です。ニュースには別の設定があります。',
+  'News plays the headlines githito.xapi collects from X every half hour. A story that has played does not play again.': 'ニュースは、githito.xapi が30分ごとにXから集めた見出しを流します。一度流したニュースは二度と流しません。',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',
   'These settings are for Humor only. News keeps its own.': 'この設定はユーモア専用です。ニュースには別の設定があります。',
   'Color': '色', 'White': '白', 'Beige': 'ベージュ', 'Pink': 'ピンク', 'Sky blue': '水色', 'Mint': 'ミント', 'Dark': 'ダーク',

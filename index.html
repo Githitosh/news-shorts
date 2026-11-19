@@ -51,6 +51,8 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 #storyLink { color: var(--acc); }
 .caption:empty { display: none; }
+.terms-foot { text-align: center; margin: 28px auto 0; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); font-size: 13px; }
+.terms-foot a { color: var(--mute); text-decoration: underline; }
 .caption.err { color: #ff9b8a; }
 #unmute {
   position: absolute; z-index: 2; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -159,7 +161,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
       <p class="set-title">News settings</p>
-      <p class="note">These settings are for News only. Humor keeps its own.</p>
+      <p class="note">These settings are for News only. Reply News keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -172,12 +174,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="country"></select>
       <label for="lang">Language</label>
       <select id="lang"></select>
-      <label for="feed">Feed</label>
-      <select id="feed">
+      <select id="feed" hidden>
         <option value="news">News</option>
-        <option value="x">X posts</option>
       </select>
-      <p class="note">News plays the headlines from X, without replies. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.</p>
+      <p class="note">News plays the headlines githito.xapi collects from X every half hour. A story that has played does not play again.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
@@ -235,6 +235,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="copySrc">Copy sources</button>
     </details>
   </div>
+<footer class="terms-foot"><a href="terms.html">Terms of Use</a></footer>
 </main>
 
 <script>/* mp4-muxer 5.2.2 (MIT License, Copyright (c) 2023 Vanilagy) — lib/mp4-muxer.LICENSE */
@@ -2153,7 +2154,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 
 const JA = {
   // Header and buttons
-  'Humor': 'ユーモア', 'News': 'ニュース', 'To Reply News': 'リプライニュースへ',
+  'Humor': 'ユーモア', 'News': 'ニュース', 'To Reply News': 'リプライニュースへ', 'Reply News': 'リプライニュース', 'Terms of Use': '利用規約',
   'Back to video': '動画に戻る', 'Play': '再生', 'Pause': '一時停止', 'Update': '更新', 'Creating…': '作成中…',
   'Full screen': '全画面', 'Exit': '全画面を終了', 'Sound': '音', 'Tap for sound': 'タップで音が出ます',
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
@@ -2164,7 +2165,10 @@ const JA = {
   // Wallpapers and music
   'Morning': '朝', 'Bright': '明るい', 'Day': '昼', 'Evening': '夕方', 'Night': '夜', 'Pop': 'ポップ',
   // Settings
-  'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
+  'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定', 'Reply News settings': 'リプライニュースの設定',
+  'These settings are for News only. Reply News keeps its own.': 'この設定はニュース専用です。リプライニュースには別の設定があります。',
+  'These settings are for Reply News only. News keeps its own.': 'この設定はリプライニュース専用です。ニュースには別の設定があります。',
+  'News plays the headlines githito.xapi collects from X every half hour. A story that has played does not play again.': 'ニュースは、githito.xapi が30分ごとにXから集めた見出しを流します。一度流したニュースは二度と流しません。',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',
   'These settings are for Humor only. News keeps its own.': 'この設定はユーモア専用です。ニュースには別の設定があります。',
   'Color': '色', 'White': '白', 'Beige': 'ベージュ', 'Pink': 'ピンク', 'Sky blue': '水色', 'Mint': 'ミント', 'Dark': 'ダーク',
@@ -3772,10 +3776,10 @@ function market() {
   const lang = LANGS.find(l => l.id === (($('lang') && $('lang').value) || '')) || LANGS.find(l => l.id === country.lang) || LANGS[0];
   return { country, lang };
 }
+/* The page reads githito.xapi only, so there is one feed: the news. (There used to be an "X posts" feed
+   that asked X from the page.) */
 function feedMode() {
-  const el = $('feed');
-  const v = (el && el.value) || store.get('feed', 'news');
-  return v === 'x' ? 'x' : 'news';
+  return 'news';
 }
 function cleanHandle(v) {
   const raw = String(v || '').trim();
@@ -4225,10 +4229,11 @@ function loadNewsRows(rss, cat) {
     start();
   });
 }
+/* The page reads githito.xapi only. X is not asked from the page any more: githito.xapi collects every
+   half hour (also for the accounts sent to it from Settings) and the page plays what it prepared.
+   Everything that used to ask X gets nothing here. */
 async function fxJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.json();
+  return null;
 }
 async function followHandles(handle) {
   const data = await fxJson('https://api.fxtwitter.com/2/profile/' + encodeURIComponent(handle) + '/following');
@@ -4464,6 +4469,8 @@ function readableLine(text) {
   return /[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? line : '';
 }
 async function readJina(url) {
+  /* X's own pages are not read from the page (see fxJson). */
+  if (/^https:\/\/r\.jina\.ai\/https?:\/\/(?:x|twitter)\.com\//i.test(String(url))) return '';
   const res = await Promise.race([
     fetch(url),
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 9000)),
@@ -6636,7 +6643,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '8323ecad576e';
+  const BUILD = 'd49840ed7baf';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

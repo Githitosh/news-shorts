@@ -36,6 +36,14 @@ decoded file sample for sample; an audio element stopped for a moment at each re
 length and exporting leave it playing where it is. On News and the Japanese page Pause stops it; on Humor
 the Sound button turns it off and on. Humor has the same three songs; the Japanese page plays 1.
 
+## The pages read githito.xapi only
+
+The pages ask X nothing themselves: News and Reply News (the page at `humor/`, formerly called Humor) play
+what [githito.xapi](https://github.com/Githitosh/githito.xapi) collected. Whatever in the pages used to ask
+FxTwitter, Bluesky or X's own pages gets nothing now, the "X posts" feed is gone from the News settings, and
+on Reply News every lineup plays the prepared stories. The terms of use are in `terms.html`, linked at the
+foot of both pages.
+
 ## Where the news comes from
 
 **In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it

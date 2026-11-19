@@ -7,7 +7,7 @@
 <script>/* The chosen color, before the page draws, so it does not flash another color. */
 document.documentElement.dataset.theme = 'dark';
 try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.humor.theme') || 'dark'; } catch (e) {}</script>
-<title>Humor</title>
+<title>Reply News</title>
 <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,6 +82,8 @@ button:disabled { opacity: .45; cursor: default; }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin-top: 10px; margin-bottom: 0; }
 .caption.err { color: #9a3b28; }
 .caption:empty { display: none; }
+.terms-foot { text-align: center; margin: 28px auto 0; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); font-size: 13px; }
+.terms-foot a { color: var(--mute); text-decoration: underline; }
 #sprog i { display: block; height: 100%; width: 0; background: var(--acc); }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin-top: 14px; margin-bottom: 4px; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -133,7 +135,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">Humor</button></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
+<header><div><button type="button" id="home" class="title">Reply News</button></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <div id="watch" class="watch">
@@ -166,8 +168,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   <div id="studio" class="studio" hidden>
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
-      <p class="set-title">Humor settings</p>
-      <p class="note">These settings are for Humor only. News keeps its own.</p>
+      <p class="set-title">Reply News settings</p>
+      <p class="note">These settings are for Reply News only. News keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -242,6 +244,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button id="copySrc">Copy sources</button>
     </details>
   </div>
+<footer class="terms-foot"><a href="../terms.html">Terms of Use</a></footer>
 </main>
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
@@ -831,10 +834,11 @@ async function gdeltRows(query, cat, source) {
     })).filter(r => r.headline);
   } catch (e) { console.warn(e); return []; }
 }
+/* The page reads githito.xapi only. X (and Bluesky) are not asked from the page any more: githito.xapi
+   collects every half hour and the page plays what it prepared. Everything that used to ask gets
+   nothing here. */
 async function fxJson(url) {
-  const res = await withTimeout(fetch(url), 9000);
-  if (!res.ok) return null;
-  return res.json();
+  return null;
 }
 function rowFromStatus(st) {
   if (!st || (st.type && st.type !== 'status')) return null;
@@ -1914,16 +1918,13 @@ async function collect() {
   const mode = feedMode();
   const N = total();
   const slots = parseLineup(lineupText());
-  /* Without a lineup, or with Romance alone, the video is made of the stories prepared ahead: nothing
-     is searched, so it starts at once. A lineup of other genres, a past date, or X switched off in
-     Sources still search as before. */
-  if (!pastDay() && sourceOn('x') && (!slots.length || slots.every(s => s.type === 'romance'))) {
+  /* The video is made of the stories githito.xapi prepared, whatever the lineup says: the page searches
+     nothing itself (X is not asked from here), so it starts at once. With nothing prepared it says so. */
+  {
     const rows = await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
-    if (S.again) return null;
-    if (rows.length) {
-      const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
-      return { date: chosenDate(), items, market: country.name + ' · ' + lang.name, played: { news: [], jokes: rows.flatMap(r => r.keys) } };
-    }
+    if (S.again || !rows.length) return null;
+    const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
+    return { date: chosenDate(), items, market: country.name + ' · ' + lang.name, played: { news: [], jokes: rows.flatMap(r => r.keys) } };
   }
   const SPECIAL = new Set(['jokes', 'romance', 'travel']);
   const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
