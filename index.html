@@ -3696,6 +3696,17 @@ function tick() {
         if (S.playing) S.raf = requestAnimationFrame(tick);
         return;
       }
+      /* The video is over: the next one is made, from what githito.xapi has that has not played yet (the
+         file is at hand, so it follows at once), and the last picture stays until it is there. With
+         Settings open the same video goes round again, so that nothing changes behind the reader's back. */
+      if (WATCH && $('studio').hidden && !S.nexting) {
+        S.nexting = true;
+        draw(Math.max(0, S.show.duration - 1 / E.FPS));
+        $('seek').value = '1000';
+        Promise.resolve(refreshMarket()).finally(() => { setTimeout(() => { S.nexting = false; }, 3000); });
+        if (S.playing) S.raf = requestAnimationFrame(tick);
+        return;
+      }
       const over = T % S.show.duration;
       restartLoop(over);
       T = over;
@@ -6643,7 +6654,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'd49840ed7baf';
+  const BUILD = '29c539dfe482';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

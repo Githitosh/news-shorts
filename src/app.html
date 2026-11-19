@@ -753,6 +753,17 @@ function tick() {
         if (S.playing) S.raf = requestAnimationFrame(tick);
         return;
       }
+      /* The video is over: the next one is made, from what githito.xapi has that has not played yet (the
+         file is at hand, so it follows at once), and the last picture stays until it is there. With
+         Settings open the same video goes round again, so that nothing changes behind the reader's back. */
+      if (WATCH && $('studio').hidden && !S.nexting) {
+        S.nexting = true;
+        draw(Math.max(0, S.show.duration - 1 / E.FPS));
+        $('seek').value = '1000';
+        Promise.resolve(refreshMarket()).finally(() => { setTimeout(() => { S.nexting = false; }, 3000); });
+        if (S.playing) S.raf = requestAnimationFrame(tick);
+        return;
+      }
       const over = T % S.show.duration;
       restartLoop(over);
       T = over;
