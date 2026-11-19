@@ -38,18 +38,23 @@ Music, under the picture:
 
 ## Where the news comes from
 
-**In Japan the News page plays replies.** Each card is one reply to a piece of news on X, and under it the
-card says which news the reply is about. The replies are collected ahead of time by
-[githito.xapi](https://github.com/Githitosh/githito.xapi) (`news.mjs`, three runs a day, up to 2000 replies
-kept for 72 hours) and read from `v1/news-ja.json`, so a video starts in about a second and Update answers
-at once. A genre chip plays the replies of that genre.
+**In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it
+ahead of time (`news.mjs`, three runs a day) and the page reads one file, `v1/news-ja.json`, so a video starts
+in about a second and Update answers at once.
 
-- Replies are collected for light news only: entertainment, sports, culture, food, science, weather.
-  News of politics, government, other countries' affairs, crimes, accidents and disasters has no replies
-  in the file; for such a genre (Politics, Public safety) the page searches the news and shows headlines.
-- The page searches the news itself, as described below, when the file cannot be read, with another
-  edition, with the X source switched off, with X accounts added, or with a lineup line that is not a genre.
-- There is no pull down to refresh. Update makes a new video.
+- **With replies** (the default): a card is an earnest reply to a piece of news, and a small line under it
+  says which news. News that gets no replies (politics, public safety) plays as a headline; three cards in
+  ten are such news.
+- **News only**: every card is a headline from a news account on X. The switch is under the video
+  (リプライあり / リプライなし) and in Settings.
+- A genre chip plays that genre: its replies, or its headlines when the genre has no replies.
+- **Sources**: X only, unless the web or a paper from abroad is switched on in Settings. A genre keeps to
+  these switches (it used to read web feeds whatever they said).
+- **Add a medium, a website or a keyword** (Settings): type a company name, a medium or `example.com`, press
+  Search, and add what was found. Its news is searched on the web (Google News and Bing News) and plays
+  first in every video, up to half of it. Up to eight can be added.
+- With another edition, with X accounts added, or with a lineup line that is not a genre, the page
+  searches as described below. There is no pull down to refresh. Update makes a new video.
 
 The searches the page makes itself:
 

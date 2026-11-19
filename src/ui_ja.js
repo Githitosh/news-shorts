@@ -51,6 +51,18 @@ const JA = {
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
   'X accounts': 'Xアカウント', 'Add': '追加',
+  'Replies': 'リプライ', 'With replies': 'リプライあり', 'News only': 'リプライなし',
+  'News plays the news from X. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.':
+    'ニュースは、Xのニュースを流します。一度流したニュースは二度と流しません。Xの投稿を選ぶと、ニュースは流さず、ラインナップと下のアカウントの投稿を流します。',
+  'With replies, a card is an earnest reply to a piece of news, and under it the card says which news. News of politics and public safety plays without replies. News only plays the headlines.':
+    '「リプライあり」は、ニュースへの真面目なリプライを1枚ずつ流し、その下にどのニュースへのコメントかを出します。政治と治安のニュースは、リプライなしで流します。「リプライなし」は、見出しだけを流します。',
+  'X is the source. The web and the papers from abroad play only when they are switched on here.':
+    '情報源はXです。ウェブと海外のメディアは、ここでオンにしたときだけ流します。',
+  'Add a medium, a website or a keyword': 'メディア・サイト・キーワードを追加', 'Company name, example.com': '会社名、example.com', 'Search': '検索', 'Searching…': '検索中…',
+  'Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.':
+    '会社名、メディア名、サイトのアドレスなどを入れて「検索」を押します。見つかったものを追加すると、そのニュースが毎回の動画の最初に流れます。名前を押すと外せます。',
+  'Or one medium only:': 'メディアを1つだけ追加する場合：', 'Eight is the limit': '追加できるのは8つまでです',
+  'No news from X yet.': 'Xのニュースがまだありません。', 'No news from X for this genre yet.': 'このジャンルのXのニュースはまだありません。',
   'Add an account to load its posts. Press Add again for another account. Press a name to remove it.':
     'アカウントを追加すると、その投稿を読み込みます。別のアカウントは、もう一度「追加」を押します。名前を押すと外せます。',
   'Add an account to load funny replies to its posts. Press Add again for another account. Press a name to remove it.':
@@ -96,6 +108,12 @@ const PATTERNS = [
   [/^Loading (@\w+)$/, m => `${m[1]}を読み込んでいます`],
   [/^Removed (@\w+)$/, m => `${m[1]}を外しました`],
   [/^Already added (@\w+)$/, m => `${m[1]}はもう追加されています`],
+  [/^Found (\d+) stories$/, m => `${m[1]}件のニュースが見つかりました`],
+  [/^Add: (.+)$/, m => `「${m[1]}」を追加`],
+  [/^Added (.+)$/, m => `${m[1]}を追加しました`],
+  [/^Removed (.+)$/, m => `${m[1]}を外しました`],
+  [/^Already added (.+)$/, m => `${m[1]}はもう追加されています`],
+  [/^No news found for (.+)\. Try other words, or a website such as example\.com\.$/, m => `「${m[1]}」のニュースは見つかりませんでした。別の言葉か、example.com のようなサイトのアドレスで試してください。`],
   [/^No posts from (.+) yet$/, m => `${m[1]}の投稿はまだありません`],
   [/^Could not read the JSON: (.*)$/, m => `JSONを読めませんでした：${m[1]}`],
   [/^Export failed: (.*)$/, m => `書き出しに失敗しました：${m[1]}`],

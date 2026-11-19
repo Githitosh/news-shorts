@@ -110,6 +110,10 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .x-add { display: flex; gap: 8px; align-items: center; }
 .x-add input { flex: 1 1 auto; width: auto; }
 .x-add button { flex: 0 0 auto; }
+.found { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; display: grid; gap: 6px; font-size: 13px; }
+.found p { margin: 0; }
+.found .found-story { color: var(--mute); line-height: 1.5; }
+.found button { justify-self: start; padding: 8px 12px; font-size: 13px; }
 #xAccounts { margin-top: 8px; }
 #xAccounts button { flex: 0 1 auto; }
 .filter-row { display: flex; align-items: center; gap: 8px; }
@@ -140,6 +144,8 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
+    <p class="music-label">Replies</p>
+    <div class="music" id="replyModes"></div>
     <p class="music-label">Items</p>
     <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
@@ -173,7 +179,13 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <option value="news">News</option>
         <option value="x">X posts</option>
       </select>
-      <p class="note">News plays the reports, with no comments. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below. Japanese text is shown large.</p>
+      <p class="note">News plays the news from X. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.</p>
+      <label for="replies">Replies</label>
+      <select id="replies">
+        <option value="on">With replies</option>
+        <option value="off">News only</option>
+      </select>
+      <p class="note">With replies, a card is an earnest reply to a piece of news, and under it the card says which news. News of politics and public safety plays without replies. News only plays the headlines.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
@@ -184,6 +196,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
+      <p class="note">X is the source. The web and the papers from abroad play only when they are switched on here.</p>
+      <label for="mediaQ">Add a medium, a website or a keyword</label>
+      <div class="x-add">
+        <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="Company name, example.com">
+        <button type="button" id="mediaFind">Search</button>
+      </div>
+      <div id="mediaFound" class="found" hidden></div>
+      <div id="myMedia" class="music"></div>
+      <p class="note">Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.</p>
       <label for="xUser">X accounts</label>
       <div class="x-add">
         <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
@@ -1017,7 +1038,14 @@ function sourceOn(id) {
   const box = document.querySelector('.srcf[value="' + id + '"]');
   if (box) return box.checked;
   const saved = savedJson('sourcesOn');
-  return saved[id] !== false;
+  return typeof saved[id] === 'boolean' ? saved[id] : sourceDefault(id);
+}
+/* In Japan the page's source is X: the web and the papers from abroad play when they are switched on.
+   Other editions have no prepared file from X, so there everything is on until switched off. */
+function sourceDefault(id) {
+  if (id === 'x') return true;
+  const c = store.get('country', '') || ((navigator.language || 'en').toLowerCase().startsWith('ja') ? 'JP' : 'US');
+  return c !== 'JP';
 }
 function matchedGenre(text, countryId) {
   const hay = String(text || '').toLowerCase();
@@ -1932,7 +1960,8 @@ function classifyRequest(text) {
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
   if (genre) return Object.assign(requestForGenre(genre), { label: name });
   if (/スポーツ|^sports$/.test(low)) return requestForGenre(GENRES.find(g => g.id === 'sports'));
-  return searchSlot(name, name.toUpperCase().slice(0, 16), name);
+  /* Words typed by the user: searched on the web whatever the source switches say. */
+  return Object.assign(searchSlot(name, name.toUpperCase().slice(0, 16), name), { own: true });
 }
 /* A request that reads several sources together: a search of Google News and of Bing News for the words,
    and whatever else is given (Yahoo! News' topics, a BBC section). GDELT is asked only when these are short. */
@@ -2054,13 +2083,16 @@ async function rowsForSlot(slot) {
       if (slot.hint) rows = rows.filter(r => slot.hint.test(r.headline));
       if (rows.length < need && slot.gdelt) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
     } else if (slot.type === 'feeds') {
-      const lists = await Promise.all(slot.feeds.map(f => cachedNews(f.url).then(items => {
+      /* A genre keeps to the source switches: with the web switched off it reads no web feed. Words the
+         user typed themselves are searched on the web all the same. */
+      const feeds = slot.feeds.filter(f => slot.own || sourceOn(f.source === 'BBC' ? 'bbc' : 'web'));
+      const lists = await Promise.all(feeds.map(f => cachedNews(f.url).then(items => {
         const got = rowsFromItems(items, f.source, slot.cat);
         return f.hint ? got.filter(r => f.hint.test(r.headline)) : got;
       }).catch(() => [])));
       rows = mergeRows(weave(lists), []);
-      if (rows.length < need && slot.gdelt) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
-    } else if (slot.type === 'gdelt') {
+      if (rows.length < need && slot.gdelt && (slot.own || sourceOn('web'))) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
+    } else if (slot.type === 'gdelt' && (slot.own || sourceOn('web'))) {
       rows = rowsFromItems(await cachedNews(searchFeed(slot.q)), '', slot.cat);
       if (rows.length < need) rows = mergeRows(rows, await gdeltRows(slot.q, slot.cat, slot.source));
     }
@@ -2215,38 +2247,42 @@ function withCoffee(rows) {
   return [news[0], { coffee: true, about: news[0] }, ...news.slice(1)];
 }
 /* ---------- replies to the news, prepared ahead ---------- */
-/* githito.xapi collects what people reply to the news on X three times a day and keeps up to 2000
-   replies in one file, each with the news it answers. The page reads that file and plays at once:
-   every card is one reply, and under it the card says which news the reply is about. A copy stays in
-   the browser, so the next visit starts without waiting for the file. With another edition, the X
-   source switched off, X accounts added, or a line in the lineup that is not a genre, the page
-   searches the news as before; so it does when the file cannot be read. */
+/* githito.xapi collects, three times a day, what people reply to the news on X (earnest replies, up to
+   2000, each with the news it answers) and the news accounts' own posts (the headlines). The page reads
+   that one file and plays at once. A copy stays in the browser, so the next visit starts without
+   waiting for the file.
+   - With replies: a card is one reply, and under it the card says which news it answers. News that
+     gets no replies (politics, public safety) plays as a headline; three cards in ten are such news.
+   - News only: every card is a headline from X.
+   With another edition, X accounts added, or a lineup line that is not a genre, the page searches as
+   before. When the file cannot be read it searches the web only if a web source is switched on. */
 const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
-let PREP = { items: [], news: {}, at: 0, part: false };
+let PREP = { items: [], news: {}, heads: [], at: 0, part: false };
 let prepLoading = null;
 const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
+const repliesOn = () => store.get('replies', 'on') !== 'off';
 function prepGood(d) {
   const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
   const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h);
-  return { items, news };
+  const heads = (Array.isArray(d && d.heads) ? d.heads : []).filter(x => x && x.id && x.h && x.t);
+  return { items, news, heads };
 }
-/* The copy for the next visit: 300 replies, those not played yet first, with their news. */
+/* The copy for the next visit: 300 replies and 200 headlines, those not played yet first. */
 function keepPrep() {
   try {
     const past = seenKeys();
-    const fresh = PREP.items.filter(x => !past.has('u:' + replyLink(x)));
-    const rest = new Set(fresh);
-    const items = fresh.concat(PREP.items.filter(x => !rest.has(x))).slice(0, 300);
+    const freshFirst = list => { const a = list.filter(x => !past.has('u:' + replyLink(x))); const s = new Set(a); return a.concat(list.filter(x => !s.has(x))); };
+    const items = freshFirst(PREP.items).slice(0, 300);
     const news = {};
     items.forEach(x => { news[x.n] = PREP.news[x.n]; });
-    store.set('prep.news', JSON.stringify({ at: PREP.at, items, news }));
+    store.set('prep.news', JSON.stringify({ at: PREP.at, items, news, heads: freshFirst(PREP.heads).slice(0, 200) }));
   } catch (e) {}
 }
 function keptPrep() {
   try {
     const d = JSON.parse(store.get('prep.news', 'null'));
     const g = prepGood(d);
-    if (g.items.length) PREP = { items: g.items, news: g.news, at: Number(d.at) || 0, part: true };
+    if (g.items.length || g.heads.length) PREP = { ...g, at: Number(d.at) || 0, part: true };
   } catch (e) {}
 }
 function loadPrep() {
@@ -2256,8 +2292,8 @@ function loadPrep() {
       const res = await timed(fetch(XAPI + 'news-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
       if (!res.ok) return false;
       const g = prepGood(await res.json());
-      if (!g.items.length) return false;
-      PREP = { items: g.items, news: g.news, at: Date.now(), part: false };
+      if (!g.items.length && !g.heads.length) return false;
+      PREP = { ...g, at: Date.now(), part: false };
       keepPrep();
       return true;
     } catch (e) { console.warn(e); return false; }
@@ -2268,27 +2304,33 @@ function loadPrep() {
 /* The kept copy at once and the whole file behind it; the file itself when there is no copy; a fresh
    read when what is held is more than ten minutes old. */
 async function prepared() {
-  if (!PREP.items.length) keptPrep();
-  if (!PREP.items.length) await loadPrep();
+  const any = () => PREP.items.length || PREP.heads.length;
+  if (!any()) keptPrep();
+  if (!any()) await loadPrep();
   else if (PREP.part || Date.now() - PREP.at > 600000) { PREP.part = false; PREP.at = Date.now(); loadPrep(); }
   return PREP;
 }
-/* Whether Update can be answered from the prepared replies (see above). */
+/* Whether Update can be answered from the prepared file (see above). */
 function prepWanted() {
   if (feedMode() === 'x' || market().country.id !== 'JP' || !sourceOn('x') || xAccounts().length) return false;
   return true;
 }
 function prepAtHand() {
-  if (!prepWanted()) return false;
-  if (PREP.items.length) return true;
+  if (!prepWanted() || myMedia().length) return false;
+  if (PREP.items.length || PREP.heads.length) return true;
   try { return !!store.get('prep.news', ''); } catch (e) { return false; }
 }
 const slotGenre = slot => {
-  if (!slot || slot.type !== 'feeds') return '';
+  if (!slot || slot.type !== 'feeds' || slot.own) return '';
   if (slot.gid) return slot.gid;
   const g = GENRES.find(x => x.name.toUpperCase() === String(slot.cat || '').toUpperCase());
   return g ? g.id : '';
 };
+/* The word a card opens on: the news' own word, not a label such as 速報. */
+function newsWord(headline, en) {
+  const plainNews = String(headline || '').replace(/【[^】]*】/g, ' ').trim() || String(headline || '');
+  return !en && /[぀-ヿ一-鿿]/.test(plainNews) ? jaWord(plainNews) : storyWord(plainNews, '');
+}
 /* One reply becomes one card: the reply large, and under it which news it answers. The card opens on
    the news' own word; the corner names the paper. */
 function replyCard(row, langId) {
@@ -2300,11 +2342,9 @@ function replyCard(row, langId) {
   const shown = news.replace(/^【([^【】]+)】$/, '$1');
   const chars = [...shown];
   const short = chars.length > 40 ? chars.slice(0, 39).join('') + '…' : shown;
-  const plainNews = String(r.news || '').replace(/【[^】]*】/g, ' ').trim() || String(r.news || '');
-  const word = !en && /[぀-ヿ一-鿿]/.test(plainNews) ? jaWord(plainNews) : storyWord(news, '');
   const g = GENRES.find(x => x.id === r.genre);
   card.jp = (card.jp || []).filter(t => t && t !== card.kw);
-  card.kw = word || card.kw;
+  card.kw = newsWord(r.news, en) || card.kw;
   card.cat = g ? g.name.toUpperCase() : 'REPLY';
   card.topic = r.name || 'X';
   card.tags = [];
@@ -2313,10 +2353,21 @@ function replyCard(row, langId) {
   card.note = en ? 'A reply to the news: ' + short : '「' + short + '」へのコメント';
   return card;
 }
-/* A video from the prepared replies, or null when the page should search instead. Replies not played
-   yet come first, newer news before older; one reply for one piece of news, nobody twice, and no paper
-   or genre taking most of the video. */
-async function preparedScript(date, slots) {
+/* A headline from X becomes a card of its own: no reply, the corner names the paper. */
+function headCard(row, langId) {
+  const card = storyFrom(row, row._en || row.headline, row._local || row.headline, langId);
+  const g = GENRES.find(x => x.id === row.genre);
+  card.kw = newsWord(row.headline, langId === 'en') || card.kw;
+  card.cat = g ? g.name.toUpperCase() : 'NEWS';
+  card.topic = row.name || 'X';
+  card.tags = [];
+  return card;
+}
+const NO_REPLY_GENRES = new Set(['politics', 'safety']);
+/* A video from the prepared file, with room for `room` cards, or null when the page should search
+   instead. What has not played yet comes first, newer news before older; one reply for one piece of
+   news, nobody twice, and no paper or genre taking most of the video. */
+async function preparedScript(date, slots, room) {
   if (!prepWanted()) return null;
   const { country, lang } = market();
   const genres = genreChoices();
@@ -2324,70 +2375,204 @@ async function preparedScript(date, slots) {
   const wants = slots.map(s => ({ gid: slotGenre(s), count: s.count || 1 }));
   if (wants.some(w => !w.gid)) return null;
   const prep = await prepared();
-  if (!prep.items.length) return null;
-  const N = total();
+  if (!prep.items.length && !prep.heads.length) return null;
+  const N = Math.max(1, room || total());
   const past = seenKeys();
+  const withReplies = repliesOn();
   const blocked = t => violentHidden() && VIOLENT.test(t);
   const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
-  const pool = prep.items.filter(x => {
-    const a = prep.news[x.n];
-    return !blocked(x.t) && !blocked(a.t) && (!allowed || allowed.has(a.g));
-  });
-  const seen = x => past.has('u:' + replyLink(x)) || past.has(String(x.t).toLowerCase().slice(0, 90));
   const now = Date.now();
-  const rank = x => {
-    const age = (now - Date.parse(prep.news[x.n].at || x.at || 0)) / 3600e3;
-    return (Number(x.s) || 0) + Math.max(0, 12 - (Number.isFinite(age) ? age : 36) / 3) + Math.random() * 8;
-  };
-  const order = list => list.map(x => [rank(x), x]).sort((p, q) => q[0] - p[0]).map(p => p[1]);
-  const unseen = order(pool.filter(x => !seen(x)));
-  const all = unseen.concat(order(pool.filter(seen)));
+  const seen = x => past.has('u:' + replyLink(x)) || past.has(String(x.t).toLowerCase().slice(0, 90));
+  const ageOf = at => { const h = (now - Date.parse(at || 0)) / 3600e3; return Number.isFinite(h) ? h : 36; };
+  const sorted = (list, rank) => { const o = l => l.map(x => [rank(x), x]).sort((p, q) => q[0] - p[0]).map(p => p[1]); return o(list.filter(x => !seen(x))).concat(o(list.filter(seen))); };
+  /* Replies: the reply's own score, the news' age, and chance. */
+  const replies = sorted(prep.items.filter(x => { const a = prep.news[x.n]; return !blocked(x.t) && !blocked(a.t) && (!allowed || allowed.has(a.g)); }),
+    x => (Number(x.s) || 0) + Math.max(0, 12 - ageOf(prep.news[x.n].at || x.at) / 3) + Math.random() * 8);
+  /* Headlines: the newest first, with a little chance so that Update changes the video. */
+  const heads = sorted(prep.heads.filter(x => !blocked(x.t) && (!allowed || allowed.has(x.g))), x => -ageOf(x.at || x.found) + Math.random() * 3);
   const picked = [];
   const usedNews = new Set();
   const people = new Set();
+  const lines = new Set();
   const bySource = {};
   const byGenre = {};
-  const take = (list, n, caps) => {
+  const count = (a, g) => { bySource[a] = (bySource[a] || 0) + 1; byGenre[g || ''] = (byGenre[g || ''] || 0) + 1; };
+  const over = (a, g, caps) => caps && ((bySource[a] || 0) >= caps.source || (g && (byGenre[g] || 0) >= caps.genre));
+  const takeReplies = (list, n, caps) => {
+    let got = 0;
     for (const x of list) {
-      if (n <= 0 || picked.length >= N) break;
+      if (got >= n || picked.length >= N) break;
       const a = prep.news[x.n];
       const who = String(x.h).toLowerCase();
-      if (usedNews.has(x.n) || people.has(who)) continue;
-      if (caps && ((bySource[a.n] || 0) >= caps.source || (a.g && (byGenre[a.g] || 0) >= caps.genre))) continue;
-      usedNews.add(x.n);
-      people.add(who);
-      bySource[a.n] = (bySource[a.n] || 0) + 1;
-      byGenre[a.g || ''] = (byGenre[a.g || ''] || 0) + 1;
-      picked.push(x);
-      n--;
+      if (usedNews.has(x.n) || people.has(who) || over(a.n, a.g, caps)) continue;
+      usedNews.add(x.n); people.add(who); count(a.n, a.g);
+      picked.push({ reply: x });
+      got++;
     }
+    return got;
   };
-  if (wants.length) {
-    for (const w of wants) {
-      const before = picked.length;
-      take(all.filter(x => prep.news[x.n].g === w.gid), w.count);
-      if (picked.length === before) return null;
+  const takeHeads = (list, n, caps) => {
+    let got = 0;
+    for (const x of list) {
+      if (got >= n || picked.length >= N) break;
+      const key = String(x.t).replace(/[\s【】「」『』、。・]/g, '').slice(0, 14);
+      if (usedNews.has(x.id) || lines.has(key) || over(x.n || x.h, x.g, caps)) continue;
+      usedNews.add(x.id); lines.add(key); count(x.n || x.h, x.g);
+      picked.push({ head: x });
+      got++;
     }
-    const ids = new Set(wants.map(w => w.gid));
-    take(all.filter(x => ids.has(prep.news[x.n].g)), N);
+    return got;
+  };
+  const caps = { source: Math.max(2, Math.ceil(N / 4)), genre: Math.max(2, Math.ceil(N / 3)) };
+  if (wants.length) {
+    /* Each line of the lineup is a genre: its replies, or its headlines when it has no replies. */
+    for (const w of wants) {
+      const ofGenre = x => (x.g || '') === w.gid;
+      let got = withReplies ? takeReplies(replies.filter(x => ofGenre(prep.news[x.n])), w.count) : 0;
+      if (got < w.count) got += takeHeads(heads.filter(ofGenre), w.count - got);
+      if (!got) { if (sourceOn('web')) return null; throw noNewError('No news from X for this genre yet. Press Update again later.'); }
+    }
+  } else if (withReplies) {
+    /* Seven cards in ten are replies; three are news that gets no replies, as headlines. */
+    const hard = heads.filter(x => NO_REPLY_GENRES.has(x.g));
+    const nHard = Math.min(Math.round(N * 0.3), hard.filter(x => !seen(x)).length || 0);
+    takeReplies(replies, N - nHard, caps);
+    takeReplies(replies, N - nHard - picked.length);
+    takeHeads(hard, nHard, { source: 2, genre: N });
+    if (picked.length < N) takeHeads(heads, N - picked.length, caps);
+    if (picked.length < N) takeHeads(heads, N - picked.length);
   } else {
-    take(unseen, N, { source: Math.max(2, Math.ceil(N / 4)), genre: Math.max(2, Math.ceil(N / 3)) });
-    take(unseen, N);
-    take(all, N);
+    takeHeads(heads, N, caps);
+    takeHeads(heads, N - picked.length);
   }
-  if (picked.length < Math.min(N, 4)) return null;
-  const rows = picked.map(x => {
-    const a = prep.news[x.n];
-    return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
+  if (!picked.length || (!wants.length && picked.length < Math.min(N, 3))) {
+    if (sourceOn('web')) return null;
+    throw noNewError('No news from X yet. Press Update again later.');
+  }
+  /* Headlines are spread among the replies, the first card being news. */
+  const hs = picked.filter(p => p.head), rs = picked.filter(p => p.reply);
+  let order = picked;
+  if (!wants.length && hs.length && rs.length) {
+    order = [];
+    const step = picked.length / hs.length;
+    const at = new Set(hs.map((_, i) => Math.floor(i * step)));
+    for (let i = 0, h = 0, r = 0; i < picked.length; i++) order.push(at.has(i) && h < hs.length ? hs[h++] : (r < rs.length ? rs[r++] : hs[h++]));
+  }
+  const rows = order.filter(Boolean).map(p => {
+    if (p.reply) {
+      const x = p.reply, a = prep.news[x.n];
+      return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
+    }
+    const x = p.head;
+    return { headline: String(x.t).replace(/^【([^【】]+)】$/, '$1'), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '' };
   });
   S.pendingKeys = rows.flatMap(storyKeys);
   if (lang.id === 'ja') rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
   else {
-    /* Another language on the cards: the replies and the news' lines are translated, which takes a moment. */
+    /* Another language on the cards: the words are translated, which takes a moment. */
     await fillText(rows, lang);
-    try { (await translateMany(rows.map(r => r.reply.news), 'en')).forEach((t, i) => { rows[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
+    const rr = rows.filter(r => r.reply);
+    try { (await translateMany(rr.map(r => r.reply.news), 'en')).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
   }
-  return { date, items: rows.map(r => replyCard(r, lang.id)), market: country.name + ' · ' + lang.name };
+  return { date, items: rows.map(r => (r.reply ? replyCard(r, lang.id) : headCard(r, lang.id))), market: country.name + ' · ' + lang.name };
+}
+
+/* ---------- media, websites and keywords the user added ---------- */
+/* X is the page's source. A user can add a medium, a website or a keyword (their own company, say):
+   the page searches the news for it and plays what it finds first, up to half of a video. An added
+   name is searched on the web whatever the source switches say, because it was asked for by name. */
+function myMedia() {
+  try {
+    const list = JSON.parse(store.get('myMedia', '[]'));
+    return (Array.isArray(list) ? list : []).filter(m => m && m.q && ['word', 'site', 'pub'].includes(m.kind)).slice(0, 8);
+  } catch (e) { return []; }
+}
+const mediaName = m => m.name || (m.kind === 'pub' ? m.pub : m.q);
+const sameMedia = (a, b) => a.kind === b.kind && String(a.q).toLowerCase() === String(b.q).toLowerCase() && String(a.pub || '') === String(b.pub || '');
+/* example.com, www.example.co.jp/news, https://example.com : a website. Anything else is words. */
+function domainOf(text) {
+  const m = String(text || '').trim().match(/^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[\/?#].*)?$/i);
+  return m ? m[1].toLowerCase().replace(/^www\./, '') : '';
+}
+function mediaFeeds(m) {
+  const e = edition();
+  const q = m.kind === 'site' ? 'site:' + m.q : m.q;
+  const google = 'https://news.google.com/rss/search?q=' + encodeURIComponent(q + ' when:7d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
+  return [google, bingFeed(q)];
+}
+async function mediaRows(m) {
+  const lists = await Promise.all(mediaFeeds(m).map(u => cachedNews(u).then(items => rowsFromItems(items, '', 'NEWS')).catch(() => [])));
+  let rows = mergeRows(weave(lists), []).filter(r => r.headline && !FOREIGN.test(r.headline) && !(violentHidden() && VIOLENT.test(r.headline)));
+  const low = String(m.q).toLowerCase();
+  /* A medium: its own stories among what was found. A keyword: the stories that name it come first. */
+  if (m.kind === 'pub') rows = rows.filter(r => String(r.source || '').toLowerCase().includes(String(m.pub).toLowerCase()));
+  else if (m.kind === 'word') rows = rows.filter(r => r.headline.toLowerCase().includes(low)).concat(rows.filter(r => !r.headline.toLowerCase().includes(low)));
+  return rows.map(r => ({ ...r, cat: mediaName(m).toUpperCase().slice(0, 16), place: 'top', mine: true }));
+}
+async function myMediaRows(need) {
+  const list = myMedia();
+  if (!list.length || need <= 0) return [];
+  const past = seenKeys();
+  const lists = await Promise.all(list.map(m => mediaRows(m).then(rows => rows.filter(r => !isSeen(r, past))).catch(e => { console.warn(e); return []; })));
+  return mergeRows(weave(lists), []).slice(0, need);
+}
+function paintMedia() {
+  const box = $('myMedia');
+  if (!box) return;
+  box.innerHTML = '';
+  myMedia().forEach(m => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'on';
+    b.textContent = mediaName(m) + ' ×';
+    b.title = 'Remove ' + mediaName(m);
+    b.onclick = () => {
+      store.set('myMedia', JSON.stringify(myMedia().filter(x => !sameMedia(x, m))));
+      paintMedia();
+      say('Removed ' + mediaName(m));
+      refreshMarket();
+    };
+    box.appendChild(b);
+  });
+}
+function addMedia(m) {
+  const list = myMedia();
+  if (list.some(x => sameMedia(x, m))) { say('Already added ' + mediaName(m)); return; }
+  if (list.length >= 8) { say('Eight is the limit'); return; }
+  store.set('myMedia', JSON.stringify(list.concat(m)));
+  paintMedia();
+  $('mediaFound').hidden = true;
+  $('mediaQ').value = '';
+  say('Added ' + mediaName(m));
+  refreshMarket();
+}
+/* Search for what was typed and show what was found, with a button to add it. */
+async function findMedia() {
+  const raw = $('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60);
+  const box = $('mediaFound');
+  if (!raw) return;
+  const site = domainOf(raw);
+  const m = site ? { kind: 'site', q: site, name: site } : { kind: 'word', q: raw, name: raw };
+  box.hidden = false;
+  box.textContent = 'Searching…';
+  let rows = [];
+  try { rows = await mediaRows(m); } catch (e) { console.warn(e); }
+  if ($('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60) !== raw) return;
+  box.innerHTML = '';
+  const line = (text, cls) => { const p = document.createElement('p'); p.className = cls || 'found-line'; p.textContent = text; box.appendChild(p); return p; };
+  const button = (text, item) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => addMedia(item); box.appendChild(b); return b; };
+  if (!rows.length) { line('No news found for ' + raw + '. Try other words, or a website such as example.com.'); return; }
+  line('Found ' + rows.length + ' stories');
+  rows.slice(0, 4).forEach(r => line('・' + r.headline + (r.source ? '（' + r.source + '）' : ''), 'found-story'));
+  button('Add: ' + mediaName(m), m);
+  if (!site) {
+    /* The media that wrote them: one of them can be added on its own. */
+    const by = {};
+    rows.forEach(r => { const s = String(r.source || '').trim(); if (s && s !== 'News') by[s] = (by[s] || 0) + 1; });
+    const pubs = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    if (pubs.length) line('Or one medium only:', 'found-line');
+    pubs.forEach(([name]) => button('Add: ' + name, { kind: 'pub', q: raw, pub: name, name }));
+  }
 }
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
@@ -2597,9 +2782,31 @@ async function collect(date) {
   if (feedMode() === 'x') return collectPosts(date);
   beginCollect();
   const slots = parseLineup(lineupText());
-  /* The replies collected ahead of time play at once; without them the news is searched as before. */
-  const ready = await preparedScript(date, slots).catch(e => { console.warn(e); return null; });
-  if (ready) return ready;
+  const N = total();
+  const { country, lang } = market();
+  /* What the user added by name plays first, up to half of the video. */
+  const mine = slots.length ? [] : await myMediaRows(Math.ceil(N / 2)).catch(e => { console.warn(e); return []; });
+  /* Then the prepared file, which plays at once; without it the news is searched as before. */
+  let script = null;
+  let noNew = null;
+  try { script = await preparedScript(date, slots, N - mine.length); }
+  catch (e) { if (e && e.noNew) noNew = e; else console.warn(e); }
+  if (!script && !noNew) {
+    try { script = await collectLive(date, slots); }
+    catch (e) { if (e && e.noNew && mine.length) noNew = e; else throw e; }
+  }
+  if (!mine.length) { if (script) return script; throw noNew; }
+  if (lang.id === 'ja') mine.forEach(r => { r._en = r.headline; r._local = r.headline; });
+  else await fillText(mine, lang);
+  const cards = mine.map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
+  const keys = mine.flatMap(storyKeys);
+  if (!script) { S.pendingKeys = keys; return { date, items: cards, market: country.name + ' · ' + lang.name }; }
+  S.pendingKeys = keys.concat(S.pendingKeys || []);
+  script.items = cards.concat(script.items).slice(0, Math.max(N, cards.length));
+  return script;
+}
+/* The search the page makes itself: the lineup's requests, or the front pages. */
+async function collectLive(date, slots) {
   if (slots.length) return collectSlots(date, slots);
   const { country, lang } = market();
   const genres = genreChoices();
@@ -3168,6 +3375,32 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     paceBox.appendChild(b);
   });
+  /* Replies on or off: the chips under the video and the choice in Settings say the same. */
+  const replyBox = $('replyModes');
+  const paintReplies = () => {
+    const v = repliesOn() ? 'on' : 'off';
+    replyBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+    if ($('replies')) $('replies').value = v;
+  };
+  const setReplies = v => {
+    if ((repliesOn() ? 'on' : 'off') === v) return;
+    store.set('replies', v);
+    paintReplies();
+    scheduleRefresh(0);
+  };
+  [['on', 'With replies'], ['off', 'News only']].forEach(([v, name]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.v = v;
+    b.textContent = name;
+    b.onclick = () => setReplies(v);
+    replyBox.appendChild(b);
+  });
+  if ($('replies')) $('replies').onchange = () => setReplies($('replies').value === 'off' ? 'off' : 'on');
+  paintReplies();
+  $('mediaFind').onclick = () => findMedia();
+  $('mediaQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findMedia(); } });
+  paintMedia();
   const countBox = $('counts');
   const paintCounts = () => countBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === total()));
   COUNTS.forEach(n => {
@@ -3296,6 +3529,11 @@ function saveFilters() {
 }
 function buildFilters() {
   const savedG = savedJson('genres');
+  /* Once: in Japan the sources go back to X only. What is switched on after that is kept. */
+  if (store.get('srcV', '') !== '2') {
+    if (!sourceDefault('web')) store.set('sourcesOn', JSON.stringify({ x: true, web: false, bbc: false, abc: false, reuters: false }));
+    store.set('srcV', '2');
+  }
   const savedS = savedJson('sourcesOn');
   const box = $('genres');
   GENRES.forEach(g => {
@@ -3344,7 +3582,7 @@ function buildFilters() {
     input.type = 'checkbox';
     input.className = 'srcf';
     input.value = s.id;
-    input.checked = savedS[s.id] !== false;
+    input.checked = typeof savedS[s.id] === 'boolean' ? savedS[s.id] : sourceDefault(s.id);
     input.onchange = () => { saveFilters(); refreshMarket(); };
     lab.appendChild(input);
     lab.appendChild(document.createTextNode(s.name));
