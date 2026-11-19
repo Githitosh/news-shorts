@@ -72,9 +72,10 @@ No API key. The page reads public feeds, from more than one source and through m
 - Press releases, blog platforms and stories in a script the edition does not read are left out.
 - Humor reads its news the same way (the topics its jokes are about).
 - Humor's romance stories are prepared ahead of time by
-  [githito.xapi](https://github.com/Githitosh/githito.xapi) (`humor.mjs`, three runs a day) and read
+  [githito.xapi](https://github.com/Githitosh/githito.xapi) (`humor.mjs`, every hour) and read
   from `v1/humor-ja.json`, so the first video and Update start in about a second. Loving talk comes
-  first; in the morning (4 to 11) good mornings are seven in ten. With other genres in the lineup, or
+  first; in the morning (4 to 11) good mornings are seven in ten. When every story has played, the
+  one that played longest ago comes back first. With other genres in the lineup, or
   when the file cannot be read, the page searches live as before.
 
 ## Make a new video

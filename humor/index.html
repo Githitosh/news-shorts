@@ -4389,7 +4389,14 @@ async function preparedRows(need) {
   const pool = all.filter(s => ok(s) && !keysOf(s).some(k => now.has(k)));
   const rank = list => list.map(s => [(Number(s.score) || 0) + Math.random() * 8, s]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
   const unseen = rank(pool.filter(s => !keysOf(s).some(k => past.has(k))));
-  const order = unseen.concat(rank(pool.filter(s => !unseen.includes(s))));
+  /* When everything has played, what played longest ago comes back first, so the same stories do not
+     return video after video. The list of what has played is kept newest first. */
+  let playedOrder = [];
+  try { playedOrder = JSON.parse(store.get(SEEN_JOKES, '[]')); } catch (e) { playedOrder = []; }
+  const at = new Map((Array.isArray(playedOrder) ? playedOrder : []).map((k, i) => [k, i]));
+  const lastPlayed = s => Math.min(...keysOf(s).map(k => (at.has(k) ? at.get(k) : Infinity)));
+  const played = pool.filter(s => !unseen.includes(s)).map(s => [lastPlayed(s) + Math.random() * 20, s]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
+  const order = unseen.concat(played);
   const hour = new Date().getHours();
   const morning = hour >= 4 && hour < 11;
   const evening = hour >= 20 || hour < 4;
@@ -5771,7 +5778,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'b658c06af3d8';
+  const BUILD = '2daf5897ceac';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
