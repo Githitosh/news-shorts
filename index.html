@@ -54,12 +54,6 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 .terms-foot { text-align: center; margin: 28px auto 0; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); font-size: 13px; }
 .terms-foot a { color: var(--mute); text-decoration: underline; }
 .caption.err { color: #ff9b8a; }
-#unmute {
-  position: absolute; z-index: 2; left: 50%; bottom: 16px; transform: translateX(-50%);
-  width: max-content; max-width: calc(100% - 24px);
-  background: rgba(13,13,15,.82); color: var(--ink); border: 1px solid var(--acc);
-  border-radius: 999px; padding: 8px 14px; font-size: 14px;
-}
 [hidden] { display: none !important; }
 @media (max-width: 819px) {
   body.watching .stage { position: static; }
@@ -134,7 +128,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div id="watch" class="watch">
     <div class="frame">
       <canvas id="cv" width="1080" height="1920"></canvas>
-      <button type="button" id="unmute" hidden>Tap for sound</button>
     </div>
     <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
     <div class="ctl">
@@ -3427,10 +3420,6 @@ function useTrack(id) {
     draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
   }
   if (wasAudible) playSound();
-  else if (S.playing && !S.audioFailed) {
-    const u = $('unmute');
-    if (u) { u.hidden = false; u.textContent = 'Tap for sound'; }
-  }
 }
 
 /* Read an m4a file and keep its AAC frames. */
@@ -3561,9 +3550,8 @@ function episodeLabel(s) {
   const month = ['January','February','March','April','May','June','July','August','September','October','November','December'][Number(m[2]) - 1];
   return `${month} ${Number(m[3])}, ${m[1]} news video`;
 }
-function watchLine(sound) {
-  const name = episodeLabel(S.script);
-  return sound ? `Playing the ${name}.` : `Playing the ${name}. Tap the picture for sound.`;
+function watchLine() {
+  return `Playing the ${episodeLabel(S.script)}.`;
 }
 async function setScript(raw, quiet) {
   stop();
@@ -3680,8 +3668,6 @@ function beginPlayback(T0) {
   $('play').disabled = false;
   $('play').textContent = 'Pause';
   document.body.classList.add('watching');
-  const u = $('unmute');
-  if (u) u.hidden = !!S.audioOn;
   if (!S.raf) S.raf = requestAnimationFrame(tick);
 }
 function tick() {
@@ -3727,22 +3713,16 @@ function startWatch() {
   if (!WATCH || !S.show || S.busy || S.playing) return;
   $('seek').value = '0';
   beginPlayback(0);
-  say(watchLine(false));
+  say(watchLine());
   playSound(0);
   closeStudio();
 }
 function soundOn() {
   S.audioOn = true;
   S.audioFailed = false;
-  const u = $('unmute');
-  if (u) u.hidden = true;
-  /* Only replace the tap-for-sound line, so a message such as No new stories stays. */
-  if (S.playing && $('caption').textContent === watchLine(false)) say(watchLine(true));
 }
 function soundOff() {
   S.audioOn = false;
-  const u = $('unmute');
-  if (u && S.playing) { u.hidden = false; u.textContent = 'Tap for sound'; }
 }
 /* Start the music if it is not playing, from where it was. It never moves the music. It plays through
    Web Audio (src/music.js), which repeats the song without a gap. */
@@ -3761,7 +3741,7 @@ async function play() {
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
-  say(watchLine(false));
+  say(watchLine());
 }
 function pauseMusic() {
   S.audioGen++;
@@ -3778,7 +3758,6 @@ function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   $('play').textContent = 'Play';
-  const u = $('unmute'); if (u) u.hidden = true;
 }
 
 /* ---------- collection ---------- */
@@ -6193,7 +6172,7 @@ async function runAll(opts) {
     else await setScript(script, true);
     /* Remember the stories once they are on screen, so they do not play again. */
     if (!S.again && S.pendingKeys) { rememberKeys(S.pendingKeys); S.pendingKeys = null; }
-    if (!S.again) say(watchLine(!!(S.audioOn || (S.ac && S.ac.state === 'running'))));
+    if (!S.again) say(watchLine());
   } catch (e) {
     console.error(e); progress(0);
     S.busy = false; setBusy(false);
@@ -6625,7 +6604,6 @@ function keepInitTail() {
     if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * (S.show.duration || 0));
     playSound(S.playing ? currentT() : 0);
   };
-  $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
   /* The page stays where it is: there is no pull down to refresh. Update makes a new video. */
   /* Full screen. */
@@ -6654,7 +6632,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '29c539dfe482';
+  const BUILD = '172f0c0799e4';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
