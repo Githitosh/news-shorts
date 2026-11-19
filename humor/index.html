@@ -82,6 +82,7 @@ button:disabled { opacity: .45; cursor: default; }
 .music button.on, .row button.on, #genreChips button.on, #xAccounts button { background: var(--acc); border-color: var(--acc); color: var(--on); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin-top: 10px; margin-bottom: 0; }
 .caption.err { color: #9a3b28; }
+.caption:empty { display: none; }
 #sprog i { display: block; height: 100%; width: 0; background: var(--acc); }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin-top: 14px; margin-bottom: 4px; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -153,7 +154,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
   </div>
-  <p id="caption" class="caption">Opening the humor video…</p>
+  <p id="caption" class="caption"></p>
   <p class="music-label">Items</p>
   <div class="music" id="counts"></div>
   <p class="music-label">Story length</p>
@@ -3141,10 +3142,14 @@ const S = {
 const TAP = ' Press Sound for music.';
 
 /* ---------- small helpers ---------- */
+/* What is being searched ("Searching couples on X", "Selecting jokes…") is not shown under the video:
+   the Update button already says that a video is being made. It still shows on the Settings page. With
+   nothing to say, the line under the video takes no room. */
+const PROGRESS = /^(?:Searching|Selecting|Reading|Opening|Adding)\b/;
 function say(msg, err) {
   [$('caption'), $('status')].forEach(el => {
     if (!el) return;
-    el.textContent = msg || '';
+    el.textContent = el.id === 'caption' && !err && PROGRESS.test(msg || '') ? '' : (msg || '');
     el.classList.toggle('err', !!err);
   });
 }
@@ -5666,7 +5671,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '5f213a016a87';
+  const BUILD = '5cc1ff72177a';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
