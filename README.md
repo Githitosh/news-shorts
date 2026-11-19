@@ -31,7 +31,8 @@ Wallpaper, under the picture: Morning is the original picture. Evening is warmer
 
 Music, under the picture: **1**, **2** and **3**, each 8 bars (1 and 3 at 90 BPM, 21.3 seconds; 2 at 110 BPM,
 17.5 seconds), made from the MIDI files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to
-the video: it repeats without a seam, and a new video, Update, the video's own repeat, the seek bar, the story
+the video: it repeats without a gap (it plays through Web Audio, `src/music.js`, which repeats one song length of the
+decoded file sample for sample; an audio element stopped for a moment at each repeat), and a new video, Update, the video's own repeat, the seek bar, the story
 length and exporting leave it playing where it is. On News and the Japanese page Pause stops it; on Humor
 the Sound button turns it off and on. Humor has the same three songs; the Japanese page plays 1.
 
@@ -112,6 +113,7 @@ python run.py --formats x     # one format: x, youtube, or pc
 | `manifest.webmanifest`, `*.png` | Name and icons for Add to Home Screen |
 | `run.py` | Runs `index.html` without a window and saves the MP4 files |
 | `src/engine.js` | Drawing for the three layouts |
+| `src/music.js` | The music player: the song repeated without a gap (Web Audio), for News, Humor and the Japanese page |
 | `src/app.html` | The page, news collection, the coffee break, and MP4 export |
 | `assets/` | Five backgrounds, the songs (`song_1.m4a`, `song_2.m4a`, `song_3.m4a`, from `midi/1.mid`, `2.mid`, `3.mid`) and an older recording no page plays (`sandman_1920.m4a`) |
 | `song.py` | Makes `assets/song_1.m4a`, `song_2.m4a` and `song_3.m4a` from the MIDI files |

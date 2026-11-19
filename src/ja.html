@@ -58,6 +58,7 @@ button:disabled { opacity: .45; cursor: default; }
   <div id="prog"><i></i></div>
   <p id="caption" class="caption"></p>
 </main>
+<script>/*__MUSIC__*/</script>
 <script>
 /*__ENGINE__*/
 const ASSETS = /*__ASSETS__*/;
@@ -100,6 +101,7 @@ async function loadAssets() {
     S.bgs[g] = im;
   }));
   S.music = b64bytes(ASSETS.track);
+  NSMusic.setSong(S.music, 1000 * 1024 / 48000);
 }
 function rssItems(xml) {
   const items = [];
@@ -305,31 +307,16 @@ function currentT() {
   if (S.playing) return S.origin + (performance.now() - S.t0perf) / 1000;
   return (+$('seek').value / 1000) * (S.show.duration || 0);
 }
-function musicEl() {
-  if (S.el) return S.el;
-  const el = document.createElement('audio');
-  el.preload = 'auto';
-  el.loop = true;
-  el.setAttribute('playsinline', '');
-  const blob = new Blob([S.music], { type: 'audio/mp4' });
-  S.musicUrl = URL.createObjectURL(blob);
-  el.src = S.musicUrl;
-  document.body.appendChild(el);
-  S.el = el;
-  return el;
-}
 /* The music (song 1) plays on its own and is not tied to the video: a new video, Update, the video repeating
    and the seek bar leave it playing where it is. Only Pause stops it. This starts it if it is not playing,
    from where it was; it never moves the music. */
 function playSound() {
   if (!S.music) return;
-  const el = musicEl();
-  if (!el.paused && S.audioOn) { $('unmute').hidden = true; return; }
-  const play = el.play();
-  if (play && play.then) play.then(() => { S.audioOn = true; $('unmute').hidden = true; }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
+  NSMusic.play().then(ok => { S.audioOn = ok; $('unmute').hidden = ok || !S.playing; });
 }
+NSMusic.onchange = heard => { S.audioOn = heard; $('unmute').hidden = heard || !S.playing; };
 function pauseMusic() {
-  if (S.el) { try { S.el.pause(); } catch (e) {} }
+  NSMusic.pause();
   S.audioOn = false;
 }
 /* Stops the video. The music goes on (pauseMusic stops it). */
