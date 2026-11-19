@@ -27,14 +27,10 @@ python run.py --x-user name --country US --lang en
 
 Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter.
 
-Music, under the picture:
-
-| Button | Recording |
-|---|---|
-| Jupiter | Holst, “Jupiter”, London Symphony Orchestra, Columbia, 1922–23 |
-| Neptune | Holst, “Neptune”, same recording, 1923 |
-| Stars and Stripes | Sousa’s Band, Edison, 1909 |
-| Sandman | Paul Whiteman and His Ambassador Orchestra, 1920 |
+Music, under the picture: **Untitled Song**, 8 bars at 90 BPM (21.3 seconds), made from the MIDI file
+`assets/midi/untitled_song.mid`. It repeats for as long as the video plays. It starts from the top with each
+new video and goes on through the video's own repeat; the seek bar and the story length do not move it.
+News, Japanese and Humor all play this song.
 
 ## Where the news comes from
 
@@ -113,7 +109,8 @@ python run.py --formats x     # one format: x, youtube, or pc
 | `run.py` | Runs `index.html` without a window and saves the MP4 files |
 | `src/engine.js` | Drawing for the three layouts |
 | `src/app.html` | The page, news collection, the coffee break, and MP4 export |
-| `assets/` | Five backgrounds and four music files |
+| `assets/` | Five backgrounds, the song (`untitled_song.m4a`, from `midi/untitled_song.mid`) and an older recording no page plays (`sandman_1920.m4a`) |
+| `song.py` | Makes `assets/untitled_song.m4a` from the MIDI file |
 | `samples/2026-11-14.json` | The original script |
 | `lib/mp4-muxer.js` | MP4 library (MIT) |
 | `build.py` | Rebuilds `index.html` from `src/` and `assets/` |
@@ -131,12 +128,11 @@ python build.py
 - English headlines use a heavy serif, condensed. Small words such as to, and, and of stay small.
 - Text bounds: Phone and X use 60px side margins, YouTube uses 60–900px, and PC uses 120–1800px.
 - On Phone, X, and PC, English line breaks are chosen automatically. A `／` in the news lines becomes a line break only when the line does not fit.
-- The selected music file is copied into the MP4 as it is. If the video is shorter than the recording, playback starts late enough to finish with the recording.
+- The song is copied into the MP4 as it is, from its beginning, and repeats to the end of the video. The file holds the 8 bars three times (64 seconds, 1000 AAC frames each); past its end the frames are taken again from one song length earlier, so the repeat has no seam.
 
 ## Credits
 
-- Jupiter and Neptune: Holst conducting the London Symphony Orchestra (Columbia, 1922–23), from Wikimedia Commons “Holst - The Planets (Columbia 1922-23).flac”. Jupiter is the 41.6 seconds starting at 18:21. Neptune is 41.6 seconds starting at 0:45 of the Neptune excerpt. Clicks and hiss were reduced with ffmpeg `adeclick` and `afftdn`, and loudness was set to -16 LUFS. The music and the recordings are in the public domain.
-- Stars and Stripes Forever: Sousa’s Band for Edison Records, November 1909, Wikimedia Commons. Public domain. The excerpt starts at 0:18.
+- Untitled Song: the MIDI file `assets/midi/untitled_song.mid`, played with FluidSynth and the FluidR3 GM SoundFont (MIT License): Chords on a piano, Bass on a fingered bass, Drums on the drum channel. `python song.py` makes the file again; loudness is about -16 LUFS.
 - The Japanese Sandman: Paul Whiteman and His Ambassador Orchestra, August 19, 1920, Wikimedia Commons. Public domain. The excerpt starts at 0:12.
 - Photos: U.S. National Park Service and NOAA (Glacier, Yellowstone, Lake Mead, southeast Alaska). Public domain.
 - Coffee-break background: an image made with Grok.

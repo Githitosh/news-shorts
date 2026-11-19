@@ -306,11 +306,11 @@ const PACES = [
   { sec: 4.2, name: '4.2s' },
   { sec: 5.2, name: '5.2s' },
 ];
-/* Jupiter is inside the page. The others load from ../assets/ the first time they are chosen. */
+/* The first song is inside the page; any other loads from ../assets/ the first time it is chosen. One song,
+   repeated for as long as the video plays. loop: the length of the song (8 bars at 90 BPM); the file holds it
+   three times over, so it repeats without a seam. */
 const TRACKS = [
-  { id: 'jupiter', name: 'Jupiter', file: '', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
-  { id: 'neptune', name: 'Neptune', file: 'neptune_1923.m4a', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
-  { id: 'stripes', name: 'Stars and Stripes', file: 'stripes_1909.m4a', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
+  { id: 'untitled', name: 'Untitled Song', file: '', loop: 64 / 3, credit: 'Music: Untitled Song' },
 ];
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const GENRES = [
@@ -430,7 +430,7 @@ async function loadAssets() {
     await im.decode();
     S.bgs[g] = im;
   }));
-  S.music = S.tracks.jupiter = b64bytes(ASSETS.track);
+  S.music = S.tracks[TRACKS[0].id] = b64bytes(ASSETS.track);
 }
 
 /* ---------- settings: market, accounts, filters ---------- */
@@ -2067,7 +2067,7 @@ function normalize(s) {
 }
 function sourcesText(s) {
   const lines = s.items.map((it, i) => `${pad2(i + 1)} ${it.head.join(' ')} — ${it.src}${it.date ? ' (' + it.date + ')' : ''}${it.url ? '\n   ' + it.url : ''}`);
-  return lines.join('\n') + '\n\n' + S.track.credit + ', public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
+  return lines.join('\n') + '\n\n' + S.track.credit + '\nPhotos: U.S. National Park Service & NOAA, public domain';
 }
 async function loadFonts(script) {
   const txt = E.allText(script);
@@ -2123,16 +2123,12 @@ function musicEl() {
   S.el = el;
   return el;
 }
-function soundAt(T) {
-  const el = S.el;
-  const len = el && isFinite(el.duration) ? el.duration : 41.6;
-  const dur = S.show ? S.show.duration : 0;
-  return Math.max(0, Math.min(Math.max(0, len - dur) + Math.max(0, T || 0), Math.max(0, len - 0.15)));
-}
+/* The song repeats on its own. It starts from its beginning with a new video (T = 0) and otherwise goes on
+   from where it was; the video repeating, a new story length or the seek bar do not move it. */
 function playSound(T) {
   if (!S.music || S.mute) return;
   const el = musicEl();
-  try { el.currentTime = soundAt(T); } catch (e) {}
+  if (!(T > 0)) { try { el.currentTime = 0; } catch (e) {} }
   const play = el.play();
   if (play && play.then) play.then(() => {
     if (S.mute || !S.playing) { try { el.pause(); } catch (e) {} S.audioOn = false; paintSound(); return; }
@@ -2205,7 +2201,6 @@ function tick() {
     const over = T % S.show.duration;
     S.origin = over;
     S.t0perf = performance.now();
-    if (S.audioOn && S.el) { try { S.el.currentTime = soundAt(over); } catch (e) {} }
     T = over;
   }
   draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
@@ -2323,7 +2318,6 @@ function reshow() {
   if (S.playing) {
     S.origin = T;
     S.t0perf = performance.now();
-    if (S.audioOn && S.el) { try { S.el.currentTime = soundAt(T); } catch (e) {} }
   }
   $('seek').value = String(Math.round(frac * 1000));
   draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
@@ -2372,8 +2366,8 @@ async function useTrack(id) {
   try { bytes = await trackBytes(t); } catch (e) {
     console.warn(e);
     if (S.wantTrack !== t.id) return;
-    say('Could not load ' + t.name + '. Jupiter plays instead.', true);
-    if (t.id !== 'jupiter') useTrack('jupiter');
+    say('Could not load ' + t.name + '.', true);
+    if (t.id !== TRACKS[0].id) useTrack(TRACKS[0].id);
     return;
   }
   if (S.wantTrack !== t.id) return;
@@ -2484,21 +2478,20 @@ async function encodeShow(show, label, p0, p1, aac) {
   await enc.flush(); enc.close();
   if (fail) throw fail;
   if (aac) {
-    /* The music loops on the page, so it loops in the file too. */
-    let first = true;
-    for (let loop = 0, base = Math.max(0, aac.duration - dur); ; loop++) {
-      const start = loop === 0 ? base : 0;
-      const at0 = loop === 0 ? 0 : (aac.duration - base) + (loop - 1) * aac.duration;
-      if (at0 >= dur) break;
-      for (const s of aac.samples) {
-        if (s.t < start - 1e-6) continue;
-        const at = at0 + (s.t - start);
-        if (at >= dur) break;
-        muxer.addAudioChunkRaw(aac.bytes.subarray(s.o, s.o + s.n), 'key', Math.round(at * 1e6), Math.round(s.d * 1e6),
-          first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: aac.channels, sampleRate: aac.rate, description: aac.asc } } : undefined);
-        first = false;
-      }
-      if (aac.duration <= 0) break;
+    /* The song repeats under the whole video, from its beginning. Past the end of the file the frames are
+       taken again from one song length earlier, where the file holds the same music, so the repeat has no seam.
+       A song without a loop length starts again from the top of the file. */
+    const F = S.track && S.track.loop ? Math.round(S.track.loop * aac.rate / 1024) : 0;
+    const K = F ? Math.floor((aac.samples.length - 1) / F) : 0;
+    const wrap = K >= 2 ? K * F : aac.samples.length, back = K >= 2 ? F : aac.samples.length;
+    let first = true, t = 0, i = 0;
+    while (t < dur - 1e-6 && aac.samples.length) {
+      if (i >= wrap) i -= back;
+      const s = aac.samples[i++];
+      muxer.addAudioChunkRaw(aac.bytes.subarray(s.o, s.o + s.n), 'key', Math.round(t * 1e6), Math.round(s.d * 1e6),
+        first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: aac.channels, sampleRate: aac.rate, description: aac.asc } } : undefined);
+      first = false;
+      t += s.d;
     }
   }
   muxer.finalize();
@@ -2519,11 +2512,15 @@ async function recordRealtime(show) {
   const parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => { rec.onstop = r; });
   let src = null;
-  if (abuf) { src = ac.createBufferSource(); src.buffer = abuf; src.loop = true; src.connect(dest); }
+  if (abuf) {
+    src = ac.createBufferSource(); src.buffer = abuf; src.loop = true; src.connect(dest);
+    const per = S.track && S.track.loop, reps = per ? Math.floor(abuf.duration / per + 1e-3) : 0;
+    if (reps >= 2) { src.loopStart = per; src.loopEnd = per * reps; }
+  }
   S.show = show; sizeCanvas(); draw(0);
   rec.start(250);
   const t0 = ac.currentTime + 0.05;
-  if (src) src.start(t0, Math.max(0, abuf.duration - show.duration));
+  if (src) src.start(t0, 0);
   await new Promise(res => {
     const step = () => {
       const T = ac.currentTime - t0;
@@ -2966,7 +2963,7 @@ function initUI() {
   $('seek').addEventListener('input', () => {
     if (!S.show) return;
     const T = (+$('seek').value / 1000) * S.show.duration;
-    if (S.playing) { S.origin = T; S.t0perf = performance.now(); if (S.audioOn && S.el) { try { S.el.currentTime = soundAt(T); } catch (e) {} } }
+    if (S.playing) { S.origin = T; S.t0perf = performance.now(); }
     draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
   });
   document.addEventListener('fullscreenchange', paintFull);
@@ -3021,9 +3018,9 @@ if (window.UIJA) {
 }
 loadAssets().then(() => {
   window.NS.ready = true;
-  const requested = Q.get('music') || store.get('music', 'jupiter');
-  if (requested !== 'jupiter') useTrack(requested);
-  else document.querySelectorAll('#music button').forEach(b => b.classList.toggle('on', b.dataset.m === 'jupiter'));
+  const first = TRACKS[0].id, requested = Q.get('music') || store.get('music', first);
+  if (requested !== first && TRACKS.some(t => t.id === requested)) useTrack(requested);
+  else document.querySelectorAll('#music button').forEach(b => b.classList.toggle('on', b.dataset.m === first));
   runAll({ export: false });
 }).catch(e => { window.NS.ready = true; say(e.message || String(e), true); });
 })();

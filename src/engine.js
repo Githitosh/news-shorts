@@ -103,7 +103,7 @@ let W = P.W, H = P.H;
 function use(name) { P = PRESETS[name] || PRESETS.youtube; W = P.W; H = P.H; return P; }
 
 const BG_ORDER = ['A', 'B', 'C', 'C', 'A', 'B', 'D', 'C', 'D', 'C', 'B', 'D'];
-const CREDIT_MUSIC = 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons';
+const CREDIT_MUSIC = 'Music: Untitled Song';
 let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
 const WALLPAPERS = {
