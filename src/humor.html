@@ -1564,7 +1564,12 @@ async function loadPrep(lang) {
 async function prepared(lang) {
   if (PREP.lang !== lang || !PREP.stories.length) keptPrep(lang);
   if (PREP.lang !== lang || !PREP.stories.length) await loadPrep(lang);
-  else if (Date.now() - PREP.at > 600000) { PREP.at = Date.now(); loadPrep(lang); }
+  else if (Date.now() - PREP.at > 600000) {
+    /* More than ten minutes old: the page waits for the new file, two and a half seconds at most, so that
+       this very Update shows the new stories; past that the new file is there for the next Update. */
+    PREP.at = Date.now();
+    await withTimeout(loadPrep(lang), 2500).catch(() => {});
+  }
   return PREP.lang === lang ? PREP.stories : [];
 }
 /* Stories for one video, read from the order githito.xapi chose (see below). Not played yet first; when

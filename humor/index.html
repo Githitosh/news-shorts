@@ -4504,7 +4504,12 @@ async function loadPrep(lang) {
 async function prepared(lang) {
   if (PREP.lang !== lang || !PREP.stories.length) keptPrep(lang);
   if (PREP.lang !== lang || !PREP.stories.length) await loadPrep(lang);
-  else if (Date.now() - PREP.at > 600000) { PREP.at = Date.now(); loadPrep(lang); }
+  else if (Date.now() - PREP.at > 600000) {
+    /* More than ten minutes old: the page waits for the new file, two and a half seconds at most, so that
+       this very Update shows the new stories; past that the new file is there for the next Update. */
+    PREP.at = Date.now();
+    await withTimeout(loadPrep(lang), 2500).catch(() => {});
+  }
   return PREP.lang === lang ? PREP.stories : [];
 }
 /* Stories for one video, read from the order githito.xapi chose (see below). Not played yet first; when
@@ -5911,7 +5916,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'a96eb37f4c97';
+  const BUILD = '3a8db1d703d2';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

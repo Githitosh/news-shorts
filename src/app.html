@@ -2248,13 +2248,20 @@ function loadPrep() {
   })();
   return prepLoading;
 }
-/* The kept copy at once and the whole file behind it; the file itself when there is no copy; a fresh
-   read when what is held is more than ten minutes old. */
+/* The kept copy at once; the file itself when there is no copy; a fresh read when what is held is more
+   than ten minutes old. */
 async function prepared() {
   const any = () => PREP.items.length || PREP.heads.length;
   if (!any()) keptPrep();
   if (!any()) await loadPrep();
-  else if (PREP.part || Date.now() - PREP.at > 600000) { PREP.part = false; PREP.at = Date.now(); loadPrep(); }
+  else if (PREP.part || Date.now() - PREP.at > 600000) {
+    /* What is held is more than ten minutes old: githito.xapi may have new news. The page waits for the
+       new file, two and a half seconds at most, so that this very Update shows it; past that it plays
+       what it has and the new file is there for the next Update. */
+    PREP.part = false;
+    PREP.at = Date.now();
+    await timed(loadPrep(), 2500).catch(() => {});
+  }
   return PREP;
 }
 /* Whether Update can be answered from the prepared file (see above). */
@@ -2305,7 +2312,7 @@ function replyCard(row, langId) {
 const SMALL_EN = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'for', 'from', 'by', 'with', 'and', 'or', 'as', 'is', 'are', 'was', 'were', 'be', 'its', 'his', 'her', 'their', 'over', 'after', 'before', 'into', 'amid', 'vs', 'not', 'that', 'this', 'it', 'will', 'has', 'have']);
 const PLAIN_EN = new Set(['the', 'a', 'an', 'in', 'on', 'at', 'after', 'before', 'this', 'that', 'it', 'there', 'about', 'approximately', 'largest', 'first', 'new', 'breaking', 'news', 'japan', 'japanese', 'prime', 'minister', 'president', 'government', 'police', 'former', 'two', 'three', 'four', 'five', 'six', 'what', 'why', 'how', 'when', 'who', 'video', 'photo', 'update', 'live']);
 function englishParts(en) {
-  const text = String(en || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"]/g, '').replace(/\s+/g, ' ').trim();
+  const text = String(en || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"`]|''/g, '').replace(/\s+/g, ' ').trim();
   const words = text.split(' ').filter(Boolean);
   const bare = w => String(w).replace(/[^A-Za-z0-9'’$%.-]/g, '').replace(/[.,:;]+$/, '');
   const small = w => SMALL_EN.has(bare(w).toLowerCase());
