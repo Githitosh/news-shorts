@@ -7,12 +7,14 @@
 Needs mido, numpy and scipy (pip), FluidSynth with the FluidR3 GM SoundFont, and ffmpeg
 (apt install fluidsynth fluid-soundfont-gm ffmpeg).
 
-Each MIDI file is 8 bars at 90 BPM (21.33 s) with its parts on one channel and no instruments. Chords play
+Each MIDI file is 8 bars (1 and 3 at 90 BPM, 21.33 s; 2 at 110 BPM, 17.45 s) with its parts on one channel
+and no instruments. Chords play
 on a piano, Bass on a fingered bass and Drums on the drum channel. The song is played six times; one
 8-bar loop is cut from the third time through, where the reverb and the release of the time before are
-already sounding, and the file holds that loop twice (42.7 s). The cut falls 42 ms before a downbeat
-and crossfades into what came just before it, so the song repeats without a seam. At 48 kHz one loop is
-exactly 1000 AAC frames, so the pages can repeat it in an MP4 by taking frames again from one loop earlier.
+already sounding, and the file holds that loop twice. The cut falls 42 ms before a downbeat and
+crossfades into what came just before it, so the song repeats without a seam. One loop is made a whole
+number of AAC frames at 48 kHz (1000 for 1 and 3; 818 for 2, whose tempo moves by 0.02% for it), so the
+pages can repeat it in an MP4 by taking frames again from one loop earlier.
 Loudness is about -16 LUFS.
 """
 import re
@@ -32,12 +34,20 @@ TARGET = -16.0           # LUFS
 SF2 = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
 RATE = 48000
 LOOP_TICKS = 4096        # 8 bars of 4/4 at 128 ticks per beat
-N = 1024000              # 8 bars at 90 BPM in samples at 48 kHz
 PARTS = {"Chords": (0, 0), "Bass": (1, 33), "Drums": (9, None)}  # channel, General MIDI program
 
 
-def repeated(src: Path, dst: Path, reps: int) -> None:
+def loop_frames(src: Path) -> int:
+    """One loop in whole AAC frames (1024 samples at 48 kHz)."""
     m = mido.MidiFile(src)
+    tempo = next((msg.tempo for t in m.tracks for msg in t if msg.type == "set_tempo"), 500000)
+    beats = LOOP_TICKS / m.ticks_per_beat
+    return round(beats * tempo / 1e6 * RATE / 1024)
+
+
+def repeated(src: Path, dst: Path, reps: int, frames: int) -> None:
+    m = mido.MidiFile(src)
+    tempo = round(frames * 1024 / RATE / (LOOP_TICKS / m.ticks_per_beat) * 1e6)  # the loop fits the frames
     out = mido.MidiFile(type=1, ticks_per_beat=m.ticks_per_beat)
     for t in m.tracks:
         part = next((k for k in PARTS if t.name.startswith(k)), None)
@@ -48,7 +58,9 @@ def repeated(src: Path, dst: Path, reps: int) -> None:
         for msg in t:
             tick += msg.time
             if msg.is_meta:
-                if msg.type in ("set_tempo", "time_signature", "track_name") and tick == 0:
+                if msg.type == "set_tempo" and tick == 0:
+                    meta.append(msg.copy(tempo=tempo, time=0))
+                elif msg.type in ("time_signature", "track_name") and tick == 0:
                     meta.append(msg.copy(time=0))
             elif msg.type in ("note_on", "note_off"):
                 ev.append((tick, msg))
@@ -87,7 +99,9 @@ def make(name: str) -> None:
     out = ROOT / "assets" / f"song_{name}.m4a"
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        repeated(midi, tmp / "rep.mid", 6)
+        frames = loop_frames(midi)
+        N = frames * 1024
+        repeated(midi, tmp / "rep.mid", 6, frames)
         run("fluidsynth", "-ni", "-q", "-r", str(RATE), "-g", "0.6", "-F", str(tmp / "rep.wav"), SF2, str(tmp / "rep.mid"))
         gain = TARGET - lufs(tmp / "rep.wav") + 0.4   # the limiter takes off a little
         run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(tmp / "rep.wav"),
@@ -104,7 +118,7 @@ def make(name: str) -> None:
         wavfile.write(tmp / "loop.wav", RATE, np.tile(seg, (COPIES, 1)).astype(np.float32))
         run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(tmp / "loop.wav"),
             "-c:a", "aac", "-b:a", "128k", "-ar", str(RATE), "-movflags", "+faststart", str(out))
-    print(f"{out.relative_to(ROOT)} {out.stat().st_size / 1048576:.2f} MB, {lufs(out):.1f} LUFS")
+    print(f"{out.relative_to(ROOT)} {out.stat().st_size / 1048576:.2f} MB, {lufs(out):.1f} LUFS, loop {frames} frames ({N / RATE:.3f} s)")
 
 
 def main() -> None:

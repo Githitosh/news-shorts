@@ -463,6 +463,15 @@ window.addEventListener('pointerup', e => {
   if (label) label.textContent = 'Pull down to refresh';
   if (dy > 70) runAll();
 });
+/* Back on the page (another app, another tab, the phone's lock screen): the video starts from the top. */
+function fromTop() {
+  if (!S.show) return;
+  $('seek').value = '0';
+  if (S.playing) { S.origin = 0; S.t0perf = performance.now(); }
+  draw(0);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fromTop(); });
+window.addEventListener('pageshow', e => { if (e.persisted) fromTop(); });
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing }) };
 E.setWallpaper('festive');
 E.setMusicCredit('Music: 1');
