@@ -307,11 +307,12 @@ const PACES = [
   { sec: 5.2, name: '5.2s' },
 ];
 /* Three songs. 1 is inside the page; 2 and 3 load from ../assets/ the first time they are chosen. Each repeats
-   on its own, without a seam. loop: the length of the song (8 bars at 90 BPM); each file holds it twice. */
+   on its own, without a seam. loop: the length of the song (8 bars; 1 and 3 at 90 BPM, 2 at 110 BPM), a whole
+   number of AAC frames; each file holds it twice. */
 const TRACKS = [
-  { id: '1', name: '1', file: '', loop: 64 / 3, credit: 'Music: 1' },
-  { id: '2', name: '2', file: 'song_2.m4a', loop: 64 / 3, credit: 'Music: 2' },
-  { id: '3', name: '3', file: 'song_3.m4a', loop: 64 / 3, credit: 'Music: 3' },
+  { id: '1', name: '1', file: '', loop: 1000 * 1024 / 48000, credit: 'Music: 1' },
+  { id: '2', name: '2', file: 'song_2.m4a', loop: 818 * 1024 / 48000, credit: 'Music: 2' },
+  { id: '3', name: '3', file: 'song_3.m4a', loop: 1000 * 1024 / 48000, credit: 'Music: 3' },
 ];
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const GENRES = [
@@ -2309,19 +2310,20 @@ function detectView() {
   if (phoneSized) return { format: 'x', label: 'Phone' };
   return { format: 'pc', label: 'PC' };
 }
-/* Rebuild the picture for a new layout or story length, keeping the place in the video. */
+/* Rebuild the picture for a new layout or story length. The video starts again from the top. */
 function reshow() {
   if (!S.script || !S.show) return;
-  const frac = S.show.duration ? Math.max(0, Math.min(0.999, currentT() / S.show.duration)) : 0;
   S.show = E.prepare(S.script, preset(), LOOK);
   sizeCanvas();
-  const T = frac * S.show.duration;
-  if (S.playing) {
-    S.origin = T;
-    S.t0perf = performance.now();
-  }
-  $('seek').value = String(Math.round(frac * 1000));
-  draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
+  fromTop();
+}
+/* Videos play from the first card: a new video, a new story length or layout, and coming back to the
+   page all start from the top. Pause and Play, and the seek bar, stay where they are. */
+function fromTop() {
+  if (!S.show) return;
+  $('seek').value = '0';
+  if (S.playing) { S.origin = 0; S.t0perf = performance.now(); }
+  draw(0);
 }
 function applyLayout() {
   const box = $('layout');
@@ -3010,6 +3012,9 @@ function watchVersion(key, url) {
   check(true);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });
 }
+/* Back on the page (another app, another tab, the phone's lock screen): the video starts from the top. */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fromTop(); });
+window.addEventListener('pageshow', e => { if (e.persisted) fromTop(); });
 initUI();
 watchVersion('humor', '../version.json');
 /* Japanese for the page's own words when Language is Japanese. */

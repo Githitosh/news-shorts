@@ -144,8 +144,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
-    <p class="music-label">Replies</p>
-    <div class="music" id="replyModes"></div>
     <p class="music-label">Items</p>
     <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
@@ -179,13 +177,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <option value="news">News</option>
         <option value="x">X posts</option>
       </select>
-      <p class="note">News plays the news from X. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.</p>
-      <label for="replies">Replies</label>
-      <select id="replies">
-        <option value="on">With replies</option>
-        <option value="off">News only</option>
-      </select>
-      <p class="note">With replies, a card is an earnest reply to a piece of news, and under it the card says which news. News of politics and public safety plays without replies. News only plays the headlines.</p>
+      <p class="note">News plays the headlines from X, without replies. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
@@ -205,13 +197,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="mediaFound" class="found" hidden></div>
       <div id="myMedia" class="music"></div>
       <p class="note">Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.</p>
-      <label for="xUser">X accounts</label>
+      <label for="xUser">Accounts with replies and comments</label>
       <div class="x-add">
         <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
         <button type="button" id="addX">Add</button>
       </div>
       <div id="xAccounts" class="music"></div>
-      <p class="note">Add an account to load its posts. Press Add again for another account. Press a name to remove it.</p>
+      <button type="button" id="sendAccounts">Send to githito.xapi</button>
+      <p class="note" id="askedNote"></p>
+      <p class="note">News plays no replies. Add an account here, and its posts play with the replies and comments under them (up to half of a video). Press Send to githito.xapi and then Submit: githito.xapi reads that account's replies from its next run, every half hour. Press a name to remove it, and send again.</p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -302,12 +296,12 @@ const PACES = [
   { sec: 4.2, name: '4.2s' },
   { sec: 5.2, name: '5.2s' },
 ];
-/* Three songs. Each repeats on its own, without a seam. loop: the length of the song (8 bars at 90 BPM);
-   each file holds it twice. */
+/* Three songs. Each repeats on its own, without a seam. loop: the length of the song (8 bars; 1 and 3 at
+   90 BPM, 2 at 110 BPM), a whole number of AAC frames; each file holds it twice. */
 const TRACKS = [
-  { id: '1', name: '1', loop: 64 / 3, credit: 'Music: 1' },
-  { id: '2', name: '2', loop: 64 / 3, credit: 'Music: 2' },
-  { id: '3', name: '3', loop: 64 / 3, credit: 'Music: 3' },
+  { id: '1', name: '1', loop: 1000 * 1024 / 48000, credit: 'Music: 1' },
+  { id: '2', name: '2', loop: 818 * 1024 / 48000, credit: 'Music: 2' },
+  { id: '3', name: '3', loop: 1000 * 1024 / 48000, credit: 'Music: 3' },
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
@@ -443,17 +437,18 @@ function usePace(sec) {
   store.set('pace', String(next));
   document.querySelectorAll('#paces button').forEach(b => b.classList.toggle('on', Number(b.dataset.p) === next));
   if (!S.script || !S.show) return;
-  const ratio = S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
-  const was = S.playing;
+  /* The video starts again from its first story. */
   S.show = E.prepare(S.script, S.format, LOOK);
   sizeCanvas();
-  const T = ratio * S.show.duration;
-  $('seek').value = String(Math.round(ratio * 1000));
-  if (was) {
-    S.origin = T;
-    S.t0perf = performance.now();
-  }
-  draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
+  fromTop();
+}
+/* Videos play from the first story: a new video, a new story length or layout, and coming back to the
+   page all start from the top. Pause and Play, and the seek bar, stay where they are. */
+function fromTop() {
+  if (!S.show) return;
+  $('seek').value = '0';
+  if (S.playing) { S.origin = 0; S.t0perf = performance.now(); }
+  draw(0);
 }
 function useWall(id) {
   const w = WALLS.find(x => x.id === id) || WALLS[0];
@@ -651,9 +646,6 @@ function growShow(raw) {
   if (S.again) return;
   const s = normalize(raw);
   const was = !!(S.playing && S.show);
-  const oldDur = was ? S.show.duration : 0;
-  let T = was ? currentT() : 0;
-  const holding = was && oldDur > 0 && T >= oldDur - 0.05;
   S.script = s;
   S.show = E.prepare(s, S.format, LOOK);
   sizeCanvas();
@@ -671,14 +663,7 @@ function growShow(raw) {
       playSound(0);
       closeStudio();
     }
-  } else if (holding) {
-    const at = Math.min(oldDur, Math.max(0, S.show.duration - 1 / E.FPS));
-    S.origin = at;
-    S.t0perf = performance.now();
-    draw(at);
-  } else {
-    draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
-  }
+  } else fromTop();
   loadFonts(s).then(() => {
     if (S.script !== s || !S.show) return;
     const now = S.playing ? Math.min(Math.max(0, currentT()), Math.max(0, S.show.duration - 1 / E.FPS)) : 0;
@@ -698,14 +683,12 @@ function sizeCanvas() {
 function setFormat(f) {
   if (!FORMATS[f]) return;
   const was = S.playing;
-  const ratio = S.show && S.show.duration ? Math.min(0.999, Math.max(0, currentT() / S.show.duration)) : 0;
   stop(); S.format = f;
   if (S.script) {
     S.show = E.prepare(S.script, f, LOOK); sizeCanvas();
-    const T = ratio * S.show.duration;
-    $('seek').value = String(Math.round(ratio * 1000));
-    draw(T);
-    if (was) beginPlayback(T);
+    $('seek').value = '0';
+    draw(0);
+    if (was) beginPlayback(0);
   } else sizeCanvas();
 }
 function chosenFormats() { return [...document.querySelectorAll('.fx')].filter(x => x.checked).map(x => x.value); }
@@ -939,6 +922,7 @@ function saveAccounts(list) {
   S.xUser = clean[0] || '';
   store.set('xUser', S.xUser);
   paintAccounts();
+  paintAsked();
   return clean;
 }
 function addAccount() {
@@ -953,6 +937,27 @@ function addAccount() {
   refreshMarket();
 }
 function xHandle() { return xAccounts()[0] || ''; }
+/* The list goes to githito.xapi as an issue titled "account" (one account on each line), which the owner
+   submits on GitHub. githito.xapi then reads those accounts' posts and the replies under them. */
+const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
+function sendAccounts() {
+  const list = xAccounts();
+  const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
+  const url = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  const w = window.open(url, '_blank', 'noopener');
+  if (!w) location.href = url;
+  say(list.length ? 'Press Submit on GitHub to send @' + list.join(', @') : 'Press Submit on GitHub to send an empty list');
+}
+/* Which of the added accounts githito.xapi already reads (the "asked" list in its news file). */
+function paintAsked() {
+  const el = $('askedNote');
+  if (!el) return;
+  const list = xAccounts();
+  if (!list.length) { el.textContent = ''; return; }
+  const got = new Set((PREP.asked || []).map(a => String(a.h || '').toLowerCase()));
+  const yes = list.filter(n => got.has(n.toLowerCase())), no = list.filter(n => !got.has(n.toLowerCase()));
+  el.textContent = [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Not sent yet: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ');
+}
 const SECTIONS = [
   ['', 'NEWS'],
   ['WORLD', 'WORLD'],
@@ -1310,29 +1315,6 @@ function loadNewsRows(rss, cat) {
     };
     start();
   });
-}
-function handleFromReferrer() {
-  const ref = document.referrer || '';
-  const m = ref.match(/https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/i);
-  if (!m) return '';
-  const skip = new Set(['home', 'explore', 'search', 'i', 'intent', 'share', 'settings', 'messages', 'notifications', 'compose', 'login', 'signup', 'hashtag', 'tos', 'privacy']);
-  return skip.has(m[1].toLowerCase()) ? '' : m[1];
-}
-async function sessionHandle() {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 2000);
-  try {
-    const res = await fetch('https://x.com/home', { credentials: 'include', signal: ctrl.signal });
-    const text = await res.text();
-    const m = text.match(/"screen_name":"([A-Za-z0-9_]{1,15})"/);
-    if (!m) return '';
-    const skip = new Set(['home', 'explore', 'search', 'i', 'intent', 'share', 'settings']);
-    return skip.has(m[1].toLowerCase()) ? '' : m[1];
-  } catch (e) {
-    return '';
-  } finally {
-    clearTimeout(timer);
-  }
 }
 async function fxJson(url) {
   const res = await fetch(url);
@@ -2248,34 +2230,36 @@ function withCoffee(rows) {
    2000, each with the news it answers) and the news accounts' own posts (the headlines). The page reads
    that one file and plays at once. A copy stays in the browser, so the next visit starts without
    waiting for the file.
-   - With replies: a card is one reply, and under it the card says which news it answers. News that
-     gets no replies (politics, public safety) plays as a headline; three cards in ten are such news.
-   - News only: every card is a headline from X.
-   With another edition, X accounts added, or a lineup line that is not a genre, the page searches as
-   before. When the file cannot be read it searches the web only if a web source is switched on. */
+   - Every card is a headline from X: News plays no replies.
+   - For an account added in Settings, its posts play with the replies and comments under them (one
+     card each, saying which post it answers), up to half of a video. githito.xapi reads replies only
+     for the accounts sent to it (Send to githito.xapi), and the page plays them only for the accounts
+     added in this browser. A post of an account that is not a news account ("q") plays only for a
+     reader who added it.
+   With another edition or a lineup line that is not a genre, the page searches as before. When the file cannot be read it searches the web only if a web source is switched on. */
 const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
-let PREP = { items: [], news: {}, heads: [], play: null, at: 0, part: false };
+let PREP = { items: [], news: {}, heads: [], play: null, asked: [], at: 0, part: false };
 let prepLoading = null;
 const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
-const repliesOn = () => store.get('replies', 'on') !== 'off';
 function prepGood(d) {
   const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
   const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h);
   const heads = (Array.isArray(d && d.heads) ? d.heads : []).filter(x => x && x.id && x.h && x.t);
   const p = d && d.play;
   const play = p && typeof p === 'object' && Array.isArray(p.replies) && Array.isArray(p.news) ? { replies: p.replies, news: p.news, genre: (p.genre && typeof p.genre === 'object') ? p.genre : {} } : null;
-  return { items, news, heads, play };
+  const asked = (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h);
+  return { items, news, heads, play, asked };
 }
 /* The copy for the next visit: the file as it was read, with the order it plays in. */
 function keepPrep() {
-  try { store.set('prep.news', JSON.stringify({ at: PREP.at, items: PREP.items, news: PREP.news, heads: PREP.heads, play: PREP.play })); }
+  try { store.set('prep.news', JSON.stringify({ at: PREP.at, items: PREP.items, news: PREP.news, heads: PREP.heads, play: PREP.play, asked: PREP.asked })); }
   catch (e) { try { store.set('prep.news', ''); } catch (e2) {} }
 }
 function keptPrep() {
   try {
     const d = JSON.parse(store.get('prep.news', 'null'));
     const g = prepGood(d);
-    if (g.items.length || g.heads.length) PREP = { ...g, at: Number(d.at) || 0, part: false };
+    if (g.items.length || g.heads.length) { PREP = { ...g, at: Number(d.at) || 0, part: false }; paintAsked(); }
   } catch (e) {}
 }
 function loadPrep() {
@@ -2288,6 +2272,7 @@ function loadPrep() {
       if (!g.items.length && !g.heads.length) return false;
       PREP = { ...g, at: Date.now(), part: false };
       keepPrep();
+      paintAsked();
       return true;
     } catch (e) { console.warn(e); return false; }
     finally { prepLoading = null; }
@@ -2305,7 +2290,7 @@ async function prepared() {
 }
 /* Whether Update can be answered from the prepared file (see above). */
 function prepWanted() {
-  if (feedMode() === 'x' || market().country.id !== 'JP' || !sourceOn('x') || xAccounts().length) return false;
+  if (feedMode() === 'x' || market().country.id !== 'JP' || !sourceOn('x')) return false;
   return true;
 }
 function prepAtHand() {
@@ -2356,7 +2341,6 @@ function headCard(row, langId) {
   card.tags = [];
   return card;
 }
-const NO_REPLY_GENRES = new Set(['politics', 'safety']);
 /* A video from the prepared file, with room for `room` cards, or null when the page should search
    instead. What has not played yet comes first, newer news before older; one reply for one piece of
    news, nobody twice, and no paper or genre taking most of the video. */
@@ -2371,7 +2355,11 @@ async function preparedScript(date, slots, room) {
   if (!prep.items.length && !prep.heads.length) return null;
   const N = Math.max(1, room || total());
   const past = seenKeys();
-  const withReplies = repliesOn();
+  /* Replies only to the accounts added in Settings; a post marked "q" only for a reader who added it. */
+  const asked = new Set(xAccounts().map(n => n.toLowerCase()));
+  const askedHead = x => asked.has(String(x.h).toLowerCase());
+  const askedReply = x => !!prep.news[x.n] && asked.has(String(prep.news[x.n].h).toLowerCase());
+  const withReplies = asked.size > 0;
   const blocked = t => violentHidden() && VIOLENT.test(t);
   const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
   const now = Date.now();
@@ -2379,10 +2367,10 @@ async function preparedScript(date, slots, room) {
   const ageOf = at => { const h = (now - Date.parse(at || 0)) / 3600e3; return Number.isFinite(h) ? h : 36; };
   const sorted = (list, rank) => { const o = l => l.map(x => [rank(x), x]).sort((p, q) => q[0] - p[0]).map(p => p[1]); return o(list.filter(x => !seen(x))).concat(o(list.filter(seen))); };
   /* Replies: the reply's own score, the news' age, and chance. */
-  const replies = sorted(prep.items.filter(x => { const a = prep.news[x.n]; return !blocked(x.t) && !blocked(a.t) && (!allowed || allowed.has(a.g)); }),
+  const replies = sorted(prep.items.filter(x => { const a = prep.news[x.n]; return askedReply(x) && !blocked(x.t) && !blocked(a.t) && (!allowed || allowed.has(a.g)); }),
     x => (Number(x.s) || 0) + Math.max(0, 12 - ageOf(prep.news[x.n].at || x.at) / 3) + Math.random() * 8);
   /* Headlines: the newest first, with a little chance so that Update changes the video. */
-  const heads = sorted(prep.heads.filter(x => !blocked(x.t) && (!allowed || allowed.has(x.g))), x => -ageOf(x.at || x.found) + Math.random() * 3);
+  const heads = sorted(prep.heads.filter(x => (!x.q || askedHead(x)) && !blocked(x.t) && (!allowed || allowed.has(x.g))), x => -ageOf(x.at || x.found) + Math.random() * 3);
   const picked = [];
   const usedNews = new Set();
   const people = new Set();
@@ -2424,16 +2412,16 @@ async function preparedScript(date, slots, room) {
   if (play) {
     const itemById = new Map(prep.items.map(x => [String(x.id), x]));
     const headById = new Map(prep.heads.map(x => [String(x.id), x]));
-    const okReply = x => x && prep.news[x.n] && !blocked(x.t) && !blocked(prep.news[x.n].t) && (!allowed || allowed.has(prep.news[x.n].g));
-    const okHead = x => x && !blocked(x.t) && (!allowed || allowed.has(x.g));
+    const okReply = x => x && askedReply(x) && !blocked(x.t) && !blocked(prep.news[x.n].t) && (!allowed || allowed.has(prep.news[x.n].g));
+    const okHead = x => x && (!x.q || askedHead(x)) && !blocked(x.t) && (!allowed || allowed.has(x.g));
     const entryOf = e => {
       const id = String(e).slice(1);
-      if (String(e)[0] === 'r') { const x = itemById.get(id); return withReplies && okReply(x) ? { reply: x } : null; }
+      if (String(e)[0] === 'r') { const x = itemById.get(id); return okReply(x) ? { reply: x } : null; }
       const x = headById.get(id);
       return okHead(x) ? { head: x } : null;
     };
-    const read = (order, n) => {
-      const list = (Array.isArray(order) ? order : []).map(entryOf).filter(Boolean);
+    const read = (order, n, only) => {
+      const list = (Array.isArray(order) ? order : []).map(entryOf).filter(e => e && (!only || only(e)));
       let got = 0;
       [false, true].forEach(played => list.forEach(e => {
         if (got >= n || picked.length >= N || seen(e.reply || e.head) !== played) return;
@@ -2446,8 +2434,13 @@ async function preparedScript(date, slots, room) {
         if (!read(play.genre[w.gid], w.count)) { if (sourceOn('web')) return null; throw noNewError('No news from X for this genre yet. Press Update again later.'); }
       }
     } else {
-      read(withReplies ? play.replies : play.news, N);
-      if (picked.length < N) read(play.news, N - picked.length);
+      /* The accounts added in Settings: the replies to their posts, then their posts, up to half. */
+      if (withReplies) {
+        const half = Math.ceil(N / 2);
+        read(play.replies, half, e => !!e.reply);
+        if (picked.length < half) read(play.news, half - picked.length, e => askedHead(e.head));
+      }
+      read(play.news, N - picked.length);
     }
   } else if (wants.length) {
     /* Each line of the lineup is a genre: its replies, or its headlines when it has no replies. */
@@ -2458,13 +2451,11 @@ async function preparedScript(date, slots, room) {
       if (!got) { if (sourceOn('web')) return null; throw noNewError('No news from X for this genre yet. Press Update again later.'); }
     }
   } else if (withReplies) {
-    /* Seven cards in ten are replies; three are news that gets no replies, as headlines. */
-    const hard = heads.filter(x => NO_REPLY_GENRES.has(x.g));
-    const nHard = Math.min(Math.round(N * 0.3), hard.filter(x => !seen(x)).length || 0);
-    takeReplies(replies, N - nHard, caps);
-    takeReplies(replies, N - nHard - picked.length);
-    takeHeads(hard, nHard, { source: 2, genre: N });
-    if (picked.length < N) takeHeads(heads, N - picked.length, caps);
+    /* Up to half the cards are replies to the accounts added in Settings; the rest are headlines. */
+    const half = Math.ceil(N / 2);
+    takeReplies(replies, half);
+    if (picked.length < half) takeHeads(heads.filter(askedHead), half - picked.length);
+    takeHeads(heads, N - picked.length, caps);
     if (picked.length < N) takeHeads(heads, N - picked.length);
   } else {
     takeHeads(heads, N, caps);
@@ -2477,7 +2468,7 @@ async function preparedScript(date, slots, room) {
   /* Headlines are spread among the replies, the first card being news. */
   const hs = picked.filter(p => p.head), rs = picked.filter(p => p.reply);
   let order = picked;
-  if (!play && !wants.length && hs.length && rs.length) {
+  if (!wants.length && hs.length && rs.length) {
     order = [];
     const step = picked.length / hs.length;
     const at = new Set(hs.map((_, i) => Math.floor(i * step)));
@@ -3407,29 +3398,7 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     paceBox.appendChild(b);
   });
-  /* Replies on or off: the chips under the video and the choice in Settings say the same. */
-  const replyBox = $('replyModes');
-  const paintReplies = () => {
-    const v = repliesOn() ? 'on' : 'off';
-    replyBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-    if ($('replies')) $('replies').value = v;
-  };
-  const setReplies = v => {
-    if ((repliesOn() ? 'on' : 'off') === v) return;
-    store.set('replies', v);
-    paintReplies();
-    scheduleRefresh(0);
-  };
-  [['on', 'With replies'], ['off', 'News only']].forEach(([v, name]) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.v = v;
-    b.textContent = name;
-    b.onclick = () => setReplies(v);
-    replyBox.appendChild(b);
-  });
-  if ($('replies')) $('replies').onchange = () => setReplies($('replies').value === 'off' ? 'off' : 'on');
-  paintReplies();
+  $('sendAccounts').onclick = sendAccounts;
   $('mediaFind').onclick = () => findMedia();
   $('mediaQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findMedia(); } });
   paintMedia();
@@ -3470,7 +3439,8 @@ function initUI() {
     feedBox.onchange = () => { store.set('feed', feedBox.value); refreshMarket(); };
   }
   let savedAccounts = xAccounts();
-  const seeded = cleanHandle(Q.get('x') || store.get('xUser', '') || handleFromReferrer());
+  /* Only an account added on purpose (here, or ?x=name): opening the page from X adds none. */
+  const seeded = cleanHandle(Q.get('x') || '');
   if (validHandle(seeded) && !savedAccounts.some(n => n.toLowerCase() === seeded.toLowerCase())) savedAccounts = [seeded, ...savedAccounts];
   saveAccounts(savedAccounts);
   $('xUser').value = '';
@@ -3681,6 +3651,9 @@ function watchVersion(key, url) {
   check(true);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(false); });
 }
+/* Back on the page (another app, another tab, the phone's lock screen): the video starts from the top. */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fromTop(); });
+window.addEventListener('pageshow', e => { if (e.persisted) fromTop(); });
 window.NS = {
   run: runAll, exportMP4, setScript,
   state: () => ({ script: S.script, sources: S.script ? sourcesText(S.script) : '', names: S.outs.map(o => o.name), sizes: S.outs.map(o => o.blob.size) }),

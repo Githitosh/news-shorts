@@ -13,11 +13,13 @@ https://githitosh.github.io/news-shorts/
 
 GitHub Pages serves the root of `main`. The picture starts on its own. Safari blocks the sound until the picture is tapped once. The video is the November 14, 2026 edition: 13 stories, about 42 seconds, then it repeats.
 
+Videos play from their first story: a new video, a new story length or layout, and coming back to the page (from another app, another tab or the lock screen) all start from the top. Pause and Play, and the seek bar, stay where they are. The same holds on Humor and the Japanese page.
+
 * opens Settings. The device name (Phone, X, YouTube, or PC) is there, with the country, the language, and the X account.
 
 - **Layout** follows the device until you choose Phone, X, YouTube, or PC.
 - **Country** is Japan or the United States. **Language** is English, Japanese, or both. Changing the country sets Japan to both and the United States to English.
-- **X account**, for example `@name`, adds recent posts and replies from accounts that account follows. No API key. Opening the page from that account on X fills the name in, and the next visit collects again.
+- **Accounts with replies and comments**, for example `@name`: News plays no replies, except for the accounts added here. Their posts play with the replies and comments under them, up to half of a video. **Send to githito.xapi** opens a GitHub issue titled `account` with the list; after Submit, githito.xapi reads those accounts' replies from its next run (every half hour). The note under the button says which accounts githito.xapi already reads. Opening the page from X adds no account; `?x=name` does.
 - Choices stay in this browser. The next visit collects again.
 
 ```bash
@@ -27,8 +29,8 @@ python run.py --x-user name --country US --lang en
 
 Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter.
 
-Music, under the picture: **1**, **2** and **3**, each 8 bars at 90 BPM (21.3 seconds), made from the MIDI
-files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to
+Music, under the picture: **1**, **2** and **3**, each 8 bars (1 and 3 at 90 BPM, 21.3 seconds; 2 at 110 BPM,
+17.5 seconds), made from the MIDI files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to
 the video: it repeats without a seam, and a new video, Update, the video's own repeat, the seek bar, the story
 length and exporting leave it playing where it is. On News and the Japanese page Pause stops it; on Humor
 the Sound button turns it off and on. Humor has the same three songs; the Japanese page plays 1.
@@ -39,12 +41,14 @@ the Sound button turns it off and on. Humor has the same three songs; the Japane
 ahead of time (`news.mjs`, every hour, kept for three days) and the page reads one file, `v1/news-ja.json`, so a video starts
 in about a second and Update answers at once.
 
-- **With replies** (the default): a card is an earnest reply to a piece of news, and a small line under it
-  says which news. News that gets no replies (politics, public safety) plays as a headline; three cards in
-  ten are such news.
-- **News only**: every card is a headline from a news account on X. The switch is under the video
-  (リプライあり / リプライなし) and in Settings.
-- A genre chip plays that genre: its replies, or its headlines when the genre has no replies.
+- **Headlines, no replies**: every card is a headline from a news account on X. There is no switch for
+  replies any more: they made room for abuse.
+- **Replies only for the accounts added in Settings** (Accounts with replies and comments): up to half of
+  a video is their posts and the earnest replies under them, a small line under each reply saying which
+  post it answers. githito.xapi reads replies only for the accounts sent to it, and keeps only earnest
+  ones (no insults, blame, mockery, politics or grave news). A post of an account that is not a news
+  account plays only for a reader who added it.
+- A genre chip plays that genre's headlines.
 - **Sources**: X only, unless the web or a paper from abroad is switched on in Settings. A genre keeps to
   these switches (it used to read web feeds whatever they said).
 - **Add a medium, a website or a keyword** (Settings): type a company name, a medium or `example.com`, press
@@ -54,8 +58,7 @@ in about a second and Update answers at once.
   its files). The pages only read an order from the top, leaving out what the reader has already seen;
   they do no searching and no choosing of their own for this. The same holds for Humor's romance stories
   (one order each for the morning, the day and the night).
-- With another edition, with X accounts added, or with a lineup line that is not a genre, the page
-  searches as described below. There is no pull down to refresh. Update makes a new video.
+- With another edition, or with a lineup line that is not a genre, the page searches as described below. There is no pull down to refresh. Update makes a new video.
 
 The searches the page makes itself:
 
@@ -129,7 +132,7 @@ python build.py
 - English headlines use a heavy serif, condensed. Small words such as to, and, and of stay small.
 - Text bounds: Phone and X use 60px side margins, YouTube uses 60–900px, and PC uses 120–1800px.
 - On Phone, X, and PC, English line breaks are chosen automatically. A `／` in the news lines becomes a line break only when the line does not fit.
-- The chosen song is copied into the MP4 as it is, from its beginning, and repeats to the end of the video. Each file holds the 8 bars twice (42.7 seconds, 1000 AAC frames each); past its end the frames are taken again from one song length earlier, so the repeat has no seam.
+- The chosen song is copied into the MP4 as it is, from its beginning, and repeats to the end of the video. Each file holds the 8 bars twice (a whole number of AAC frames each: 1000 for 1 and 3, 818 for 2); past its end the frames are taken again from one song length earlier, so the repeat has no seam.
 
 ## Credits
 
