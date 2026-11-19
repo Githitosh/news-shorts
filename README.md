@@ -36,6 +36,22 @@ Music, under the picture:
 | Stars and Stripes | Sousa’s Band, Edison, 1909 |
 | Sandman | Paul Whiteman and His Ambassador Orchestra, 1920 |
 
+## Where the news comes from
+
+No API key. The page reads public feeds, from more than one source and through more than one relay, so that one of them refusing or being slow does not stop the video.
+
+| Edition | Front pages | A genre |
+|---|---|---|
+| Japan | Google News, Yahoo! News (its main topics and one section in turn), and one paper from abroad in turn (BBC, ABC, Reuters) | Yahoo! News' topic page where it has one, a search of Google News and of Bing News, and the BBC's section |
+| United States | Google News, NPR, and BBC, ABC or Reuters in turn | A search of Google News and of Bing News, and the BBC's section |
+
+- In Japan seven stories in ten are the edition's own; elsewhere half.
+- A feed cannot be read by a page directly, so it goes through a relay: rss2json, allorigins or r.jina.ai. Each refuses some sites (r.jina.ai refuses Google News at times, rss2json cannot read Yahoo! News, allorigins cannot read Google News), so for each site the relay that reads it best is asked first and the next one takes over when it fails or does not answer in two and a half seconds. A relay that failed for a site rests for ten minutes.
+- What a feed returned is kept for four minutes, so pressing Update again does not ask for the same page.
+- GDELT is asked last, only when the others are short: it is slow and often refuses.
+- Press releases, blog platforms and stories in a script the edition does not read are left out.
+- Humor reads its news the same way (the topics its jokes are about).
+
 ## Make a new video
 
 `index.html` contains the pictures, the music, and the program. Chrome, Edge, and Safari can open it. Collection uses public headlines, so there is no API key.

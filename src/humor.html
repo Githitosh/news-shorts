@@ -669,33 +669,114 @@ function rssItems(xml) {
   }
   return items;
 }
-async function loadNewsRows(rss) {
-  try {
-    const res = await withTimeout(fetch('https://r.jina.ai/' + rss, { headers: { 'X-Return-Format': 'text' } }), 12000);
-    if (res.ok) {
-      const parsed = rssItems(await res.text());
-      if (parsed.length) return parsed;
-    }
-  } catch (e) { console.warn(e); }
-  try {
-    const res = await withTimeout(fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss) + '&count=20'), 8000);
-    if (res.ok) {
-      const j = await res.json();
-      if (j && j.status === 'ok') return (j.items || []).map(it => ({ title: it.title || '', link: it.link || '', pubDate: it.pubDate || '' }));
-    }
-  } catch (e) { console.warn(e); }
-  return [];
+/* A feed is read through a relay, and there are three of them, because each refuses some sites and each
+   has bad hours: rss2json reads Google News, Bing News, the BBC and ABC; allorigins reads Yahoo! News,
+   Bing News, the BBC and ABC; r.jina.ai reads Yahoo! News, the BBC and ABC. For each site the relay
+   that reads it best is asked first; the next one starts when the one before fails, or after two and a
+   half seconds without an answer; the first that returns stories is used. A relay that failed for a
+   site is left out for that site for ten minutes; while every relay is out for a site, that site is
+   passed over. (The same as on the News page.) */
+function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
+/* Bing News links pass through its own counter; the story's address is inside. */
+function realLink(link) {
+  const u = String(link || '');
+  const m = /bing\.com\/news\/apiclick/i.test(u) && u.match(/[?&]url=([^&]+)/);
+  if (!m) return u;
+  try { return decodeURIComponent(m[1]); } catch (e) { return u; }
 }
+const RELAYS = {
+  rss2json: { ms: 9000, get: async rss => {
+    const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss));
+    if (!res.ok) throw new Error('rss2json ' + res.status);
+    const j = await res.json();
+    if (!j || j.status !== 'ok') throw new Error('rss2json could not read it');
+    return j.items || [];
+  } },
+  allorigins: { ms: 10000, get: async rss => {
+    const res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(rss));
+    if (!res.ok) throw new Error('allorigins ' + res.status);
+    return rssItems(await res.text());
+  } },
+  jina: { ms: 10000, get: async rss => {
+    const res = await fetch('https://r.jina.ai/' + rss, { headers: { 'X-Return-Format': 'text' } });
+    if (!res.ok) throw new Error('jina ' + res.status);
+    return rssItems(await res.text());
+  } },
+};
+function relayOrder(site) {
+  /* allorigins cannot read Google News and takes ten seconds to say so. */
+  if (/news\.google\.com$/.test(site)) return ['rss2json', 'jina'];
+  if (/news\.yahoo\.co\.jp$/.test(site)) return ['allorigins', 'jina'];
+  if (/bing\.com$/.test(site)) return ['allorigins', 'rss2json'];
+  return ['allorigins', 'jina', 'rss2json'];
+}
+const relayOff = new Map();
+function loadNewsRows(rss) {
+  const site = hostOf(rss);
+  const order = relayOrder(site).filter(id => (relayOff.get(id + ' ' + site) || 0) < Date.now());
+  if (!order.length) return Promise.resolve([]);
+  return new Promise(resolve => {
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let timer = 0;
+    const finish = rows => { if (done) return; done = true; clearTimeout(timer); resolve(rows); };
+    const start = () => {
+      clearTimeout(timer);
+      if (done) return;
+      if (next >= order.length) { if (!running) { console.warn('feed not read', rss); finish([]); } return; }
+      const id = order[next++];
+      running++;
+      withTimeout(RELAYS[id].get(rss), RELAYS[id].ms).then(items => {
+        const rows = (items || []).map(it => ({ title: String(it.title || '').trim(), link: realLink(it.link), pubDate: it.pubDate || '' })).filter(it => it.title);
+        if (!rows.length) throw new Error(id + ' returned no stories');
+        running--;
+        finish(rows);
+      }).catch(e => {
+        running--;
+        relayOff.set(id + ' ' + site, Date.now() + 600000);
+        console.warn(id, site, e && e.message);
+        start();
+      });
+      timer = setTimeout(start, 2500);
+    };
+    start();
+  });
+}
+/* What a feed returned is kept for four minutes, so pressing Update again does not ask the relays for
+   the same page: they refuse a page that asks too often. */
+const feedKept = new Map();
 function cachedNews(url) {
-  if (!feedMemo.has(url)) feedMemo.set(url, loadNewsRows(url));
-  return feedMemo.get(url);
+  if (feedMemo.has(url)) return feedMemo.get(url);
+  const kept = feedKept.get(url);
+  const job = kept && Date.now() - kept.at < 240000 ? Promise.resolve(kept.rows) : loadNewsRows(url).then(rows => {
+    if (rows.length) feedKept.set(url, { at: Date.now(), rows });
+    return rows;
+  });
+  feedMemo.set(url, job);
+  return job;
+}
+/* More than one source of news for a genre: Bing News beside Google News, and in Japan the topic pages
+   of Yahoo! News, which editors choose. */
+function bingFeed(query) {
+  const e = edition();
+  return 'https://www.bing.com/news/search?q=' + encodeURIComponent(query) + '&format=rss&setlang=' + (e.hl === 'ja' ? 'ja' : 'en-US') + '&cc=' + e.gl;
+}
+const yahooFeed = name => 'https://news.yahoo.co.jp/rss/topics/' + name + '.xml';
+const yahooOn = () => { const e = edition(); return e.gl === 'JP' && e.hl === 'ja' && !pastDay(); };
+const YAHOO_TOPIC = { politics: 'domestic', science: 'science', entertainment: 'entertainment', sports: 'sports', local: 'local' };
+function weave(lists) {
+  const out = [];
+  const n = Math.max(0, ...lists.map(l => l.length));
+  for (let k = 0; k < n; k++) lists.forEach(l => { if (l[k]) out.push(l[k]); });
+  return out;
 }
 function splitHeadline(title) {
   const raw = String(title || '').trim();
   const parts = raw.split(/\s[-–—]\s/);
   if (parts.length < 2) return { headline: raw, source: '' };
   const tail = parts[parts.length - 1].trim();
-  const publisher = tail.length <= 32 && tail.split(/\s+/).length <= 4 && !/[.?!。]/.test(tail);
+  const publisher = tail.length <= 32 && tail.split(/\s+/).length <= 4 && !/[.?!。！？…]$/.test(tail) && !/[?。？]/.test(tail);
   if (!publisher) return { headline: raw, source: '' };
   return { headline: parts.slice(0, -1).join(' - ').trim(), source: tail };
 }
@@ -708,7 +789,12 @@ function rowsFromItems(items, source, cat) {
   });
   return rows;
 }
-async function searchRows(query, cat) { return rowsFromItems(await cachedNews(searchFeed(query)), '', cat); }
+/* A search of the news: Google News and, for today's news, Bing News, one story from each in turn. */
+async function searchRows(query, cat) {
+  const feeds = [searchFeed(query)].concat(pastDay() ? [] : [bingFeed(query)]);
+  const lists = await Promise.all(feeds.map(url => cachedNews(url).then(items => rowsFromItems(items, '', cat)).catch(() => [])));
+  return mergeRows(weave(lists), []);
+}
 function mergeRows(first, second) {
   const out = [];
   const seen = new Set();
@@ -800,7 +886,9 @@ function classifyRequest(text) {
   if (/スポーツ|^sports$/.test(low)) return requestForGenre(GENRES.find(g => g.id === 'sports'));
   return { type: 'gdelt', q: name, cat: name.toUpperCase().slice(0, 16), source: 'News', label: name };
 }
-function requestForGenre(g) {
+/* A genre's request carries the genre, so that its own sources (Yahoo! News' topic page) can be read too. */
+function requestForGenre(g) { return Object.assign(genreRequest(g), { gid: g.id }); }
+function genreRequest(g) {
   const name = g.name;
   const { country } = market();
   const q = g.q[country.id] || g.q.US;
@@ -836,6 +924,10 @@ async function rowsForSlot(slot) {
     } else if (slot.type === 'gdelt') {
       rows = await searchRows(slot.q, slot.cat);
       if (rows.length < (slot.count || 1)) rows = mergeRows(rows, await gdeltRows(slot.q, slot.cat, slot.source));
+    }
+    if (slot.gid && yahooOn() && YAHOO_TOPIC[slot.gid]) {
+      const own = rowsFromItems(await cachedNews(yahooFeed(YAHOO_TOPIC[slot.gid])), 'Yahoo!ニュース', slot.cat);
+      rows = mergeRows(weave([own, rows]), []);
     }
   } catch (e) { console.warn(e); }
   return rows.filter(allowedRow);
