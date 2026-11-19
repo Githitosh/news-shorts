@@ -18,7 +18,7 @@ Videos play from their first story: a new video, a new story length or layout, a
 * opens Settings. The device name (Phone, X, YouTube, or PC) is there, with the country, the language, and the X account.
 
 - **Layout** follows the device until you choose Phone, X, YouTube, or PC.
-- **Country** is Japan or the United States. **Language** is English, Japanese, or both. Changing the country sets Japan to both and the United States to English.
+- **Country** is Japan or the United States. **Language** is English, Japanese, or Both. English writes the cards in English only and Japanese in Japanese only; only Both writes the two on one card (the English headline large, the Japanese lines under it). Changing the country sets Japan to Both and the United States to English. A choice of Japanese saved before this (when Japanese still showed the English too) is moved to Both once.
 - **Accounts with replies and comments**, for example `@name`: News plays no replies, except for the accounts added here. Their posts play with the replies and comments under them, up to half of a video. **Send to githito.xapi** opens a GitHub issue titled `account` with the list; after Submit, githito.xapi reads those accounts' replies from its next run (every half hour). The note under the button says which accounts githito.xapi already reads. Opening the page from X adds no account; `?x=name` does.
 - Choices stay in this browser. The next visit collects again.
 

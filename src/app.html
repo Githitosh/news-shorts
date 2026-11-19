@@ -253,13 +253,23 @@ const store = {
 };
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
 const COUNTRIES = [
-  { id: 'JP', name: 'Japan', lang: 'ja' },
+  { id: 'JP', name: 'Japan', lang: 'both' },
   { id: 'US', name: 'United States', lang: 'en' },
 ];
+/* The language on the cards. English: English only. Japanese: Japanese only. Both: the English headline
+   large with the Japanese lines under it; only then are the two written on one card. */
 const LANGS = [
   { id: 'en', name: 'English' },
   { id: 'ja', name: 'Japanese' },
+  { id: 'both', name: 'Both' },
 ];
+/* The language of the page's own words and of the date line: Japanese for Japanese, and for Both in Japan. */
+function wordsLang() {
+  const v = (document.getElementById('lang') || {}).value || '';
+  if (v === 'en') return 'en';
+  if (v === 'both' && ((document.getElementById('country') || {}).value || 'JP') !== 'JP') return 'en';
+  return 'ja';
+}
 const WALLS = [
   { id: 'morning', name: 'Morning' },
   { id: 'bright', name: 'Bright' },
@@ -300,7 +310,7 @@ const TRACKS = [
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
-const LOOK = { uniform: true, jp: 2, get lang() { const el = document.getElementById('lang'); return el && el.value === 'en' ? 'en' : 'ja'; } };
+const LOOK = { uniform: true, jp: 2, get lang() { return wordsLang(); } };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
@@ -1883,7 +1893,7 @@ function chipKey(line) {
   return enName(String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0]).toLowerCase();
 }
 function chipLine(chip) {
-  if (!window.UIJA || $('lang').value !== 'ja') return chip.label;
+  if (!window.UIJA || wordsLang() !== 'ja') return chip.label;
   return UIJA.tr(chip.label);
 }
 function classifyRequest(text) {
@@ -2279,6 +2289,11 @@ function newsWord(headline, en) {
   const plainNews = String(headline || '').replace(/【[^】]*】/g, ' ').trim() || String(headline || '');
   return !en && /[぀-ヿ一-鿿]/.test(plainNews) ? jaWord(plainNews) : storyWord(plainNews, '');
 }
+/* The genre in a card's corner: in Japanese when the cards are Japanese only. */
+function cornerGenre(g, langId, none, noneJa) {
+  if (langId === 'ja' && window.UIJA) return g ? UIJA.tr(g.name) : noneJa;
+  return g ? g.name.toUpperCase() : none;
+}
 /* One reply becomes one card: the reply large, and under it which news it answers. The card opens on
    the news' own word; the corner names the paper. */
 function replyCard(row, langId) {
@@ -2292,8 +2307,8 @@ function replyCard(row, langId) {
   const short = chars.length > 40 ? chars.slice(0, 39).join('') + '…' : shown;
   const g = GENRES.find(x => x.id === r.genre);
   card.jp = (card.jp || []).filter(t => t && t !== card.kw);
-  card.kw = newsWord(r.news, en) || card.kw;
-  card.cat = g ? g.name.toUpperCase() : 'REPLY';
+  card.kw = (en && r.newsEn ? storyWord(r.newsEn, '') : newsWord(r.news, en)) || card.kw;
+  card.cat = cornerGenre(g, langId, 'REPLY', 'リプライ');
   card.topic = r.name || 'X';
   card.tags = [];
   card.sub = card.sub || [];
@@ -2335,7 +2350,7 @@ function englishParts(en) {
   const longs = words.map(w => bare(w).toUpperCase().replace(/[^A-Z0-9]/g, '')).filter(b => b.length >= 5 && !PLAIN_EN.has(b.toLowerCase()) && !SMALL_EN.has(b.toLowerCase()) && !names.includes(b));
   const kw = (names[0] || longs[0] || bare(words[0] || 'NEWS').toUpperCase()).replace(/[^A-Z0-9]/g, '').slice(0, 14) || 'NEWS';
   const tags = names.concat(longs).filter((t, k, a) => t && a.indexOf(t) === k).slice(0, 3);
-  return { kw, head: head || kw, sub, tags };
+  return { kw, head: head || kw, sub, tags, text, whole: m >= words.length };
 }
 /* The English of headlines, kept in the browser (the newest 800), so a headline is asked for once. */
 function englishKept() { try { return JSON.parse(store.get('news.en', '{}')) || {}; } catch (e) { return {}; } }
@@ -2360,8 +2375,10 @@ function englishFor(list) {
   return run;
 }
 /* A headline from X as the first News videos showed one: the English headline large with the rest of
-   it under, the Japanese lines below, tags at the foot. githito.xapi sends the English with the headline. */
-function bothCard(row) {
+   it under, the Japanese lines below, tags at the foot. githito.xapi sends the English with the headline.
+   englishOnly (Language: English): no Japanese; the lines below are the whole English sentence when the
+   large lines had to cut it. */
+function bothCard(row, englishOnly) {
   const p = englishParts(row.en);
   const g = GENRES.find(x => x.id === row.genre);
   let md = '';
@@ -2371,17 +2388,21 @@ function bothCard(row) {
     /* The corner: the second thing the news is about, as in the first videos (the paper is at the foot). */
     kw: p.kw, cat: g ? g.name.toUpperCase() : 'NEWS', topic: p.tags.find(t => t !== p.kw) || p.kw,
     head: [p.head], sub: p.sub ? [p.sub] : [],
-    jp: [row.headline, row.detail].filter(Boolean),
+    jp: englishOnly ? (p.whole ? [] : [p.text]) : [row.headline, row.detail].filter(Boolean),
     tags: p.tags, src: ('X @' + String(row.source || '')).slice(0, 40), date: md, url: row.link || '',
   };
 }
 /* A headline from X becomes a card of its own: no reply, the corner names the paper. */
 function headCard(row, langId) {
-  if (langId === 'ja' && row.en) return bothCard(row);
+  if (langId === 'both' && row.en) return bothCard(row);
+  /* English: the translated headline, and nothing Japanese on the card. */
+  if (langId === 'en' && row._en && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(row._en)) return bothCard({ ...row, en: row._en }, true);
   const card = storyFrom(row, row._en || row.headline, row._local || row.headline, langId);
   const g = GENRES.find(x => x.id === row.genre);
   card.kw = newsWord(row.headline, langId === 'en') || card.kw;
-  card.cat = g ? g.name.toUpperCase() : 'NEWS';
+  card.cat = cornerGenre(g, langId, 'NEWS', 'ニュース');
+  /* Japanese only: the line the post added to its headline goes under it, as on the card with both languages. */
+  if (langId === 'ja' && row.detail && !(card.jp || []).includes(row.detail)) card.jp = (card.jp || []).concat(row.detail);
   card.topic = row.name || 'X';
   card.tags = [];
   return card;
@@ -2529,6 +2550,10 @@ async function preparedScript(date, slots, room) {
   });
   S.pendingKeys = rows.flatMap(storyKeys);
   if (lang.id === 'ja') {
+    /* Japanese only: the headline as it is, and no English is asked for. */
+    rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
+  }
+  else if (lang.id === 'both') {
     rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
     /* A headline that came without its English (githito.xapi is refused by the translator where it runs):
        the page has it from an earlier video, or asks for it now, briefly. Without it the card is Japanese only. */
@@ -2545,7 +2570,10 @@ async function preparedScript(date, slots, room) {
     }
   }
   else {
-    /* Another language on the cards: the words are translated, which takes a moment. */
+    /* English only: the English githito.xapi sent or an earlier video asked for is used; the rest is
+       translated now, which takes a moment. */
+    const known = englishKept();
+    rows.forEach(r => { const e = !r.reply && (r.en || known[r.link]); if (e) r._en = e; });
     await fillText(rows, lang);
     const rr = rows.filter(r => r.reply);
     try { (await translateMany(rr.map(r => r.reply.news), 'en')).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
@@ -3490,6 +3518,9 @@ function initUI() {
     : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
   countryBox.value = pickedCountry;
   const countryDefault = (COUNTRIES.find(c => c.id === pickedCountry) || COUNTRIES[0]).lang;
+  /* Until now Japanese showed the English as well. That look is now called Both: a choice of Japanese
+     saved before is moved to it once, so the page looks as it did until Japanese is chosen again. */
+  if (store.get('langV', '') !== '2') { if (store.get('lang', '') === 'ja') store.set('lang', 'both'); store.set('langV', '2'); }
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
   langBox.value = pickedLang;
@@ -3724,7 +3755,7 @@ window.NS = {
   watchVersion('news', 'version.json');
   /* Japanese for the page's own words when Language is Japanese. */
   if (window.UIJA) {
-    UIJA.start(() => $('lang').value);
+    UIJA.start(() => wordsLang());
     ['lang', 'country'].forEach(id => $(id).addEventListener('change', () => UIJA.apply()));
   }
   try {
