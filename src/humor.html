@@ -25,7 +25,6 @@ try { document.documentElement.dataset.theme = localStorage.getItem('newsShorts.
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
 button.title { background: none; border: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; cursor: pointer; }
-header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP",sans-serif; text-decoration: none; }
 .hright { display: flex; align-items: center; gap: 12px; }
 #gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
@@ -134,7 +133,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">Humor</button><span class="pull">Pull down to refresh</span></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
+<header><div><button type="button" id="home" class="title">Humor</button></div><div class="hright"><a class="jump" href="../">News</a><button type="button" id="gear" aria-label="Settings" aria-expanded="false">*</button></div></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <div id="watch" class="watch">
@@ -2926,8 +2925,8 @@ function initUI() {
   $('applyLine').onclick = applyLineup;
   $('lineupGo').onclick = applyLineup;
   $('play').onclick = toggle;
-  /* A tap or click on the picture pauses and plays. A pull to refresh is not a tap. */
-  $('cv').addEventListener('click', () => { if (Date.now() - (S.pulledAt || 0) < 500) return; toggle(); });
+  /* A tap or click on the picture pauses and plays. */
+  $('cv').addEventListener('click', () => toggle());
   $('dl').onclick = () => download();
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
@@ -2952,61 +2951,6 @@ function initUI() {
     tick();
   }, 40);
   setupVideoFull();
-  initPull();
-}
-
-/* ---------- pull down to refresh ---------- */
-function initPull() {
-  /* Touch uses touch events, which keep coming while the browser scrolls; a mouse uses pointer events.
-     A pull that is cancelled or lifted ends without a refresh, so it never stays half-open over the buttons. */
-  const PULL_AT = 70;
-  const frame = document.querySelector('.frame');
-  let pull = null;
-  const show = dy => {
-    const label = document.querySelector('header .pull');
-    if (label) label.textContent = dy > PULL_AT ? 'Release to refresh' : 'Pull down to refresh';
-    if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.35, 72) + 'px)'; }
-    else { frame.classList.remove('pulling'); frame.style.transform = ''; }
-  };
-  const end = go => {
-    const p = pull;
-    pull = null;
-    if (p && p.dy > 8) S.pulledAt = Date.now();
-    show(0);
-    if (go && p && !p.dead && p.dy > PULL_AT) refreshMarket();
-  };
-  const begin = (target, y, kind) => {
-    if (pull) end(false);
-    if (S.vfull || studioOpen() || (!fullOn() && window.scrollY > 8)) return;
-    if (target && target.closest && target.closest('button, a, input, select, textarea, .ctl, .music')) return;
-    pull = { y, kind, dy: 0, dead: false };
-  };
-  const move = y => {
-    if (!pull || pull.dead) return false;
-    pull.dy = y - pull.y;
-    if (pull.dy < -12) { pull.dead = true; show(0); return false; }
-    show(pull.dy);
-    return pull.dy > 8;
-  };
-  window.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { if (pull) end(false); return; }
-    begin(e.target, e.touches[0].clientY, 'touch');
-  }, { passive: true });
-  window.addEventListener('touchmove', e => {
-    if (!pull || pull.kind !== 'touch' || e.touches.length !== 1) return;
-    if (move(e.touches[0].clientY) && e.cancelable) e.preventDefault();
-  }, { passive: false });
-  window.addEventListener('touchend', () => { if (pull && pull.kind === 'touch') end(true); });
-  window.addEventListener('touchcancel', () => { if (pull && pull.kind === 'touch') end(false); });
-  window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) begin(e.target, e.clientY, 'mouse'); });
-  window.addEventListener('pointermove', e => {
-    if (!pull || pull.kind !== 'mouse' || e.pointerType !== 'mouse') return;
-    if (!(e.buttons & 1)) { end(false); return; }
-    move(e.clientY);
-  });
-  window.addEventListener('pointerup', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') end(true); });
-  window.addEventListener('pointercancel', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') end(false); });
-  window.addEventListener('blur', () => { if (pull) end(false); });
 }
 
 /* ---------- start ---------- */

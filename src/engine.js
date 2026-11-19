@@ -378,7 +378,42 @@ function uniformLayout(items) {
   }
   items.forEach(it => { it.L = layoutAt(it, J0); });
 }
+/* A note under the text: a line or two in small letters that says what the words above are about
+   (on News: which news a reply answers). The text gives it room and stays centred together with it. */
+const NOTE = { k: 1.12, lines: 3, gap: 0.9 };
+function noteLines(text) {
+  const size = P.jp.size * NOTE.k;
+  const w = t => adv(t, font(P.jp.w, size, F_SERIF)) * P.jp.sx;
+  const max = P.layout === 'columns' ? (P.colL.right - P.colL.left) : P.jp.maxW;
+  const out = [];
+  let cur = '';
+  for (const ch of [...String(text || '').replace(/\s+/g, ' ').trim()]) {
+    if (cur && w(cur + ch) > max) { out.push(cur.trim()); cur = ''; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  /* A closing mark alone on a line goes back to the line before. */
+  if (out.length > 1 && [...out[out.length - 1]].length <= 2) { const tail = out.pop(); out[out.length - 1] += tail; }
+  if (out.length > NOTE.lines) { out.length = NOTE.lines; out[NOTE.lines - 1] = [...out[NOTE.lines - 1]].slice(0, -1).join('') + '…'; }
+  return out;
+}
 function layoutAt(it, scale, forced) {
+  const note = it.note && !it.still ? noteLines(it.note) : [];
+  if (!note.length) return layoutCore(it, scale, forced);
+  const size = P.jp.size * NOTE.k, line = P.jp.line * NOTE.k;
+  const h = size * NOTE.gap + size + (note.length - 1) * line;
+  const box = P.box;
+  P.box = { top: box.top, bottom: box.bottom - h, center: box.center - h / 2 };
+  try {
+    const L = layoutCore(it, scale, forced);
+    const top = L.bottom + size * NOTE.gap;
+    L.note = note.map((t, i) => ({ t, base: top + P.jp.ascent * size + i * line }));
+    L.noteSize = size;
+    L.blockH = (L.blockH || 0) + h;
+    return L;
+  } finally { P.box = box; }
+}
+function layoutCore(it, scale, forced) {
   jpScale = scale;
   const jp = [];
   (it.jp || []).forEach((p, pi) => wrapJp(p).forEach((t, li) => jp.push({ t, para: li === 0 && pi > 0 })));
@@ -457,7 +492,7 @@ function layoutAt(it, scale, forced) {
     : blockH;
   if (!forced && jpH > avail + 4 && jpScale > 0.28) {
     const next = Math.max(0.28, Math.min(jpScale - 0.02, jpScale * avail / jpH * 0.98));
-    if (next < jpScale - 0.01) return layoutAt(it, next);
+    if (next < jpScale - 0.01) return layoutCore(it, next);
   }
   return L;
 }
@@ -610,6 +645,7 @@ function drawItem(ctx, show, i, t, bgs) {
     L.head.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.head.sx, 'center'));
     /* No rules in the middle of the card: only the one under the top line and the one above the foot. */
     L.sub.forEach(l => subLine(ctx, l.t, L.Ss, l.base, L.cxHead));
+    if (L.note && P.layout === 'columns') { ctx.font = font(P.jp.w, L.noteSize, F_SERIF); L.note.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.jp.sx, 'center')); }
     if (P.layout === 'columns') ctx.fillRect(P.divider - 1, P.box.top + 10, 2, P.box.bottom - P.box.top - 20);
     ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
     ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
@@ -621,6 +657,11 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.globalAlpha = a2 * a1;
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
+    if (L.note && P.layout !== 'columns') {
+      ctx.globalAlpha = a2 * a1 * 0.92;
+      ctx.font = font(P.jp.w, L.noteSize, F_SERIF);
+      L.note.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.jp.sx, 'center'));
+    }
   }
   if (a3 > 0 && it.tags.length) {
     ctx.globalAlpha = a3 * a1;
@@ -648,7 +689,7 @@ function fontSpecs() {
 function allText(script) {
   const s = [];
   (script.items || []).concat(script.coffee ? [script.coffee] : []).forEach(it => {
-    s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.replies || []), ...(it.tags || []), it.src, it.date);
+    s.push(it.kw, it.cat, it.topic, ...(it.head || []), ...(it.sub || []).map(x => x + x.toUpperCase()), ...(it.jp || []), ...(it.replies || []), ...(it.tags || []), it.src, it.date, it.note);
   });
   s.push('0123456789 NEWS NOTE COFFEE BREAK News Shorts 年月日速報ニュース ｜ / -', musicCredit, CREDIT_PHOTO, CREDIT_COFFEE);
   return s.filter(Boolean).join(' ');

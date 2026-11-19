@@ -21,9 +21,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 "Noto Sans JP","Hiragino Sans",system-ui,sans-serif; overscroll-behavior-y: none; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; position: sticky; top: 0; z-index: 40; background: var(--bg); touch-action: none; }
-a.jump { color: var(--acc); font: 700 14px/1 "Noto Sans JP", sans-serif; text-decoration: none; }
+a.jump { color: var(--acc); font: 700 13px/1 "Noto Sans JP", sans-serif; text-decoration: none; white-space: nowrap; border: 1px solid var(--acc); border-radius: 10px; padding: 10px 12px; margin-left: auto; }
 button.title { background: none; border: 0; border-radius: 0; padding: 0; color: var(--ink); font: 700 20px/1.2 "Noto Serif JP",serif; letter-spacing: .02em; cursor: pointer; }
-header .pull { display: block; color: var(--mute); font-size: 12px; letter-spacing: .04em; }
 #gear { width: 48px; height: 44px; padding: 0; font-size: 22px; line-height: 1; touch-action: manipulation; }
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
@@ -122,7 +121,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 </style>
 </head>
 <body>
-<header><div><button type="button" id="home" class="title">News Shorts</button><span class="pull">Pull down to refresh</span></div><a class="jump" href="humor/">Humor</a><button type="button" id="gear" aria-label="Settings">*</button></header>
+<header><div><button type="button" id="home" class="title">News Shorts</button></div><a class="jump" href="humor/">To Reply News</a><button type="button" id="gear" aria-label="Settings">*</button></header>
 <button type="button" id="backDock" class="back-dock" hidden>Back to video</button>
 <main>
   <section class="stage" id="stage">
@@ -554,6 +553,7 @@ function normItem(it) {
     jp: arr(it.jp).slice(0, 8),
     tags: arr(it.tags).map(up).slice(0, 4),
     src: String(it.src || '').trim(), date: String(it.date || '').trim(), url: String(it.url || '').trim(),
+    note: String(it.note || '').trim(),
     replies: [],
   };
 }
@@ -1954,6 +1954,7 @@ function requestForGenre(g) {
   /* In Japan the topic pages of Yahoo! News come first: they are chosen by editors. */
   if (yahooOn() && YAHOO_TOPIC[g.id]) more.push({ url: yahooFeed(YAHOO_TOPIC[g.id]), source: 'Yahoo!ニュース' });
   const slot = searchSlot(q, name.toUpperCase(), name, more);
+  slot.gid = g.id;
   /* One story in every round comes from the BBC's section, where it has one. */
   if (BBC_SECTION[g.id] && sourceOn('bbc')) slot.feeds.push({ url: RSS[BBC_SECTION[g.id]], source: 'BBC', hint: BBC_HINT[g.id] || null });
   return slot;
@@ -2213,6 +2214,181 @@ function withCoffee(rows) {
   if (!news.length) return (rows || []).some(r => r && r.coffee) ? [{ coffee: true }] : [];
   return [news[0], { coffee: true, about: news[0] }, ...news.slice(1)];
 }
+/* ---------- replies to the news, prepared ahead ---------- */
+/* githito.xapi collects what people reply to the news on X three times a day and keeps up to 2000
+   replies in one file, each with the news it answers. The page reads that file and plays at once:
+   every card is one reply, and under it the card says which news the reply is about. A copy stays in
+   the browser, so the next visit starts without waiting for the file. With another edition, the X
+   source switched off, X accounts added, or a line in the lineup that is not a genre, the page
+   searches the news as before; so it does when the file cannot be read. */
+const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
+let PREP = { items: [], news: {}, at: 0, part: false };
+let prepLoading = null;
+const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
+function prepGood(d) {
+  const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
+  const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h);
+  return { items, news };
+}
+/* The copy for the next visit: 300 replies, those not played yet first, with their news. */
+function keepPrep() {
+  try {
+    const past = seenKeys();
+    const fresh = PREP.items.filter(x => !past.has('u:' + replyLink(x)));
+    const rest = new Set(fresh);
+    const items = fresh.concat(PREP.items.filter(x => !rest.has(x))).slice(0, 300);
+    const news = {};
+    items.forEach(x => { news[x.n] = PREP.news[x.n]; });
+    store.set('prep.news', JSON.stringify({ at: PREP.at, items, news }));
+  } catch (e) {}
+}
+function keptPrep() {
+  try {
+    const d = JSON.parse(store.get('prep.news', 'null'));
+    const g = prepGood(d);
+    if (g.items.length) PREP = { items: g.items, news: g.news, at: Number(d.at) || 0, part: true };
+  } catch (e) {}
+}
+function loadPrep() {
+  if (prepLoading) return prepLoading;
+  prepLoading = (async () => {
+    try {
+      const res = await timed(fetch(XAPI + 'news-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
+      if (!res.ok) return false;
+      const g = prepGood(await res.json());
+      if (!g.items.length) return false;
+      PREP = { items: g.items, news: g.news, at: Date.now(), part: false };
+      keepPrep();
+      return true;
+    } catch (e) { console.warn(e); return false; }
+    finally { prepLoading = null; }
+  })();
+  return prepLoading;
+}
+/* The kept copy at once and the whole file behind it; the file itself when there is no copy; a fresh
+   read when what is held is more than ten minutes old. */
+async function prepared() {
+  if (!PREP.items.length) keptPrep();
+  if (!PREP.items.length) await loadPrep();
+  else if (PREP.part || Date.now() - PREP.at > 600000) { PREP.part = false; PREP.at = Date.now(); loadPrep(); }
+  return PREP;
+}
+/* Whether Update can be answered from the prepared replies (see above). */
+function prepWanted() {
+  if (feedMode() === 'x' || market().country.id !== 'JP' || !sourceOn('x') || xAccounts().length) return false;
+  return true;
+}
+function prepAtHand() {
+  if (!prepWanted()) return false;
+  if (PREP.items.length) return true;
+  try { return !!store.get('prep.news', ''); } catch (e) { return false; }
+}
+const slotGenre = slot => {
+  if (!slot || slot.type !== 'feeds') return '';
+  if (slot.gid) return slot.gid;
+  const g = GENRES.find(x => x.name.toUpperCase() === String(slot.cat || '').toUpperCase());
+  return g ? g.id : '';
+};
+/* One reply becomes one card: the reply large, and under it which news it answers. The card opens on
+   the news' own word; the corner names the paper. */
+function replyCard(row, langId) {
+  const card = storyFrom(row, row._en || row.headline, row._local || row.headline, langId);
+  const r = row.reply;
+  const en = langId === 'en';
+  const news = String((en && r.newsEn) || r.news || '');
+  /* A headline Yahoo! News wraps in 【 】 is shown without them. */
+  const shown = news.replace(/^【([^【】]+)】$/, '$1');
+  const chars = [...shown];
+  const short = chars.length > 40 ? chars.slice(0, 39).join('') + '…' : shown;
+  const plainNews = String(r.news || '').replace(/【[^】]*】/g, ' ').trim() || String(r.news || '');
+  const word = !en && /[぀-ヿ一-鿿]/.test(plainNews) ? jaWord(plainNews) : storyWord(news, '');
+  const g = GENRES.find(x => x.id === r.genre);
+  card.jp = (card.jp || []).filter(t => t && t !== card.kw);
+  card.kw = word || card.kw;
+  card.cat = g ? g.name.toUpperCase() : 'REPLY';
+  card.topic = r.name || 'X';
+  card.tags = [];
+  card.sub = card.sub || [];
+  card.src = ('X @' + r.handle + ' → @' + r.to).slice(0, 46);
+  card.note = en ? 'A reply to the news: ' + short : '「' + short + '」へのコメント';
+  return card;
+}
+/* A video from the prepared replies, or null when the page should search instead. Replies not played
+   yet come first, newer news before older; one reply for one piece of news, nobody twice, and no paper
+   or genre taking most of the video. */
+async function preparedScript(date, slots) {
+  if (!prepWanted()) return null;
+  const { country, lang } = market();
+  const genres = genreChoices();
+  if (!genres.length) return null;
+  const wants = slots.map(s => ({ gid: slotGenre(s), count: s.count || 1 }));
+  if (wants.some(w => !w.gid)) return null;
+  const prep = await prepared();
+  if (!prep.items.length) return null;
+  const N = total();
+  const past = seenKeys();
+  const blocked = t => violentHidden() && VIOLENT.test(t);
+  const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
+  const pool = prep.items.filter(x => {
+    const a = prep.news[x.n];
+    return !blocked(x.t) && !blocked(a.t) && (!allowed || allowed.has(a.g));
+  });
+  const seen = x => past.has('u:' + replyLink(x)) || past.has(String(x.t).toLowerCase().slice(0, 90));
+  const now = Date.now();
+  const rank = x => {
+    const age = (now - Date.parse(prep.news[x.n].at || x.at || 0)) / 3600e3;
+    return (Number(x.s) || 0) + Math.max(0, 12 - (Number.isFinite(age) ? age : 36) / 3) + Math.random() * 8;
+  };
+  const order = list => list.map(x => [rank(x), x]).sort((p, q) => q[0] - p[0]).map(p => p[1]);
+  const unseen = order(pool.filter(x => !seen(x)));
+  const all = unseen.concat(order(pool.filter(seen)));
+  const picked = [];
+  const usedNews = new Set();
+  const people = new Set();
+  const bySource = {};
+  const byGenre = {};
+  const take = (list, n, caps) => {
+    for (const x of list) {
+      if (n <= 0 || picked.length >= N) break;
+      const a = prep.news[x.n];
+      const who = String(x.h).toLowerCase();
+      if (usedNews.has(x.n) || people.has(who)) continue;
+      if (caps && ((bySource[a.n] || 0) >= caps.source || (a.g && (byGenre[a.g] || 0) >= caps.genre))) continue;
+      usedNews.add(x.n);
+      people.add(who);
+      bySource[a.n] = (bySource[a.n] || 0) + 1;
+      byGenre[a.g || ''] = (byGenre[a.g || ''] || 0) + 1;
+      picked.push(x);
+      n--;
+    }
+  };
+  if (wants.length) {
+    for (const w of wants) {
+      const before = picked.length;
+      take(all.filter(x => prep.news[x.n].g === w.gid), w.count);
+      if (picked.length === before) return null;
+    }
+    const ids = new Set(wants.map(w => w.gid));
+    take(all.filter(x => ids.has(prep.news[x.n].g)), N);
+  } else {
+    take(unseen, N, { source: Math.max(2, Math.ceil(N / 4)), genre: Math.max(2, Math.ceil(N / 3)) });
+    take(unseen, N);
+    take(all, N);
+  }
+  if (picked.length < Math.min(N, 4)) return null;
+  const rows = picked.map(x => {
+    const a = prep.news[x.n];
+    return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
+  });
+  S.pendingKeys = rows.flatMap(storyKeys);
+  if (lang.id === 'ja') rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
+  else {
+    /* Another language on the cards: the replies and the news' lines are translated, which takes a moment. */
+    await fillText(rows, lang);
+    try { (await translateMany(rows.map(r => r.reply.news), 'en')).forEach((t, i) => { rows[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
+  }
+  return { date, items: rows.map(r => replyCard(r, lang.id)), market: country.name + ' · ' + lang.name };
+}
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
   (sequence || []).forEach(row => {
@@ -2421,6 +2597,9 @@ async function collect(date) {
   if (feedMode() === 'x') return collectPosts(date);
   beginCollect();
   const slots = parseLineup(lineupText());
+  /* The replies collected ahead of time play at once; without them the news is searched as before. */
+  const ready = await preparedScript(date, slots).catch(e => { console.warn(e); return null; });
+  if (ready) return ready;
   if (slots.length) return collectSlots(date, slots);
   const { country, lang } = market();
   const genres = genreChoices();
@@ -2745,7 +2924,8 @@ async function runAll(opts) {
   S.busy = true; S.grew = false; S.pendingKeys = null; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
+    /* With the prepared replies at hand the new video is there in a moment: no waiting card. */
+    if (!prepAtHand()) showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
     say(feedMode() === 'x' ? 'Searching X' : 'Searching the news');
   }
   try {
@@ -3183,70 +3363,7 @@ function keepInitTail() {
   };
   $('unmute').onclick = e => { e.stopPropagation(); tapSound(); };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
-  /* Pull down to refresh. Touch uses touch events, which keep coming while the browser scrolls;
-     a mouse uses pointer events. A pull that is cancelled or lifted ends without a refresh,
-     so it never stays half-open over the buttons. */
-  const header = document.querySelector('header');
-  const frame = document.querySelector('.frame');
-  const PULL_AT = 70;
-  let pull = null;
-  const videoAtTop = () => {
-    const cv = $('cv');
-    if (!cv) return window.scrollY < 80;
-    return cv.getBoundingClientRect().top <= header.offsetHeight + 12;
-  };
-  const canPull = target => {
-    if (!$('studio').hidden || S.vfull) return false;
-    if (!fullOn() && !videoAtTop()) return false;
-    if (target && target.closest && target.closest('#gear, button, a, input, select, textarea, summary, .ctl, .music')) return false;
-    return fullOn() || header.contains(target) || !!(target && target.closest && target.closest('#stage, canvas, main'));
-  };
-  const markPull = dy => {
-    const label = document.querySelector('header .pull');
-    if (label) label.textContent = dy > PULL_AT ? 'Release to refresh' : 'Pull down to refresh';
-    if (!frame) return;
-    if (dy > 0) { frame.classList.add('pulling'); frame.style.transform = 'translateY(' + Math.min(dy * 0.45, 96) + 'px)'; }
-    else { frame.classList.remove('pulling'); frame.style.transform = ''; }
-  };
-  const endPull = go => {
-    const p = pull;
-    pull = null;
-    markPull(0);
-    if (!go || !p || p.dead || p.dy < PULL_AT) return;
-    say('Refreshing. The stories and their order change.');
-    refreshMarket();
-  };
-  const beginPull = (target, y, kind) => {
-    if (pull) endPull(false);
-    if (!canPull(target)) return;
-    pull = { y, kind, dy: 0, dead: false };
-  };
-  const movePull = y => {
-    if (!pull || pull.dead) return false;
-    pull.dy = y - pull.y;
-    if (pull.dy < -12) { pull.dead = true; markPull(0); return false; }
-    markPull(pull.dy);
-    return pull.dy > 8;
-  };
-  window.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { if (pull) endPull(false); return; }
-    beginPull(e.target, e.touches[0].clientY, 'touch');
-  }, { passive: true });
-  window.addEventListener('touchmove', e => {
-    if (!pull || pull.kind !== 'touch' || e.touches.length !== 1) return;
-    if (movePull(e.touches[0].clientY) && e.cancelable) e.preventDefault();
-  }, { passive: false });
-  window.addEventListener('touchend', () => { if (pull && pull.kind === 'touch') endPull(true); });
-  window.addEventListener('touchcancel', () => { if (pull && pull.kind === 'touch') endPull(false); });
-  window.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button === 0) beginPull(e.target, e.clientY, 'mouse'); });
-  window.addEventListener('pointermove', e => {
-    if (!pull || pull.kind !== 'mouse' || e.pointerType !== 'mouse') return;
-    if (!(e.buttons & 1)) { endPull(false); return; }
-    movePull(e.clientY);
-  });
-  window.addEventListener('pointerup', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') endPull(true); });
-  window.addEventListener('pointercancel', e => { if (pull && pull.kind === 'mouse' && e.pointerType === 'mouse') endPull(false); });
-  window.addEventListener('blur', () => { if (pull) endPull(false); });
+  /* The page stays where it is: there is no pull down to refresh. Update makes a new video. */
   /* Full screen. */
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   document.addEventListener('fullscreenchange', paintFull);

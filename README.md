@@ -38,6 +38,21 @@ Music, under the picture:
 
 ## Where the news comes from
 
+**In Japan the News page plays replies.** Each card is one reply to a piece of news on X, and under it the
+card says which news the reply is about. The replies are collected ahead of time by
+[githito.xapi](https://github.com/Githitosh/githito.xapi) (`news.mjs`, three runs a day, up to 2000 replies
+kept for 48 hours) and read from `v1/news-ja.json`, so a video starts in about a second and Update answers
+at once. A genre chip plays the replies of that genre.
+
+- Replies are collected for light news only: entertainment, sports, culture, food, science, weather.
+  News of politics, government, other countries' affairs, crimes, accidents and disasters has no replies
+  in the file; for such a genre (Politics, Public safety) the page searches the news and shows headlines.
+- The page searches the news itself, as described below, when the file cannot be read, with another
+  edition, with the X source switched off, with X accounts added, or with a lineup line that is not a genre.
+- There is no pull down to refresh. Update makes a new video.
+
+The searches the page makes itself:
+
 No API key. The page reads public feeds, from more than one source and through more than one relay, so that one of them refusing or being slow does not stop the video.
 
 | Edition | Front pages | A genre |
