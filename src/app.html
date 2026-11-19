@@ -302,10 +302,10 @@ const PACES = [
   { sec: 4.2, name: '4.2s' },
   { sec: 5.2, name: '5.2s' },
 ];
+/* One song, repeated for as long as the video plays. loop: the length of the song (8 bars at 90 BPM);
+   the file holds it three times over, so it repeats without a seam. */
 const TRACKS = [
-  { id: 'jupiter', name: 'Jupiter', credit: 'Music: Holst ‘Jupiter’ – Holst / London Symphony Orchestra (Columbia, 1922–23), Wikimedia Commons' },
-  { id: 'neptune', name: 'Neptune', credit: 'Music: Holst ‘Neptune’ – Holst / London Symphony Orchestra (Columbia, 1923), Wikimedia Commons' },
-  { id: 'stripes', name: 'Stars and Stripes', credit: 'Music: Sousa ‘Stars and Stripes Forever’ – Sousa’s Band (Edison, 1909), Wikimedia Commons' },
+  { id: 'untitled', name: 'Untitled Song', loop: 64 / 3, credit: 'Music: Untitled Song' },
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
@@ -450,9 +450,6 @@ function usePace(sec) {
   if (was) {
     S.origin = T;
     S.t0perf = performance.now();
-    if (S.audioOn && S.el && !S.el.paused) {
-      try { S.el.currentTime = soundOffset(T); } catch (e) {}
-    }
   }
   draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
 }
@@ -546,7 +543,7 @@ function parseM4A(u8) {
   }
   throw new Error('This file has no audio track');
 }
-function musicOffset(dur) { const md = S.aac ? S.aac.duration : 41.6; return Math.max(0, md - dur); }
+/* The music repeats on its own. The video repeating, a new story length, new stories or the seek bar do not move it. */
 
 async function loadFonts(script) {
   const txt = E.allText(script);
@@ -614,7 +611,7 @@ function normalize(s) {
 function sourcesText(s) {
   const lines = s.items.map((it, i) => `${pad2(i + 1)} ${it.head.join(' ')} — ${it.src}${it.date ? ' (' + it.date + ')' : ''}${it.url ? '\n   ' + it.url : ''}`);
   const music = (S.track && S.track.credit) || 'Music: public domain';
-  return lines.join('\n') + '\n\n' + music + ', public domain\nPhotos: U.S. National Park Service & NOAA, public domain';
+  return lines.join('\n') + '\n\n' + music + '\nPhotos: U.S. National Park Service & NOAA, public domain';
 }
 function episodeLabel(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s && s.date) || '');
@@ -675,9 +672,6 @@ function growShow(raw) {
     const at = Math.min(oldDur, Math.max(0, S.show.duration - 1 / E.FPS));
     S.origin = at;
     S.t0perf = performance.now();
-    if (S.audioOn && S.el && !S.el.paused) {
-      try { S.el.currentTime = soundOffset(at); } catch (e) {}
-    }
     draw(at);
   } else {
     draw(Math.min(Math.max(0, T), Math.max(0, S.show.duration - 1 / E.FPS)));
@@ -796,8 +790,6 @@ function tick() {
 function restartLoop(over) {
   S.origin = over;
   S.t0perf = performance.now();
-  if (!(S.audioOn && S.el)) return;
-  try { S.el.currentTime = soundOffset(over); } catch (e) {}
 }
 function startWatch() {
   if (!WATCH || !S.show || S.busy || S.playing) return;
@@ -816,6 +808,7 @@ function musicEl() {
   if (S.el) return S.el;
   const el = document.createElement('audio');
   el.preload = 'auto';
+  el.loop = true;
   el.setAttribute('playsinline', '');
   el.volume = 1;
   const blob = new Blob([S.music], { type: 'audio/mp4' });
@@ -825,15 +818,11 @@ function musicEl() {
   S.el = el;
   return el;
 }
-function soundOffset(T) {
-  const dur = S.show ? S.show.duration : 0;
-  const len = S.el && isFinite(S.el.duration) ? S.el.duration : (S.aac ? S.aac.duration : 41.6);
-  return Math.max(0, Math.min(musicOffset(dur) + Math.max(0, T || 0), Math.max(0, len - 0.15)));
-}
+/* The song starts from its beginning with a new video (T = 0) and otherwise goes on from where it was. */
 function playSound(T) {
   if (!S.music) return;
   const el = musicEl();
-  try { el.currentTime = soundOffset(T); } catch (e) {}
+  if (!(T > 0)) { try { el.currentTime = 0; } catch (e) {} }
   const gen = ++S.audioGen;
   const pending = el.play();
   if (pending && pending.then) {
@@ -3003,13 +2992,18 @@ async function encodeShow(show, label, p0, p1) {
   await enc.flush(); enc.close();
   if (fail) throw fail;
   if (S.aac) {
-    const off = musicOffset(dur), A = S.aac; let first = true;
-    for (const s of A.samples) {
-      if (s.t < off - 1e-6) continue;
-      if (s.t - off >= dur) break;
-      muxer.addAudioChunkRaw(A.bytes.subarray(s.o, s.o + s.n), 'key', Math.round((s.t - off) * 1e6), Math.round(s.d * 1e6),
+    /* The song repeats under the whole video. Past the end of the file the frames are taken again from one
+       song length earlier, where the file holds the same music, so the repeat has no seam. */
+    const A = S.aac, F = S.track && S.track.loop ? Math.round(S.track.loop * A.rate / 1024) : 0;
+    const K = F ? Math.floor((A.samples.length - 1) / F) : 0, wrap = K >= 2 ? K * F : A.samples.length;
+    let first = true, t = 0, i = 0;
+    while (t < dur - 1e-6) {
+      if (i >= wrap) { if (K >= 2) i -= F; else break; }
+      const s = A.samples[i++];
+      muxer.addAudioChunkRaw(A.bytes.subarray(s.o, s.o + s.n), 'key', Math.round(t * 1e6), Math.round(s.d * 1e6),
         first ? { decoderConfig: { codec: 'mp4a.40.2', numberOfChannels: A.channels, sampleRate: A.rate, description: A.asc } } : undefined);
       first = false;
+      t += s.d;
     }
   }
   muxer.finalize();
@@ -3111,7 +3105,10 @@ async function recordRealtime() {
   const parts = []; rec.ondataavailable = e => e.data.size && parts.push(e.data);
   const done = new Promise(r => rec.onstop = r);
   const src = ac.createBufferSource(); src.buffer = S.abuf; src.connect(dest);
-  draw(0); rec.start(250); const t0 = ac.currentTime + 0.05; src.start(t0, musicOffset(S.show.duration));
+  const per = S.track && S.track.loop, reps = per ? Math.floor(S.abuf.duration / per + 1e-3) : 0;
+  src.loop = true;
+  if (reps >= 2) { src.loopStart = per; src.loopEnd = per * reps; }
+  draw(0); rec.start(250); const t0 = ac.currentTime + 0.05; src.start(t0, 0);
   await new Promise(res => {
     const tick = () => {
       const T = ac.currentTime - t0;
@@ -3381,8 +3378,8 @@ function initUI() {
     };
     musicBox.appendChild(b);
   });
-  const requested = Q.get('music') || store.get('music', 'jupiter');
-  useTrack(TRACKS.some(t => t.id === requested) ? requested : 'jupiter');
+  const requested = Q.get('music') || store.get('music', TRACKS[0].id);
+  useTrack(TRACKS.some(t => t.id === requested) ? requested : TRACKS[0].id);
   const wallBox = $('walls');
   WALLS.forEach(w => {
     const b = document.createElement('button');
@@ -3648,9 +3645,6 @@ function keepInitTail() {
     if (!S.playing) { draw(T); return; }
     S.origin = T;
     S.t0perf = performance.now();
-    if (S.audioOn && S.el && !S.el.paused) {
-      try { S.el.currentTime = soundOffset(T); } catch (e) {}
-    }
     draw(T);
   };
   $('copySrc').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('sources').textContent).then(() => say('Copied the sources.'));

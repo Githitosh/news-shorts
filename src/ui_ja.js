@@ -18,7 +18,6 @@ const JA = {
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
   // Wallpapers and music
   'Morning': '朝', 'Bright': '明るい', 'Day': '昼', 'Evening': '夕方', 'Night': '夜', 'Pop': 'ポップ',
-  'Jupiter': '木星', 'Neptune': '海王星', 'Stars and Stripes': '星条旗よ永遠なれ',
   // Settings
   'News settings': 'ニュースの設定', 'Humor settings': 'ユーモアの設定',
   'These settings are for News only. Humor keeps its own.': 'この設定はニュース専用です。ユーモアには別の設定があります。',
@@ -92,7 +91,7 @@ const JA = {
   'No new stories for this lineup yet.': 'このラインナップの新しいニュースはまだありません。', 'No new X posts yet.': 'まだ新しいXの投稿がありません。',
   'Press Update again later.': 'しばらくしてから更新を押してください。', 'This video keeps playing.': 'この動画を流し続けます。',
   'Add an X account in Settings.': '設定でXアカウントを追加してください。', 'Choose at least one genre in Settings.': '設定でジャンルを1つ以上選んでください。',
-  'Jupiter plays instead.': '木星を流します。', 'Forgot what has played.': '流したものを忘れました。', 'Stories and jokes can play again.': 'ニュースやジョークをまた流せます。',
+  'Forgot what has played.': '流したものを忘れました。', 'Stories and jokes can play again.': 'ニュースやジョークをまた流せます。',
   'This browser cannot export video.': 'このブラウザでは動画を書き出せません。', 'The script has no stories': 'スクリプトにニュースがありません',
   'Could not collect headlines.': '見出しを集められませんでした。', 'Press Update to try again.': '更新を押してもう一度試してください。',
 };
