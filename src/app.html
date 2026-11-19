@@ -302,10 +302,12 @@ const PACES = [
   { sec: 4.2, name: '4.2s' },
   { sec: 5.2, name: '5.2s' },
 ];
-/* One song, repeated for as long as the video plays. loop: the length of the song (8 bars at 90 BPM);
-   the file holds it three times over, so it repeats without a seam. */
+/* Three songs. Each repeats on its own, without a seam. loop: the length of the song (8 bars at 90 BPM);
+   each file holds it twice. */
 const TRACKS = [
-  { id: 'untitled', name: 'Untitled Song', loop: 64 / 3, credit: 'Music: Untitled Song' },
+  { id: '1', name: '1', loop: 64 / 3, credit: 'Music: 1' },
+  { id: '2', name: '2', loop: 64 / 3, credit: 'Music: 2' },
+  { id: '3', name: '3', loop: 64 / 3, credit: 'Music: 3' },
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
@@ -467,7 +469,7 @@ function useTrack(id) {
   const available = TRACKS.filter(t => ASSETS.tracks && ASSETS.tracks[t.id]);
   const t = available.find(x => x.id === id) || available[0];
   if (!t) return;
-  const wasAudible = !!(S.audioOn && S.playing);
+  const wasAudible = !!S.audioOn;
   S.track = t;
   S.music = b64bytes(ASSETS.tracks[t.id]);
   try { S.aac = parseM4A(S.music); } catch (e) { console.warn('m4a', e); S.aac = null; }
@@ -543,7 +545,8 @@ function parseM4A(u8) {
   }
   throw new Error('This file has no audio track');
 }
-/* The music repeats on its own. The video repeating, a new story length, new stories or the seek bar do not move it. */
+/* The music plays on its own and is not tied to the video: a new video, Update, the video repeating, the story
+   length, the layout, the seek bar and exporting leave it playing where it is. Only Pause stops it. */
 
 async function loadFonts(script) {
   const txt = E.allText(script);
@@ -818,22 +821,25 @@ function musicEl() {
   S.el = el;
   return el;
 }
-/* The song starts from its beginning with a new video (T = 0) and otherwise goes on from where it was. */
-function playSound(T) {
+function soundOn() {
+  S.audioOn = true;
+  S.audioFailed = false;
+  const u = $('unmute');
+  if (u) u.hidden = true;
+  /* Only replace the tap-for-sound line, so a message such as No new stories stays. */
+  if (S.playing && $('caption').textContent === watchLine(false)) say(watchLine(true));
+}
+/* Start the music if it is not playing, from where it was. It never moves the music. */
+function playSound() {
   if (!S.music) return;
   const el = musicEl();
-  if (!(T > 0)) { try { el.currentTime = 0; } catch (e) {} }
+  if (!el.paused && S.audioOn) { soundOn(); return; }
   const gen = ++S.audioGen;
   const pending = el.play();
   if (pending && pending.then) {
     pending.then(() => {
       if (gen !== S.audioGen || el.paused) return;
-      S.audioOn = true;
-      S.audioFailed = false;
-      const u = $('unmute');
-      if (u) u.hidden = true;
-      /* Only replace the tap-for-sound line, so a message such as No new stories stays. */
-      if (S.playing && $('caption').textContent === watchLine(false)) say(watchLine(true));
+      soundOn();
     }).catch(() => {
       if (gen !== S.audioGen || !el.paused) return;
       S.audioOn = false;
@@ -844,22 +850,24 @@ function playSound(T) {
 }
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); say('Paused. Press Play to continue.'); return; }
+  if (S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
   say(watchLine(false));
 }
+function pauseMusic() {
+  S.audioGen++;
+  if (S.el) { try { S.el.pause(); } catch (e) {} }
+  S.audioOn = false;
+}
+/* Stops the video. The music goes on (pauseMusic stops it). */
 function stop() {
   if (S.show && S.playing && S.show.duration) {
     const T = Math.max(0, Math.min(currentT(), S.show.duration));
     $('seek').value = String(Math.round(T / S.show.duration * 1000));
     draw(Math.min(T, Math.max(0, S.show.duration - 1 / E.FPS)));
   }
-  S.audioGen++;
-  if (S.src) { try { S.src.stop(); } catch (e) {} S.src = null; }
-  if (S.el) { try { S.el.pause(); } catch (e) {} }
-  S.audioOn = false;
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   $('play').textContent = 'Play';
@@ -3170,7 +3178,7 @@ async function runAll(opts) {
     else await setScript(script, true);
     /* Remember the stories once they are on screen, so they do not play again. */
     if (!S.again && S.pendingKeys) { rememberKeys(S.pendingKeys); S.pendingKeys = null; }
-    if (!S.again) say(watchLine(!!(S.ac && S.ac.state === 'running')));
+    if (!S.again) say(watchLine(!!(S.audioOn || (S.ac && S.ac.state === 'running'))));
   } catch (e) {
     console.error(e); progress(0);
     S.busy = false; setBusy(false);
@@ -3259,7 +3267,7 @@ function setupVideoFull() {
   v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
   v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
   /* Pause and play in the system player pause and play the video and the music. */
-  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); say('Paused. Press Play to continue.'); } }, 300); });
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); } }, 300); });
   v.addEventListener('play', () => { if (S.vfull && !S.playing && S.show) { play().catch(() => {}); playSound(currentT()); } });
 }
 function videoFull() {
@@ -3372,9 +3380,8 @@ function initUI() {
     b.dataset.m = t.id;
     b.textContent = t.name;
     b.onclick = () => {
-      const hear = S.playing;
       useTrack(t.id);
-      if (hear) playSound(currentT());
+      playSound();
     };
     musicBox.appendChild(b);
   });

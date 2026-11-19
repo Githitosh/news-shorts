@@ -318,20 +318,24 @@ function musicEl() {
   S.el = el;
   return el;
 }
-/* The song repeats on its own. It starts from its beginning with a new video (T = 0) and otherwise goes on
-   from where it was; the video repeating or the seek bar do not move it. */
-function playSound(T) {
+/* The music (song 1) plays on its own and is not tied to the video: a new video, Update, the video repeating
+   and the seek bar leave it playing where it is. Only Pause stops it. This starts it if it is not playing,
+   from where it was; it never moves the music. */
+function playSound() {
   if (!S.music) return;
   const el = musicEl();
-  if (!(T > 0)) { try { el.currentTime = 0; } catch (e) {} }
+  if (!el.paused && S.audioOn) { $('unmute').hidden = true; return; }
   const play = el.play();
   if (play && play.then) play.then(() => { S.audioOn = true; $('unmute').hidden = true; }).catch(() => { S.audioOn = false; if (S.playing) $('unmute').hidden = false; });
 }
+function pauseMusic() {
+  if (S.el) { try { S.el.pause(); } catch (e) {} }
+  S.audioOn = false;
+}
+/* Stops the video. The music goes on (pauseMusic stops it). */
 function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
-  if (S.el) { try { S.el.pause(); } catch (e) {} }
-  S.audioOn = false;
   $('play').textContent = 'Play';
   $('unmute').hidden = true;
 }
@@ -416,7 +420,7 @@ async function runAll() {
 }
 function toggle() {
   if (!S.show) return;
-  if (S.playing) { stop(); say('Paused. Press Play to continue.'); return; }
+  if (S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
@@ -461,7 +465,7 @@ window.addEventListener('pointerup', e => {
 });
 window.NS = { state: () => ({ script: S.script, show: S.show, playing: S.playing }) };
 E.setWallpaper('festive');
-E.setMusicCredit('Music: Untitled Song');
+E.setMusicCredit('Music: 1');
 loadAssets().then(() => { window.NS.ready = true; runAll(); }).catch(e => { window.NS.ready = true; say(e.message || String(e), true); });
 </script>
 </body>

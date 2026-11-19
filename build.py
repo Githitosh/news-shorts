@@ -42,9 +42,7 @@ def main() -> None:
         ensure_ascii=False,
     )
     assets = {f"bg_{g}": b64(ROOT / "assets" / f"bg_{g}.jpg") for g in "ABCDE"}
-    assets["tracks"] = {
-        "untitled": b64(ROOT / "assets" / "untitled_song.m4a"),
-    }
+    assets["tracks"] = {n: b64(ROOT / "assets" / f"song_{n}.m4a") for n in ("1", "2", "3")}
     for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine), ("ui_ja.js", UI_JA)):
         if "</script" in code.lower():
             raise SystemExit(f"{name} contains </script")
@@ -53,7 +51,7 @@ def main() -> None:
     (ROOT / "index.html").write_text(out, encoding="utf-8")
     print(f"index.html {len(out.encode('utf-8')) / 1048576:.2f} MB")
     ja_assets = {"bg_" + g: assets["bg_" + g] for g in "ABCDE"}
-    ja_assets["track"] = assets["tracks"]["untitled"]
+    ja_assets["track"] = assets["tracks"]["1"]
     ja = pack((ROOT / "src" / "ja.html").read_text(encoding="utf-8"), engine, ja_assets)
     dest = ROOT / "ja" / "index.html"
     dest.parent.mkdir(exist_ok=True)

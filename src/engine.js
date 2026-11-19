@@ -103,7 +103,7 @@ let W = P.W, H = P.H;
 function use(name) { P = PRESETS[name] || PRESETS.youtube; W = P.W; H = P.H; return P; }
 
 const BG_ORDER = ['A', 'B', 'C', 'C', 'A', 'B', 'D', 'C', 'D', 'C', 'B', 'D'];
-const CREDIT_MUSIC = 'Music: Untitled Song';
+const CREDIT_MUSIC = 'Music: 1';
 let musicCredit = CREDIT_MUSIC;
 function setMusicCredit(text) { musicCredit = text || CREDIT_MUSIC; }
 const WALLPAPERS = {
