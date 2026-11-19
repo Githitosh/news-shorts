@@ -4282,6 +4282,94 @@ async function collectRomance(need, place) {
     keys: [st.a, st.b, ...st.cheers].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]),
   }));
 }
+/* ---------- stories made ahead of time ---------- */
+/* githito.xapi (github.com/Githitosh/githito.xapi, humor.mjs) searches X three times a day and writes the
+   loving exchanges it finds as one file. The page reads that file, so Update makes a video at once
+   instead of searching for half a minute or more. The last file read is kept in this browser, so the
+   next visit starts with it and reads the new one meanwhile. Love is the centre of the video; in the
+   morning greetings come first. */
+const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
+let PREP = { lang: '', stories: [], at: 0 };
+const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && s.a.handle && s.b.handle && s.a.id && s.b.id);
+function keptPrep(lang) {
+  try {
+    const d = JSON.parse(store.get('prep.' + lang, 'null'));
+    const stories = goodStories(d && d.stories);
+    if (stories.length) PREP = { lang, stories, at: Number(d.at) || 0 };
+  } catch (e) {}
+}
+async function loadPrep(lang) {
+  try {
+    const res = await withTimeout(fetch(XAPI + 'humor-' + lang + '.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 8000);
+    if (!res.ok) return false;
+    const stories = goodStories((await res.json()).stories);
+    if (!stories.length) return false;
+    PREP = { lang, stories, at: Date.now() };
+    store.set('prep.' + lang, JSON.stringify({ at: PREP.at, stories }));
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+/* The prepared stories for this language: the kept copy at once, the file when there is no copy, and a
+   fresh read in the background when the copy is more than ten minutes old. */
+async function prepared(lang) {
+  if (PREP.lang !== lang || !PREP.stories.length) keptPrep(lang);
+  if (PREP.lang !== lang || !PREP.stories.length) await loadPrep(lang);
+  else if (Date.now() - PREP.at > 600000) { PREP.at = Date.now(); loadPrep(lang); }
+  return PREP.lang === lang ? PREP.stories : [];
+}
+/* Stories for one video. Not played yet first; when those run out, played ones come round again.
+   In the morning (4 to 11) good mornings are seven in ten and loving talk the rest. At other hours
+   loving talk is two in three; the rest are the greetings of the hour: coming home, and good nights
+   only from eight in the evening. */
+async function preparedRows(need) {
+  const lang = jokeLang();
+  const all = await prepared(lang);
+  if (!all.length) return [];
+  const past = seenSet(SEEN_JOKES);
+  const now = playingKeys();
+  const keysOf = s => [s.a, s.b].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
+  /* The page's own rules hold for what was prepared too. */
+  const ok = s => [s.a.text, s.b.text].every(t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !(sensitiveHidden() && suggestive(t)));
+  const pool = all.filter(s => ok(s) && !keysOf(s).some(k => now.has(k)));
+  const rank = list => list.map(s => [(Number(s.score) || 0) + Math.random() * 8, s]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
+  const unseen = rank(pool.filter(s => !keysOf(s).some(k => past.has(k))));
+  const order = unseen.concat(rank(pool.filter(s => !unseen.includes(s))));
+  const hour = new Date().getHours();
+  const morning = hour >= 4 && hour < 11;
+  const evening = hour >= 20 || hour < 4;
+  const picked = [];
+  const people = new Set();
+  const take = (list, n, cap) => {
+    const kinds = {};
+    for (const s of list) {
+      if (picked.length >= need || n <= 0) break;
+      const a = s.a.handle.toLowerCase(), b = s.b.handle.toLowerCase();
+      if (picked.includes(s) || people.has(a) || people.has(b)) continue;
+      if (cap && (kinds[s.kind] || 0) >= cap) continue;
+      kinds[s.kind] = (kinds[s.kind] || 0) + 1;
+      people.add(a); people.add(b);
+      picked.push(s);
+      n--;
+    }
+  };
+  const loving = s => s.kind === 'icha' || s.kind === 'love' || s.kind === 'miss';
+  const ofTheHour = s => s.kind === 'home' || s.kind === 'other' || (evening && s.kind === 'night');
+  if (morning) {
+    take(order.filter(s => s.kind === 'morning'), Math.ceil(need * 0.7));
+    take(order.filter(loving), need);
+  } else {
+    take(order.filter(loving), Math.ceil(need * 2 / 3));
+    take(order.filter(ofTheHour), need);
+    take(order.filter(loving), need);
+  }
+  /* Short of stories: first those that fit the hour, then whatever is left, so the video has its length. */
+  take(order.filter(s => morning ? s.kind !== 'night' : s.kind !== 'morning' && (evening || s.kind !== 'night')), need);
+  take(order, need);
+  return picked.map(s => {
+    const story = { a: { ...s.a }, b: { ...s.b }, cheers: [] };
+    return { romance: true, story, lang, place: 'middle', kind: s.kind, headline: s.a.text, joke: true, keys: keysOf(s) };
+  });
+}
 /* One story becomes several cards: the post, the reply, then what others said. */
 function romanceCards(r, langId) {
   const st = r.story;
@@ -4541,6 +4629,17 @@ async function collect() {
   const mode = feedMode();
   const N = total();
   const slots = parseLineup(lineupText());
+  /* Without a lineup, or with Romance alone, the video is made of the stories prepared ahead: nothing
+     is searched, so it starts at once. A lineup of other genres, a past date, or X switched off in
+     Sources still search as before. */
+  if (!pastDay() && sourceOn('x') && (!slots.length || slots.every(s => s.type === 'romance'))) {
+    const rows = await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
+    if (S.again) return null;
+    if (rows.length) {
+      const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
+      return { date: chosenDate(), items, market: country.name + ' · ' + lang.name, played: { news: [], jokes: rows.flatMap(r => r.keys) } };
+    }
+  }
   const SPECIAL = new Set(['jokes', 'romance', 'travel']);
   const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
   const used = new Set();
@@ -5671,7 +5770,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '5cc1ff72177a';
+  const BUILD = 'd79f689e4e7f';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
