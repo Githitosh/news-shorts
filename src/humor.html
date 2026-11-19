@@ -306,11 +306,12 @@ const PACES = [
   { sec: 4.2, name: '4.2s' },
   { sec: 5.2, name: '5.2s' },
 ];
-/* The first song is inside the page; any other loads from ../assets/ the first time it is chosen. One song,
-   repeated for as long as the video plays. loop: the length of the song (8 bars at 90 BPM); the file holds it
-   three times over, so it repeats without a seam. */
+/* Three songs. 1 is inside the page; 2 and 3 load from ../assets/ the first time they are chosen. Each repeats
+   on its own, without a seam. loop: the length of the song (8 bars at 90 BPM); each file holds it twice. */
 const TRACKS = [
-  { id: 'untitled', name: 'Untitled Song', file: '', loop: 64 / 3, credit: 'Music: Untitled Song' },
+  { id: '1', name: '1', file: '', loop: 64 / 3, credit: 'Music: 1' },
+  { id: '2', name: '2', file: 'song_2.m4a', loop: 64 / 3, credit: 'Music: 2' },
+  { id: '3', name: '3', file: 'song_3.m4a', loop: 64 / 3, credit: 'Music: 3' },
 ];
 const VIOLENT = /murder|stabbed|shot dead|shooting|killed|beheading|homicide|massacre|rape|sexual assault|robbery|凶悪|殺人|殺害|刺殺|遺体|刺され|死傷|銃乱射|暴行|強盗|レイプ|強姦/i;
 const GENRES = [
@@ -2123,15 +2124,16 @@ function musicEl() {
   S.el = el;
   return el;
 }
-/* The song repeats on its own. It starts from its beginning with a new video (T = 0) and otherwise goes on
-   from where it was; the video repeating, a new story length or the seek bar do not move it. */
-function playSound(T) {
+/* The music plays on its own and is not tied to the video: a new video, Update, the video repeating, Pause,
+   the story length, the seek bar and exporting leave it playing where it is. The Sound button turns it off
+   and on. This starts it if it is not playing, from where it was; it never moves the music. */
+function playSound() {
   if (!S.music || S.mute) return;
   const el = musicEl();
-  if (!(T > 0)) { try { el.currentTime = 0; } catch (e) {} }
+  if (!el.paused && S.audioOn) return;
   const play = el.play();
   if (play && play.then) play.then(() => {
-    if (S.mute || !S.playing) { try { el.pause(); } catch (e) {} S.audioOn = false; paintSound(); return; }
+    if (S.mute) { try { el.pause(); } catch (e) {} S.audioOn = false; paintSound(); return; }
     S.audioOn = true;
     paintSound();
     if ($('caption').textContent.endsWith(TAP)) say(watchLine());
@@ -2170,11 +2172,10 @@ function watchLine() {
   const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
   return 'Playing ' + what + '.' + (S.audioOn ? '' : TAP);
 }
+/* Stops the video. The music goes on. */
 function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
-  if (S.el) { try { S.el.pause(); } catch (e) {} }
-  S.audioOn = false;
   $('play').textContent = 'Play';
   paintSound();
 }
@@ -2386,9 +2387,9 @@ async function useTrack(id) {
   try { S.el.load(); } catch (e) {}
   S.audioOn = false;
   paintSound();
-  if (was && S.playing && !S.mute) {
+  if (was && !S.mute) {
     await new Promise(r => { S.el.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 3000); });
-    if (S.wantTrack === t.id && S.playing && !S.mute) playSound(currentT());
+    if (S.wantTrack === t.id && !S.mute) playSound();
   }
 }
 

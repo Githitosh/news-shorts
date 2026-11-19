@@ -27,10 +27,11 @@ python run.py --x-user name --country US --lang en
 
 Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter.
 
-Music, under the picture: **Untitled Song**, 8 bars at 90 BPM (21.3 seconds), made from the MIDI file
-`assets/midi/untitled_song.mid`. It repeats for as long as the video plays. It starts from the top with each
-new video and goes on through the video's own repeat; the seek bar and the story length do not move it.
-News, Japanese and Humor all play this song.
+Music, under the picture: **1**, **2** and **3**, each 8 bars at 90 BPM (21.3 seconds), made from the MIDI
+files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to
+the video: it repeats without a seam, and a new video, Update, the video's own repeat, the seek bar, the story
+length and exporting leave it playing where it is. On News and the Japanese page Pause stops it; on Humor
+the Sound button turns it off and on. Humor has the same three songs; the Japanese page plays 1.
 
 ## Where the news comes from
 
@@ -109,8 +110,8 @@ python run.py --formats x     # one format: x, youtube, or pc
 | `run.py` | Runs `index.html` without a window and saves the MP4 files |
 | `src/engine.js` | Drawing for the three layouts |
 | `src/app.html` | The page, news collection, the coffee break, and MP4 export |
-| `assets/` | Five backgrounds, the song (`untitled_song.m4a`, from `midi/untitled_song.mid`) and an older recording no page plays (`sandman_1920.m4a`) |
-| `song.py` | Makes `assets/untitled_song.m4a` from the MIDI file |
+| `assets/` | Five backgrounds, the songs (`song_1.m4a`, `song_2.m4a`, `song_3.m4a`, from `midi/1.mid`, `2.mid`, `3.mid`) and an older recording no page plays (`sandman_1920.m4a`) |
+| `song.py` | Makes `assets/song_1.m4a`, `song_2.m4a` and `song_3.m4a` from the MIDI files |
 | `samples/2026-11-14.json` | The original script |
 | `lib/mp4-muxer.js` | MP4 library (MIT) |
 | `build.py` | Rebuilds `index.html` from `src/` and `assets/` |
@@ -128,11 +129,11 @@ python build.py
 - English headlines use a heavy serif, condensed. Small words such as to, and, and of stay small.
 - Text bounds: Phone and X use 60px side margins, YouTube uses 60–900px, and PC uses 120–1800px.
 - On Phone, X, and PC, English line breaks are chosen automatically. A `／` in the news lines becomes a line break only when the line does not fit.
-- The song is copied into the MP4 as it is, from its beginning, and repeats to the end of the video. The file holds the 8 bars three times (64 seconds, 1000 AAC frames each); past its end the frames are taken again from one song length earlier, so the repeat has no seam.
+- The chosen song is copied into the MP4 as it is, from its beginning, and repeats to the end of the video. Each file holds the 8 bars twice (42.7 seconds, 1000 AAC frames each); past its end the frames are taken again from one song length earlier, so the repeat has no seam.
 
 ## Credits
 
-- Untitled Song: the MIDI file `assets/midi/untitled_song.mid`, played with FluidSynth and the FluidR3 GM SoundFont (MIT License): Chords on a piano, Bass on a fingered bass, Drums on the drum channel. `python song.py` makes the file again; loudness is about -16 LUFS.
+- Songs 1, 2 and 3: the MIDI files in `assets/midi/`, played with FluidSynth and the FluidR3 GM SoundFont (MIT License): Chords on a piano, Bass on a fingered bass, Drums on the drum channel. `python song.py` makes the files again; loudness is about -16 LUFS.
 - The Japanese Sandman: Paul Whiteman and His Ambassador Orchestra, August 19, 1920, Wikimedia Commons. Public domain. The excerpt starts at 0:12.
 - Photos: U.S. National Park Service and NOAA (Glacier, Yellowstone, Lake Mead, southeast Alaska). Public domain.
 - Coffee-break background: an image made with Grok.

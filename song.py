@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Make assets/untitled_song.m4a from assets/midi/untitled_song.mid.
+"""Make assets/song_1.m4a, song_2.m4a and song_3.m4a from assets/midi/1.mid, 2.mid and 3.mid.
 
-    python song.py
+    python song.py          # all three
+    python song.py 3        # one of them
 
 Needs mido, numpy and scipy (pip), FluidSynth with the FluidR3 GM SoundFont, and ffmpeg
 (apt install fluidsynth fluid-soundfont-gm ffmpeg).
 
-The MIDI file is 8 bars at 90 BPM (21.33 s) with its parts on one channel and no instruments. Chords play
+Each MIDI file is 8 bars at 90 BPM (21.33 s) with its parts on one channel and no instruments. Chords play
 on a piano, Bass on a fingered bass and Drums on the drum channel. The song is played six times; one
 8-bar loop is cut from the third time through, where the reverb and the release of the time before are
-already sounding, and the file holds that loop three times (64 s). The cut falls 42 ms before a downbeat
+already sounding, and the file holds that loop twice (42.7 s). The cut falls 42 ms before a downbeat
 and crossfades into what came just before it, so the song repeats without a seam. At 48 kHz one loop is
 exactly 1000 AAC frames, so the pages can repeat it in an MP4 by taking frames again from one loop earlier.
 Loudness is about -16 LUFS.
 """
+import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -23,8 +26,9 @@ import numpy as np
 from scipy.io import wavfile
 
 ROOT = Path(__file__).resolve().parent
-MIDI = ROOT / "assets" / "midi" / "untitled_song.mid"
-OUT = ROOT / "assets" / "untitled_song.m4a"
+SONGS = ("1", "2", "3")
+COPIES = 2               # loops in each file
+TARGET = -16.0           # LUFS
 SF2 = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
 RATE = 48000
 LOOP_TICKS = 4096        # 8 bars of 4/4 at 128 ticks per beat
@@ -72,13 +76,22 @@ def run(*cmd: str) -> None:
     subprocess.run(cmd, check=True)
 
 
-def main() -> None:
+def lufs(path: Path) -> float:
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af", "ebur128", "-f", "null", "-"],
+                       capture_output=True, text=True, check=True)
+    return float(re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)[-1])
+
+
+def make(name: str) -> None:
+    midi = ROOT / "assets" / "midi" / f"{name}.mid"
+    out = ROOT / "assets" / f"song_{name}.m4a"
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        repeated(MIDI, tmp / "rep.mid", 6)
+        repeated(midi, tmp / "rep.mid", 6)
         run("fluidsynth", "-ni", "-q", "-r", str(RATE), "-g", "0.6", "-F", str(tmp / "rep.wav"), SF2, str(tmp / "rep.mid"))
+        gain = TARGET - lufs(tmp / "rep.wav") + 0.4   # the limiter takes off a little
         run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(tmp / "rep.wav"),
-            "-af", "volume=6.4dB,alimiter=limit=0.74:attack=4:release=60:level=false", "-c:a", "pcm_f32le", str(tmp / "lim.wav"))
+            "-af", f"volume={gain:.2f}dB,alimiter=limit=0.68:attack=4:release=60:level=false", "-c:a", "pcm_f32le", str(tmp / "lim.wav"))
         rate, x = wavfile.read(tmp / "lim.wav")
         assert rate == RATE
         x = x.astype(np.float64)
@@ -88,10 +101,15 @@ def main() -> None:
         t = (np.arange(fade) + 0.5) / fade
         seg[N - fade:] = x[a + N - fade:a + N] * np.cos(t * np.pi / 2)[:, None] + x[a - fade:a] * np.sin(t * np.pi / 2)[:, None]
         seg = np.roll(seg, -pre, axis=0)  # the file starts on the downbeat
-        wavfile.write(tmp / "loop.wav", RATE, np.tile(seg, (3, 1)).astype(np.float32))
+        wavfile.write(tmp / "loop.wav", RATE, np.tile(seg, (COPIES, 1)).astype(np.float32))
         run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(tmp / "loop.wav"),
-            "-c:a", "aac", "-b:a", "128k", "-ar", str(RATE), "-movflags", "+faststart", str(OUT))
-    print(f"{OUT.relative_to(ROOT)} {OUT.stat().st_size / 1048576:.2f} MB")
+            "-c:a", "aac", "-b:a", "128k", "-ar", str(RATE), "-movflags", "+faststart", str(out))
+    print(f"{out.relative_to(ROOT)} {out.stat().st_size / 1048576:.2f} MB, {lufs(out):.1f} LUFS")
+
+
+def main() -> None:
+    for name in sys.argv[1:] or SONGS:
+        make(name)
 
 
 if __name__ == "__main__":

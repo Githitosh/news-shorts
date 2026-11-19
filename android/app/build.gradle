@@ -33,7 +33,7 @@ android {
 tasks.register('copyHumor', Copy) {
     from(rootProject.file('../humor/index.html')) { into 'humor' }
     from(rootProject.file('../assets')) {
-        include 'untitled_song.m4a'
+        include 'song_2.m4a', 'song_3.m4a'
         into 'assets'
     }
     into layout.projectDirectory.dir('src/main/assets')
