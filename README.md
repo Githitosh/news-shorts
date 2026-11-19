@@ -39,11 +39,16 @@ the Sound button turns it off and on. Humor has the same three songs; the Japane
 ## Where the news comes from
 
 **In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it
-ahead of time (`news.mjs`, every hour, kept for three days) and the page reads one file, `v1/news-ja.json`, so a video starts
+ahead of time (`news.mjs`, every half hour, kept for three days) and the page reads one file, `v1/news-ja.json`, so a video starts
 in about a second and Update answers at once.
 
 - **Headlines, no replies**: every card is a headline from a news account on X. There is no switch for
   replies any more: they made room for abuse.
+- **A card looks as in the first News videos**: it opens on an English keyword, then shows the English
+  headline large with the rest of it under, the Japanese lines below, and a few tags at the foot.
+  githito.xapi sends each headline's English with it (and one more line of the post when there is one);
+  for a headline that has none yet the page asks for the translation itself, and without it the card is
+  Japanese only.
 - **Replies only for the accounts added in Settings** (Accounts with replies and comments): up to half of
   a video is their posts and the earnest replies under them, a small line under each reply saying which
   post it answers. githito.xapi reads replies only for the accounts sent to it, and keeps only earnest

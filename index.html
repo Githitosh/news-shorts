@@ -5240,8 +5240,61 @@ function replyCard(row, langId) {
   card.note = en ? 'A reply to the news: ' + short : '「' + short + '」へのコメント';
   return card;
 }
+/* The English of a headline, cut for a card as in the first News videos: a keyword the card opens on, a
+   short headline of two or three words, the rest as the line under it, and a few tags. */
+const SMALL_EN = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'for', 'from', 'by', 'with', 'and', 'or', 'as', 'is', 'are', 'was', 'were', 'be', 'its', 'his', 'her', 'their', 'over', 'after', 'before', 'into', 'amid', 'vs', 'not', 'that', 'this', 'it', 'will', 'has', 'have']);
+const PLAIN_EN = new Set(['the', 'a', 'an', 'in', 'on', 'at', 'after', 'before', 'this', 'that', 'it', 'there', 'about', 'approximately', 'largest', 'first', 'new', 'breaking', 'news', 'japan', 'japanese', 'prime', 'minister', 'president', 'government', 'police', 'former', 'two', 'three', 'four', 'five', 'six', 'what', 'why', 'how', 'when', 'who', 'video', 'photo', 'update', 'live']);
+function englishParts(en) {
+  const text = String(en || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"]/g, '').replace(/\s+/g, ' ').trim();
+  const words = text.split(' ').filter(Boolean);
+  const bare = w => String(w).replace(/[^A-Za-z0-9'’$%.-]/g, '').replace(/[.,:;]+$/, '');
+  const small = w => SMALL_EN.has(bare(w).toLowerCase());
+  const len = n => words.slice(0, n).join(' ').length;
+  /* The headline: two words, or three when they are short; it does not end on a small word such as
+     "and" (it goes on to the next word when that fits, otherwise it stops before the small word), and
+     it stops at a comma or a colon. */
+  let n = Math.min(words.length, 2);
+  while (n < Math.min(3, words.length) && len(n) < 10) n++;
+  while (n < Math.min(4, words.length) && small(words[n - 1]) && len(n + 1) <= 24) n++;
+  while (n > 1 && small(words[n - 1])) n--;
+  for (let k = 0; k < n - 1; k++) if (/[,:;]$/.test(words[k])) { n = k + 1; break; }
+  if (n === 1 && words.length > 1 && bare(words[0]).length < 4 && !small(words[1])) n = 2;
+  const trim = t => t.replace(/[\s,:;.\-–—]+$/, '').replace(/^[\s,:;.\-–—]+/, '');
+  const head = trim(words.slice(0, n).join(' '));
+  /* The line under it: the next words, eight at most, not ending on a small word. */
+  let m = Math.min(words.length, n + 8);
+  while (m > n + 1 && small(words[m - 1])) m--;
+  const sub = trim(words.slice(n, m).join(' '));
+  /* Names first: words written with a capital that are not ordinary sentence openers. A name joined
+     with hyphens gives its parts (U.S.-China-Russia: CHINA, RUSSIA). */
+  const names = [];
+  words.forEach(w => bare(w).replace(/['’]s$/, '').split('-').forEach(b => {
+    if (/^[A-Z][A-Za-z0-9]{2,}$/.test(b) && !PLAIN_EN.has(b.toLowerCase()) && !names.includes(b.toUpperCase())) names.push(b.toUpperCase());
+  }));
+  const longs = words.map(w => bare(w).toUpperCase().replace(/[^A-Z0-9]/g, '')).filter(b => b.length >= 5 && !PLAIN_EN.has(b.toLowerCase()) && !SMALL_EN.has(b.toLowerCase()) && !names.includes(b));
+  const kw = (names[0] || longs[0] || bare(words[0] || 'NEWS').toUpperCase()).replace(/[^A-Z0-9]/g, '').slice(0, 14) || 'NEWS';
+  const tags = names.concat(longs).filter((t, k, a) => t && a.indexOf(t) === k).slice(0, 3);
+  return { kw, head: head || kw, sub, tags };
+}
+/* A headline from X as the first News videos showed one: the English headline large with the rest of
+   it under, the Japanese lines below, tags at the foot. githito.xapi sends the English with the headline. */
+function bothCard(row) {
+  const p = englishParts(row.en);
+  const g = GENRES.find(x => x.id === row.genre);
+  let md = '';
+  const d = new Date(String(row.pubDate || ''));
+  if (!Number.isNaN(d.getTime())) md = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+  return {
+    /* The corner: the second thing the news is about, as in the first videos (the paper is at the foot). */
+    kw: p.kw, cat: g ? g.name.toUpperCase() : 'NEWS', topic: p.tags.find(t => t !== p.kw) || p.kw,
+    head: [p.head], sub: p.sub ? [p.sub] : [],
+    jp: [row.headline, row.detail].filter(Boolean),
+    tags: p.tags, src: ('X @' + String(row.source || '')).slice(0, 40), date: md, url: row.link || '',
+  };
+}
 /* A headline from X becomes a card of its own: no reply, the corner names the paper. */
 function headCard(row, langId) {
+  if (langId === 'ja' && row.en) return bothCard(row);
   const card = storyFrom(row, row._en || row.headline, row._local || row.headline, langId);
   const g = GENRES.find(x => x.id === row.genre);
   card.kw = newsWord(row.headline, langId === 'en') || card.kw;
@@ -5389,10 +5442,18 @@ async function preparedScript(date, slots, room) {
       return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
     }
     const x = p.head;
-    return { headline: String(x.t).replace(/^【([^【】]+)】$/, '$1'), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '' };
+    return { headline: String(x.t).replace(/^【([^【】]+)】$/, '$1'), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '', en: x.e || '', detail: x.d || '' };
   });
   S.pendingKeys = rows.flatMap(storyKeys);
-  if (lang.id === 'ja') rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
+  if (lang.id === 'ja') {
+    rows.forEach(r => { r._en = r.headline; r._local = r.headline; });
+    /* A headline githito.xapi has not put into English yet: the page asks for it, briefly. Without it the card is Japanese only. */
+    const lack = rows.filter(r => !r.reply && !r.en);
+    if (lack.length) {
+      try { (await timed(translateMany(lack.map(r => r.headline.replace(/【[^】]*】/g, ' ').trim() || r.headline), 'en'), 4000)).forEach((t, i) => { if (t && /[A-Za-z]{3}/.test(t) && !/[\u3040-\u30ff]/.test(t)) lack[i].en = t; }); }
+      catch (e) { console.warn(e); }
+    }
+  }
   else {
     /* Another language on the cards: the words are translated, which takes a moment. */
     await fillText(rows, lang);
@@ -6539,7 +6600,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'be813feb8a04';
+  const BUILD = '3085cfafd3bf';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
