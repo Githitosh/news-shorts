@@ -5069,7 +5069,7 @@ function withCoffee(rows) {
    With another edition, X accounts added, or a lineup line that is not a genre, the page searches as
    before. When the file cannot be read it searches the web only if a web source is switched on. */
 const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
-let PREP = { items: [], news: {}, heads: [], at: 0, part: false };
+let PREP = { items: [], news: {}, heads: [], play: null, at: 0, part: false };
 let prepLoading = null;
 const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
 const repliesOn = () => store.get('replies', 'on') !== 'off';
@@ -5077,24 +5077,20 @@ function prepGood(d) {
   const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
   const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h);
   const heads = (Array.isArray(d && d.heads) ? d.heads : []).filter(x => x && x.id && x.h && x.t);
-  return { items, news, heads };
+  const p = d && d.play;
+  const play = p && typeof p === 'object' && Array.isArray(p.replies) && Array.isArray(p.news) ? { replies: p.replies, news: p.news, genre: (p.genre && typeof p.genre === 'object') ? p.genre : {} } : null;
+  return { items, news, heads, play };
 }
-/* The copy for the next visit: 300 replies and 200 headlines, those not played yet first. */
+/* The copy for the next visit: the file as it was read, with the order it plays in. */
 function keepPrep() {
-  try {
-    const past = seenKeys();
-    const freshFirst = list => { const a = list.filter(x => !past.has('u:' + replyLink(x))); const s = new Set(a); return a.concat(list.filter(x => !s.has(x))); };
-    const items = freshFirst(PREP.items).slice(0, 300);
-    const news = {};
-    items.forEach(x => { news[x.n] = PREP.news[x.n]; });
-    store.set('prep.news', JSON.stringify({ at: PREP.at, items, news, heads: freshFirst(PREP.heads).slice(0, 200) }));
-  } catch (e) {}
+  try { store.set('prep.news', JSON.stringify({ at: PREP.at, items: PREP.items, news: PREP.news, heads: PREP.heads, play: PREP.play })); }
+  catch (e) { try { store.set('prep.news', ''); } catch (e2) {} }
 }
 function keptPrep() {
   try {
     const d = JSON.parse(store.get('prep.news', 'null'));
     const g = prepGood(d);
-    if (g.items.length || g.heads.length) PREP = { ...g, at: Number(d.at) || 0, part: true };
+    if (g.items.length || g.heads.length) PREP = { ...g, at: Number(d.at) || 0, part: false };
   } catch (e) {}
 }
 function loadPrep() {
@@ -5236,7 +5232,39 @@ async function preparedScript(date, slots, room) {
     return got;
   };
   const caps = { source: Math.max(2, Math.ceil(N / 4)), genre: Math.max(2, Math.ceil(N / 3)) };
-  if (wants.length) {
+  /* githito.xapi chooses the order, at random, after every collection: replies with headlines among
+     them, headlines alone, and one order for each genre. The page only reads it from the top: what has
+     not played yet first, then what has. (One reply for a piece of news and nobody twice in a video.) */
+  const play = prep.play;
+  if (play) {
+    const itemById = new Map(prep.items.map(x => [String(x.id), x]));
+    const headById = new Map(prep.heads.map(x => [String(x.id), x]));
+    const okReply = x => x && prep.news[x.n] && !blocked(x.t) && !blocked(prep.news[x.n].t) && (!allowed || allowed.has(prep.news[x.n].g));
+    const okHead = x => x && !blocked(x.t) && (!allowed || allowed.has(x.g));
+    const entryOf = e => {
+      const id = String(e).slice(1);
+      if (String(e)[0] === 'r') { const x = itemById.get(id); return withReplies && okReply(x) ? { reply: x } : null; }
+      const x = headById.get(id);
+      return okHead(x) ? { head: x } : null;
+    };
+    const read = (order, n) => {
+      const list = (Array.isArray(order) ? order : []).map(entryOf).filter(Boolean);
+      let got = 0;
+      [false, true].forEach(played => list.forEach(e => {
+        if (got >= n || picked.length >= N || seen(e.reply || e.head) !== played) return;
+        got += e.reply ? takeReplies([e.reply], 1) : takeHeads([e.head], 1);
+      }));
+      return got;
+    };
+    if (wants.length) {
+      for (const w of wants) {
+        if (!read(play.genre[w.gid], w.count)) { if (sourceOn('web')) return null; throw noNewError('No news from X for this genre yet. Press Update again later.'); }
+      }
+    } else {
+      read(withReplies ? play.replies : play.news, N);
+      if (picked.length < N) read(play.news, N - picked.length);
+    }
+  } else if (wants.length) {
     /* Each line of the lineup is a genre: its replies, or its headlines when it has no replies. */
     for (const w of wants) {
       const ofGenre = x => (x.g || '') === w.gid;
@@ -5264,7 +5292,7 @@ async function preparedScript(date, slots, room) {
   /* Headlines are spread among the replies, the first card being news. */
   const hs = picked.filter(p => p.head), rs = picked.filter(p => p.reply);
   let order = picked;
-  if (!wants.length && hs.length && rs.length) {
+  if (!play && !wants.length && hs.length && rs.length) {
     order = [];
     const step = picked.length / hs.length;
     const at = new Set(hs.map((_, i) => Math.floor(i * step)));
@@ -6443,7 +6471,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'e28627042017';
+  const BUILD = 'ac606748e345';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

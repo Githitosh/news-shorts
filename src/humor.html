@@ -1533,23 +1533,25 @@ async function collectRomance(need, place) {
    next visit starts with it and reads the new one meanwhile. Love is the centre of the video; in the
    morning greetings come first. */
 const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
-let PREP = { lang: '', stories: [], at: 0 };
+let PREP = { lang: '', stories: [], play: null, at: 0 };
 const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && s.a.handle && s.b.handle && s.a.id && s.b.id);
+const goodPlay = p => (p && typeof p === 'object' && ['morning', 'day', 'night'].every(k => Array.isArray(p[k])) ? p : null);
 function keptPrep(lang) {
   try {
     const d = JSON.parse(store.get('prep.' + lang, 'null'));
     const stories = goodStories(d && d.stories);
-    if (stories.length) PREP = { lang, stories, at: Number(d.at) || 0 };
+    if (stories.length) PREP = { lang, stories, play: goodPlay(d.play), at: Number(d.at) || 0 };
   } catch (e) {}
 }
 async function loadPrep(lang) {
   try {
     const res = await withTimeout(fetch(XAPI + 'humor-' + lang + '.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 8000);
     if (!res.ok) return false;
-    const stories = goodStories((await res.json()).stories);
+    const d = await res.json();
+    const stories = goodStories(d.stories);
     if (!stories.length) return false;
-    PREP = { lang, stories, at: Date.now() };
-    store.set('prep.' + lang, JSON.stringify({ at: PREP.at, stories }));
+    PREP = { lang, stories, play: goodPlay(d.play), at: Date.now() };
+    store.set('prep.' + lang, JSON.stringify({ at: PREP.at, stories, play: PREP.play }));
     return true;
   } catch (e) { console.warn(e); return false; }
 }
@@ -1561,10 +1563,8 @@ async function prepared(lang) {
   else if (Date.now() - PREP.at > 600000) { PREP.at = Date.now(); loadPrep(lang); }
   return PREP.lang === lang ? PREP.stories : [];
 }
-/* Stories for one video. Not played yet first; when those run out, played ones come round again.
-   In the morning (4 to 11) good mornings are seven in ten and loving talk the rest. At other hours
-   loving talk is two in three; the rest are the greetings of the hour: coming home, and good nights
-   only from eight in the evening. */
+/* Stories for one video, read from the order githito.xapi chose (see below). Not played yet first; when
+   those run out, played ones come round again, the one that played longest ago first. */
 async function preparedRows(need) {
   const lang = jokeLang();
   const all = await prepared(lang);
@@ -1590,6 +1590,31 @@ async function preparedRows(need) {
   const evening = hour >= 20 || hour < 4;
   const picked = [];
   const people = new Set();
+  /* githito.xapi chooses the order, at random, after every collection: one order for the morning, one
+     for the day, one for the night (the mix of greetings and loving talk is dealt there). The page only
+     reads it from the top: what has not played yet first, then what played longest ago. */
+  const listed = PREP.play && PREP.play[morning ? 'morning' : (evening ? 'night' : 'day')];
+  if (listed && listed.length) {
+    const byId = new Map(pool.map(s => [String(s.id), s]));
+    const inOrder = listed.map(id => byId.get(String(id))).filter(Boolean);
+    const fresh = new Set(unseen);
+    const read = list => {
+      for (const s of list) {
+        if (picked.length >= need) break;
+        const a = s.a.handle.toLowerCase(), b = s.b.handle.toLowerCase();
+        if (picked.includes(s) || people.has(a) || people.has(b)) continue;
+        people.add(a); people.add(b);
+        picked.push(s);
+      }
+    };
+    read(inOrder.filter(s => fresh.has(s)));
+    read(inOrder.filter(s => !fresh.has(s)).map(s => [lastPlayed(s), s]).sort((x, y) => y[0] - x[0]).map(x => x[1]));
+    if (picked.length) return picked.map(s => {
+      const story = { a: { ...s.a }, b: { ...s.b }, cheers: [] };
+      return { romance: true, story, lang, place: 'middle', kind: s.kind, headline: s.a.text, joke: true, keys: keysOf(s) };
+    });
+  }
+  /* A file without an order (an older one): the page deals the mix itself, as before. */
   const take = (list, n, cap) => {
     const kinds = {};
     for (const s of list) {

@@ -39,7 +39,7 @@ Music, under the picture:
 ## Where the news comes from
 
 **In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it
-ahead of time (`news.mjs`, three runs a day) and the page reads one file, `v1/news-ja.json`, so a video starts
+ahead of time (`news.mjs`, every hour, kept for three days) and the page reads one file, `v1/news-ja.json`, so a video starts
 in about a second and Update answers at once.
 
 - **With replies** (the default): a card is an earnest reply to a piece of news, and a small line under it
@@ -53,6 +53,10 @@ in about a second and Update answers at once.
 - **Add a medium, a website or a keyword** (Settings): type a company name, a medium or `example.com`, press
   Search, and add what was found. Its news is searched on the web (Google News and Bing News) and plays
   first in every video, up to half of it. Up to eight can be added.
+- **What plays is chosen by githito.xapi, at random**, after every hourly collection (the `play` orders in
+  its files). The pages only read an order from the top, leaving out what the reader has already seen;
+  they do no searching and no choosing of their own for this. The same holds for Humor's romance stories
+  (one order each for the morning, the day and the night).
 - With another edition, with X accounts added, or with a lineup line that is not a genre, the page
   searches as described below. There is no pull down to refresh. Update makes a new video.
 
@@ -72,7 +76,7 @@ No API key. The page reads public feeds, from more than one source and through m
 - Press releases, blog platforms and stories in a script the edition does not read are left out.
 - Humor reads its news the same way (the topics its jokes are about).
 - Humor's romance stories are prepared ahead of time by
-  [githito.xapi](https://github.com/Githitosh/githito.xapi) (`humor.mjs`, every hour) and read
+  [githito.xapi](https://github.com/Githitosh/githito.xapi) (`humor.mjs`, every hour, kept for three days) and read
   from `v1/humor-ja.json`, so the first video and Update start in about a second. Loving talk comes
   first; in the morning (4 to 11) good mornings are seven in ten. When every story has played, the
   one that played longest ago comes back first. With other genres in the lineup, or
