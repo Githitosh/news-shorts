@@ -501,8 +501,8 @@ function cutEn(text, force) {
 /* ---------- a card in one language: one sentence in two beats, in the same letters ---------- */
 /* The two parts are written alike: the headline's letters, one size for the whole video. A line ends where
    a phrase ends. What a break costs: nothing after a mark or a space, little after a particle (は, を, の)
-   when a word follows, more where the kind of letter changes inside a word (シード|喪失), most inside a run
-   of the same letters (特別|公演), before hiragana (良好|でない) and inside a quotation. In English: nothing
+   when a word follows, more where the kind of letter changes (シード|喪失) or between two words written in
+   the same letters (特別|公演), most before hiragana (良好|でない) and inside a quotation. In English: nothing
    after a mark, little before a joining word (and, to, in), most after a small one (the, of). */
 const KIND = ch => (/[\u3041-\u309f]/.test(ch) ? 'h' : /[\u30a0-\u30ffー]/.test(ch) ? 'k' : /[\u4e00-\u9fff々]/.test(ch) ? 'j' : /[0-9A-Za-z０-９Ａ-Ｚａ-ｚ]/.test(ch) ? 'a' : 'o');
 const OPENERS = '「『（(【〔“', CLOSERS = '」』）)】〕”';
@@ -523,14 +523,18 @@ function breakCost(s, i, quoted, cjk) {
   else if (CLOSERS.includes(prev)) c = 0.5;
   else if ('・＆&'.includes(prev)) c = 6;
   else if (KIND(prev) === 'h') c = /[おご]/.test(prev) && KIND(s[i - 2] || '') !== 'h' ? 7 : 1;
-  else if (KIND(prev) === 'a' && KIND(next) === 'j') c = /[0-9０-９]/.test(prev) ? 7 : 3;
-  else if (KIND(prev) !== KIND(next)) c = 3;
-  else c = 7;
-  return c + (quoted ? 2 : 0);
+  else if (KIND(prev) === 'a' && KIND(next) === 'j') c = /[0-9０-９]/.test(prev) ? 7 : 2;
+  else if (KIND(prev) !== KIND(next)) c = 2;
+  else c = 4;
+  /* Words in quotation marks stay on one line when a slightly smaller size lets them. */
+  return c + (quoted ? 6 : 0);
 }
 /* The ways to write a text in lines no wider than a limit: at(limit) gives, for one to four lines at most,
    the lines whose breaks cost least ({ lines, bad }), or null where the text does not fit. */
-const TWIN = { lines: 4, line: 1.5, gap: 0.55, descent: 0.16, give: 60, floor: 0.45 };
+/* lines: how many lines a part may take. top: the largest letters, by page shape. give and floor: a card
+   is written a little smaller when that buys better line ends (a tenth smaller is worth three points of
+   break cost), but never under floor of the largest size it fits at. */
+const TWIN = { lines: 6, line: 1.5, gap: 0.55, descent: 0.16, give: 30, floor: 0.72, top: { x: 250, youtube: 200, pc: 190, wide: 150 } };
 function fitter(text) {
   const cjk = CJK_HEAD.test(text);
   let pts;
@@ -590,50 +594,40 @@ function twinPlan(head, second, S) {
   L.bottom = last + TWIN.descent * S;
   return L;
 }
-/* One size for the video: the largest at which every card fits, then smaller for as long as that buys
-   better line ends (give: a tenth smaller is worth six points of break cost). False when nothing fits. */
+/* Each card is written as large as it fits: its two parts in one size, from the largest letters (TWIN.top)
+   down to the first size at which the lines fit the width and the two parts fit the box, then a little
+   smaller when that buys better line ends. A short card is large and a long one smaller; one long card no
+   longer makes every card of the video small. */
 function twinLayout(items, pres) {
-  const fits = items.map((it, i) => inPreset(pres[i], () => {
+  items.forEach((it, i) => inPreset(pres[i], () => {
     const a = headText(it) || String(it.kw || 'NEWS').toUpperCase(), b = twinSecond(it);
-    return { a: fitter(a), b: b ? fitter(b) : null };
-  }));
-  const plan = S => {
-    let bad = 0;
-    const cards = [];
-    for (let i = 0; i < items.length; i++) {
-      const card = inPreset(pres[i], () => {
-        /* A note under the text (layoutAt) takes its lines from the box. */
-        const note = items[i].note && !items[i].still ? noteLines(items[i].note).length : 0;
-        const avail = P.box.bottom - P.box.top - (note ? P.jp.size * NOTE.k * (NOTE.gap + 1) + (note - 1) * P.jp.line * NOTE.k : 0);
-        const A = fits[i].a(P.head.maxW / S), B = fits[i].b ? fits[i].b(P.head.maxW / S) : null;
-        let best = null;
-        for (let m1 = 1; m1 <= TWIN.lines; m1++) for (let m2 = B ? 1 : 0; m2 <= (B ? TWIN.lines : 0); m2++) {
-          const x = A[m1], y = B ? B[m2] : null;
-          if (!x || (B && !y)) continue;
-          if (twinHeight(x.lines.length, y ? y.lines.length : 0, S) > avail + 0.5) continue;
-          const score = x.score + (y ? y.score : 0);
-          if (!best || score < best.score - 1e-6) best = { score, bad: x.bad + (y ? y.bad : 0), lines: x.lines, second: y ? y.lines : [] };
-        }
-        return best;
-      });
-      if (!card) return null;
-      bad += card.bad; cards.push(card);
+    const fa = fitter(a), fb = b ? fitter(b) : null;
+    /* A note under the text (layoutAt) takes its lines from the box. */
+    const note = it.note && !it.still ? noteLines(it.note).length : 0;
+    const avail = P.box.bottom - P.box.top - (note ? P.jp.size * NOTE.k * (NOTE.gap + 1) + (note - 1) * P.jp.line * NOTE.k : 0);
+    const at = S => {
+      const A = fa(P.head.maxW / S), B = fb ? fb(P.head.maxW / S) : null;
+      let best = null;
+      for (let m1 = 1; m1 <= TWIN.lines; m1++) for (let m2 = B ? 1 : 0; m2 <= (B ? TWIN.lines : 0); m2++) {
+        const x = A[m1], y = B ? B[m2] : null;
+        if (!x || (B && !y)) continue;
+        if (twinHeight(x.lines.length, y ? y.lines.length : 0, S) > avail + 0.5) continue;
+        const score = x.score + (y ? y.score : 0);
+        if (!best || score < best.score - 1e-6) best = { score, bad: x.bad + (y ? y.bad : 0), lines: x.lines, second: y ? y.lines : [] };
+      }
+      return best;
+    };
+    let first = 0, best = null;
+    for (let S = TWIN.top[P.name] || P.head.max[2]; S > 12; S *= 0.96) {
+      const c = at(S);
+      if (!c) continue;
+      if (!first) first = S;
+      if (S < first * TWIN.floor) break;
+      c.rank = c.bad + TWIN.give * (1 - S / first);
+      if (!best || c.rank < best.rank - 1e-6) { best = c; best.S = S; }
     }
-    return { S, bad, cards };
-  };
-  let top = 0;
-  for (const it of items) top = Math.max(top, inPreset(presetOf(it), () => P.head.max[1]));
-  let first = null, best = null;
-  for (let S = top; S > top * 0.12; S *= 0.95) {
-    const p = plan(S);
-    if (!p) continue;
-    if (!first) first = p;
-    if (S < first.S * TWIN.floor) break;
-    p.score = p.bad + TWIN.give * (1 - S / first.S);
-    if (!best || p.score < best.score - 1e-6) best = p;
-  }
-  if (!best) return false;
-  items.forEach((it, i) => { const c = best.cards[i]; it.L = inPreset(pres[i], () => layoutAt(it, 1, { lines: c.lines, Sh: best.S, twin: c.second })); });
+    it.L = best ? layoutAt(it, 1, { lines: best.lines, Sh: best.S, twin: best.second }) : layoutAt(it, OPT.jp || 1);
+  }));
   return true;
 }
 
