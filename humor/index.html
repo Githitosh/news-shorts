@@ -2536,7 +2536,8 @@ global.UIJA = { start, apply, tr };
    honour or private life, and slander in what people themselves write. These are the same three lists as
    githito.xapi's filters.mjs, which leaves the same things out when it collects; the pages apply them
    again to what they read, so that a change holds at once and what an older file still holds does not
-   play. Change the two together. No lookbehind is used: older browsers do not have it. */
+   play. Change the two together. No lookbehind is used: older browsers do not have it. Alcohol and smoking
+   (ALCOHOL, TOBACCO, COMPANY) are the lists of the same names there. */
 (function (global) {
 const CRUEL_WORDS = [
   /* killing and bodies */
@@ -2586,8 +2587,14 @@ const plain = text => String(text || '').replace(SAYINGS, '');
 const cruel = text => CRUEL.test(plain(text));
 const personal = text => PERSONAL.test(plain(text));
 const slander = text => SLANDER.test(plain(text));
+/* Alcohol and smoking (the pages are read by the young too). News keeps them when it is a company's news
+   (a brewer's results, a new beer on sale, a tobacco maker's price rise). Car and sea sickness are no drinking. */
+const ALCOHOL = /お酒|酒(?![井田々])|飲酒|禁酒|晩酌|泥酔|酔っ|酔い|酔う|酔え|二日酔|ほろ酔|ほろよい|呑[みむまん]|飲み会|飲みに|飲み過ぎ|飲みすぎ|飲んだくれ|宅飲み|家飲み|居酒屋|酒場|乾杯|カンパイ|かんぱい|ビール|ビアガーデン|ビアホール|ビアバー|ワイン|日本酒|焼酎|ハイボール|チューハイ|酎ハイ|サワー|カクテル|ウイスキー|ウィスキー|ウォッカ|テキーラ|シャンパン|梅酒|生中(?!継)|ストゼロ|アルコール|酒豪|ベロンベロン|🍺|🍻|🥂|🍷|🍸|🍹|🥃|🍶|\b(?:beers?|wine|drunk|alcohol|whiske?y|vodka|tequila|cocktails?|hangover|tipsy|booze|sake)\b/i;
+const TOBACCO = /タバコ|たばこ|煙草|喫煙|禁煙|分煙|加熱式|アイコス|IQOS|ベイプ|VAPE|ヤニ(?!ヤ)|一服|紫煙|吸い殻|吸殻|灰皿|葉巻|シガー|シーシャ|ニコチン|スモーカー|🚬|\b(?:cigarettes?|cigars?|smok(?:e|es|ed|ing)|vap(?:e|es|ing)|nicotine|tobacco|juul)\b/i;
+const COMPANY = /アサヒ|キリン|サッポロ|サントリー|宝酒造|宝ホールディングス|白鶴|月桂冠|菊正宗|大関|黄桜|獺祭|旭酒造|オエノン|メルシャン|ニッカ|JT|日本たばこ|日本たばこ産業|フィリップ・?モリス|ブリティッシュ・?アメリカン・?タバコ|BAT|ハイネケン|ディアジオ|ペルノ|アンハイザー|バドワイザー|カールスバーグ|モルソン|コンステレーション|鳥貴族|ワタミ|串カツ田中|酒造|醸造|株式会社|ホールディングス|HD|グループ|社長|会長|CEO|決算|売上|業績|株価|株主|上場|買収|合併|提携|新商品|新製品|発売|値上げ|値下げ|出荷|工場|事業|市場|シェア|増益|減益|増収|減収|黒字|赤字|最高益|純利益|営業利益|輸出|販売|出店|閉店|店舗|メーカー|ブランド|企業/;
+const adult = text => ALCOHOL.test(String(text || '').replace(/(?:車|船|乗り物)酔い/g, '')) || TOBACCO.test(String(text || ''));
 /* news: a headline (with the line under it) that may not play. */
-global.NSNever = { cruel, personal, slander, news: text => cruel(text) || personal(text) };
+global.NSNever = { cruel, personal, slander, adult, news: text => cruel(text) || personal(text) || (adult(text) && !COMPANY.test(String(text || ''))) };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>/* News Shorts drawing engine. Phone and X and YouTube are 1080×1920. PC is 1920×1080. 30fps. 3.2 seconds per story, or 4.2 / 5.2. */
@@ -4780,7 +4787,7 @@ const SHORT = { ja: 30, en: 90 };
 const LONG = { ja: 60, en: 180 };
 /* Talk about alcohol is not played (githito.xapi leaves it out too: filters.mjs there). 酒井, 酒田 are names;
    car and sea sickness are no drinking. */
-const ALCOHOL = /お酒|酒(?![井田])|飲酒|禁酒|晩酌|泥酔|酔っ|酔い|酔う|酔え|二日酔|ほろ酔|ほろよい|呑[みむまん]|飲み会|飲みに|飲み過ぎ|飲みすぎ|飲んだくれ|宅飲み|家飲み|居酒屋|酒場|乾杯|カンパイ|かんぱい|ビール|ビア|ワイン|日本酒|焼酎|ハイボール|チューハイ|酎ハイ|サワー|カクテル|ウイスキー|ウィスキー|ウォッカ|テキーラ|シャンパン|梅酒|生中|ストゼロ|アルコール|酒豪|ベロンベロン|🍺|🍻|🥂|🍷|🍸|🍹|🥃|🍶|\b(?:beers?|wine|drunk|alcohol|whiske?y|vodka|tequila|cocktails?|hangover|tipsy|booze|sake)\b/i;
+const ALCOHOL = /お酒|酒(?![井田々])|飲酒|禁酒|晩酌|泥酔|酔っ|酔い|酔う|酔え|二日酔|ほろ酔|ほろよい|呑[みむまん]|飲み会|飲みに|飲み過ぎ|飲みすぎ|飲んだくれ|宅飲み|家飲み|居酒屋|酒場|乾杯|カンパイ|かんぱい|ビール|ビアガーデン|ビアホール|ビアバー|ワイン|日本酒|焼酎|ハイボール|チューハイ|酎ハイ|サワー|カクテル|ウイスキー|ウィスキー|ウォッカ|テキーラ|シャンパン|梅酒|生中(?!継)|ストゼロ|アルコール|酒豪|ベロンベロン|🍺|🍻|🥂|🍷|🍸|🍹|🥃|🍶|\b(?:beers?|wine|drunk|alcohol|whiske?y|vodka|tequila|cocktails?|hangover|tipsy|booze|sake)\b/i;
 /* Talk about smoking, its words and its emoji: the page is read by the young too (filters.mjs in githito.xapi). */
 const TOBACCO = /タバコ|たばこ|煙草|喫煙|禁煙|分煙|加熱式|アイコス|IQOS|ベイプ|VAPE|ヤニ(?!ヤ)|一服|紫煙|吸い殻|吸殻|灰皿|葉巻|シガー|シーシャ|ニコチン|スモーカー|🚬|\b(?:cigarettes?|cigars?|smok(?:e|es|ed|ing)|vap(?:e|es|ing)|nicotine|tobacco|juul)\b/i;
 /* Alcohol and smoking are left out. */
@@ -6649,7 +6656,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'aceb70fe5201';
+  const BUILD = '6e7ec6ea5d51';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
