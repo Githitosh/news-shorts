@@ -46,8 +46,10 @@ words of their own (`stockScript` in `src/app.html`, `stockRows` in `src/humor.h
 - **News** plays the newest video it has not played. A card is speed-read news in three beats: the keyword,
   what happened, who (or the headline's two parts, or a short headline and the line its post added, or the
   paper). Genres chosen, words in the lineup or accounts added: the cards are picked among the stock's.
-- **Reply News** plays one card per story in two beats that follow on: the post, then the reply. In the
-  morning a video of greetings comes first. For accounts a reader added: their replies first, the reply alone.
+- **Reply News**: a video is conversations, whole (githito.xapi keeps the back-and-forth between two
+  people), loving greetings first, in the order of the day. Each message is a card in two beats: a part of
+  it taken out, large, then the whole message. In the morning a video of morning greetings comes first. For
+  accounts a reader added: their replies first, a card each.
 - **English**: githito.xapi is refused by the translator where it runs, so the page puts the two parts into
   English, a line each (kept in the browser), and asks for the next video's meanwhile.
 - Until the stock is there, the pages work as they did before (the prepared files below).

@@ -2864,7 +2864,7 @@ function stockCard(c, langId, en) {
   const lines = String(en || '').split('\n').map(t => t.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim()).filter(Boolean);
   const two = lines.length === 2 ? lines : null;
   /* A reply to an account the reader added: the account's news, then the reply. */
-  const ja = c.ask ? [c.on || c.ja[0], c.ja.join('')] : c.ja;
+  const ja = c.ask ? [c.on || c.ja[0], c.ja[1] || c.ja[0]] : c.ja;
   const base = { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.n || 'X'),
     src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [] };
   if (langId === 'en' && two) return { ...base, kw: storyWord(two.join(' '), ''), head: [two[0].toUpperCase()], jp: [two[1].toUpperCase()] };

@@ -4965,25 +4965,29 @@ async function prepared(lang) {
   return PREP.lang === lang ? PREP.stories : [];
 }
 /* ---------- the video stock ---------- */
-/* githito.xapi writes every card and deals the cards into about a hundred videos of ten (stock.mjs there);
-   the page receives them and plays them. A card is one story in two beats that follow on from each other:
-   the post, then the reply to it ({ id, k (kind), a, b (who wrote them), kw, ja: [post, reply] }). Videos
-   marked m are greetings of the morning. replies: the replies to the accounts readers added (the reply
-   alone, in two parts). With English chosen the two parts are put into English here, a line each. */
-let STOCK = { cards: [], byId: new Map(), videos: [], replies: [], at: 0 };
+/* githito.xapi writes every card and makes the videos (stock.mjs there); the page receives them and plays
+   them. A video is conversations: talks between two people, whole, about ten messages, greetings said with
+   love first, in the order of the day. Each message is a card in two beats: a part of it taken out (the
+   greeting or the loving word: the large first beat), then the whole message. A talk: { i, k (kind), gl,
+   m: [{ i, h (who wrote it), to (whom it answers), ja: [part, whole] }] }. Videos marked m are mostly
+   greetings of the morning. replies: the replies to the accounts readers added. With English chosen the
+   part and the whole are put into English here, a line each. */
+let STOCK = { talks: [], byId: new Map(), videos: [], replies: [], at: 0 };
 let stockLoading = null;
 function stockGood(d) {
   const never = window.NSNever;
-  const ok = c => c && c.id && c.a && c.b && Array.isArray(c.ja) && c.ja[0] && !(never && never.slander(c.ja.join(' ')));
-  const cards = (Array.isArray(d && d.cards) ? d.cards : []).filter(ok);
-  const byId = new Map(cards.map(c => [String(c.id), c]));
+  const okMsg = x => x && x.h && Array.isArray(x.ja) && x.ja[1] && !(never && never.slander(x.ja[1]));
+  const talks = (Array.isArray(d && d.talks) ? d.talks : []).filter(t => t && t.i && Array.isArray(t.m) && t.m.length >= 2 && t.m.every(okMsg));
+  const byId = new Map(talks.map(t => [String(t.i), t]));
   const videos = (Array.isArray(d && d.videos) ? d.videos : []).filter(v => v && Array.isArray(v.c)).map(v => ({ i: v.i, at: v.at, m: !!v.m, c: v.c.map(String).filter(id => byId.has(id)) })).filter(v => v.c.length);
-  const replies = (Array.isArray(d && d.replies) ? d.replies : []).filter(c => ok(c) && c.ask);
-  return { cards, byId, videos, replies, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
+  /* A reply to an account a reader added becomes a message of its own. */
+  const replies = (Array.isArray(d && d.replies) ? d.replies : []).filter(c => c && c.id && c.ask && c.b && Array.isArray(c.ja) && c.ja[1])
+    .map(c => ({ i: String(c.id), h: c.b.h, to: c.ask, ja: c.ja, ask: c.ask })).filter(okMsg);
+  return { talks, byId, videos, replies, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
 }
 function keptStock() {
   try {
-    const d = JSON.parse(store.get('stock', 'null'));
+    const d = JSON.parse(store.get('stock2', 'null'));
     const g = stockGood(d);
     if (g.videos.length) { STOCK = { ...g, at: Number(d.at) || 0 }; ASKED = { ...ASKED, at: ASKED.at || 1, asked: g.asked }; paintAsked(); }
   } catch (e) {}
@@ -5000,8 +5004,8 @@ function loadStock() {
       STOCK = { ...g, at: Date.now() };
       ASKED = { ...ASKED, at: Date.now(), asked: g.asked };
       paintAsked();
-      try { store.set('stock', JSON.stringify({ at: STOCK.at, cards: d.cards, videos: d.videos, replies: d.replies, asked: d.asked })); }
-      catch (e) { try { store.set('stock', ''); } catch (e2) {} }
+      try { store.set('stock', ''); store.set('stock2', JSON.stringify({ at: STOCK.at, talks: d.talks, videos: d.videos, replies: d.replies, asked: d.asked })); }
+      catch (e) { try { store.set('stock2', ''); } catch (e2) {} }
       return true;
     } catch (e) { console.warn(e); return false; }
     finally { stockLoading = null; }
@@ -5014,37 +5018,49 @@ async function stock() {
   else if (Date.now() - STOCK.at > 600000) { STOCK.at = Date.now(); await withTimeout(loadStock(), 2500).catch(() => {}); }
   return STOCK;
 }
-const stockKeys = c => ['id:' + c.a.i, 'id:' + c.b.i, 't:' + squash(c.ja.join('')).slice(0, 50)].filter(k => k !== 'id:');
-/* A video from the stock: the accounts the reader added first (their replies, up to half), then the newest
-   video that has not played (in the morning, a video of greetings first). Null when there is no stock yet. */
+const msgKeys = x => ['id:' + x.i, 't:' + squash(x.ja[1]).slice(0, 50)].filter(k => k !== 'id:');
+/* A video from the stock, message by message: the replies to the reader's accounts first (up to half), then
+   the first video that has not played, as githito.xapi ordered them (in the morning, a video of morning
+   greetings first). Talks are taken whole: the video may be a message or two longer than chosen, so that
+   no conversation stops in the middle. Null when there is no stock yet. */
 async function stockRows(N) {
   const st = await stock();
   if (!st.videos.length) return null;
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  const seen = c => stockKeys(c).some(k => past.has(k));
-  const ok = c => !stockKeys(c).some(k => now.has(k)) && c.ja.every(t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !(sensitiveHidden() && suggestive(t)));
-  const picked = [];
+  const okText = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !(sensitiveHidden() && suggestive(t));
+  const seenMsg = x => msgKeys(x).some(k => past.has(k));
+  const rows = [];
   const people = new Set();
-  const take = (list, n) => {
-    for (const c of list) {
-      if (n <= 0 || picked.length >= N) break;
-      const who = [c.a.h, c.b.h].map(h => String(h).toLowerCase());
-      if (picked.includes(c) || who.some(h => people.has(h)) || !ok(c)) continue;
-      picked.push(c); who.forEach(h => people.add(h)); n--;
-    }
-  };
   const mine = new Set(xAccounts().map(n => n.toLowerCase()));
   if (mine.size) {
-    const list = st.replies.filter(c => mine.has(String(c.ask).toLowerCase()));
-    take(list.filter(c => !seen(c)).concat(list.filter(seen)), Math.max(1, Math.floor(N / 2)));
+    const list = st.replies.filter(x => mine.has(String(x.ask).toLowerCase()) && okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)));
+    for (const x of list.filter(x => !seenMsg(x)).concat(list.filter(seenMsg))) {
+      if (rows.length >= Math.max(1, Math.floor(N / 2))) break;
+      const who = String(x.h).toLowerCase();
+      if (people.has(who)) continue;
+      people.add(who);
+      rows.push({ romance: true, stock: x, asked: true, keys: msgKeys(x) });
+    }
   }
   const hour = new Date().getHours();
   const morning = hour >= 4 && hour < 11;
-  const unseen = v => v.c.filter(id => !seen(st.byId.get(id))).length;
+  const talkSeen = t => t.m.some(seenMsg);
+  const unseen = v => v.c.filter(id => !talkSeen(st.byId.get(id))).length;
   const order = st.videos.map((v, i) => [(v.m === morning ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
-  for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
-  return picked.map(c => ({ romance: true, stock: c, asked: !!c.ask, keys: stockKeys(c) }));
+  const took = new Set();
+  for (const v of order) {
+    for (const id of v.c) {
+      if (rows.length >= N) break;
+      const t = st.byId.get(id);
+      const who = [...new Set(t.m.map(x => String(x.h).toLowerCase()))];
+      if (took.has(t.i) || who.some(h => people.has(h)) || !t.m.every(x => okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)))) continue;
+      took.add(t.i); who.forEach(h => people.add(h));
+      t.m.forEach(x => rows.push({ romance: true, stock: x, talk: t.i, keys: msgKeys(x) }));
+    }
+    if (rows.length >= N) break;
+  }
+  return rows;
 }
 /* ---------- the accounts the reader added: their posts and the replies under them ---------- */
 /* githito.xapi collects these for the accounts sent to it and keeps them in its news file: `news` (the
@@ -5190,13 +5206,13 @@ const EN_STOCK = new Map();
 const EN_PARTS = new Map();
 async function englishStories(rows) {
   /* A card of the stock: its two parts, a line each (EN_STOCK, by card). */
-  const fromStock = rows.filter(r => r.stock && !EN_STOCK.has(r.stock.id));
+  const fromStock = rows.filter(r => r.stock && !EN_STOCK.has(r.stock.i));
   if (fromStock.length) {
     try {
       const got = await Promise.race([translateMany(fromStock.map(r => r.stock.ja.join('\n')), 'en'), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
       fromStock.forEach((r, i) => {
         const lines = String(got[i] || '').split('\n').map(x => x.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim()).filter(Boolean);
-        if (lines.length && !lines.some(x => CJK.test(x))) EN_STOCK.set(r.stock.id, lines.length === r.stock.ja.length ? lines : [lines.join(' ')]);
+        if (lines.length && !lines.some(x => CJK.test(x))) EN_STOCK.set(r.stock.i, lines.length === 2 ? lines : [storyWord(lines.join(' '), ''), lines.join(' ')]);
       });
     } catch (e) { console.warn(e); }
   }
@@ -5222,15 +5238,15 @@ async function englishStories(rows) {
 }
 function romanceCards(r, langId) {
   if (r.stock) {
-    /* The post on the second beat, the reply on the third: one story, one card. */
-    const c = r.stock;
-    const en = langId === 'en' ? EN_STOCK.get(c.id) : null;
-    const parts = en || c.ja;
+    /* A message of a conversation, in two beats: the part taken out (large, the card's first beat), then
+       the whole message. Nothing else on the card. */
+    const x = r.stock;
+    const en = langId === 'en' ? EN_STOCK.get(x.i) : null;
+    const parts = en || x.ja;
     const ja = !en;
     const corner = r.asked ? (ja ? 'リプライ' : 'REPLY') : (ja ? '恋愛' : 'ROMANCE');
-    const kw = ja ? (c.kw || jaWord(parts.join(' '))) : storyWord(parts.join(' '), '');
-    return [{ kw, cat: corner, topic: ja ? '' : corner, head: [ja ? parts[0] : parts[0].toUpperCase()], sub: [], jp: parts[1] ? [ja ? parts[1] : parts[1].toUpperCase()] : [], tags: [],
-      src: 'X @' + c.b.h + ' → @' + c.a.h, url: 'https://x.com/' + c.b.h + '/status/' + c.b.i, key: r.keys }];
+    return [{ kw: parts[0] || parts[1], cat: corner, topic: ja ? '' : corner, head: [ja ? parts[1] : parts[1].toUpperCase()], sub: [], jp: [], tags: [],
+      src: 'X @' + x.h + (x.to ? ' → @' + x.to : ''), url: x.i ? 'https://x.com/' + x.h + '/status/' + x.i : '', key: r.keys }];
   }
   const st = r.story;
   const ja = r.lang !== 'en';
@@ -5515,11 +5531,11 @@ async function collect() {
     const items = [];
     const shown = [];
     for (const r of rows) {
-      if (items.length >= N) break;
+      if (items.length >= N && !(fromStock && r.talk && shown.length && shown[shown.length - 1].talk === r.talk)) break;
       items.push(...romanceCards(r, lang.id));
       shown.push(r);
     }
-    return { date: chosenDate(), items: items.slice(0, N), market: country.name + ' · ' + lang.name, played: { news: [], jokes: shown.flatMap(r => r.keys) } };
+    return { date: chosenDate(), items: fromStock ? items : items.slice(0, N), market: country.name + ' · ' + lang.name, played: { news: [], jokes: shown.flatMap(r => r.keys) } };
   }
   const SPECIAL = new Set(['jokes', 'romance', 'travel']);
   const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
@@ -6626,7 +6642,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '498154fecb10';
+  const BUILD = 'd64d3758a033';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

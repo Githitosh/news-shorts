@@ -6200,7 +6200,7 @@ function stockCard(c, langId, en) {
   const lines = String(en || '').split('\n').map(t => t.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim()).filter(Boolean);
   const two = lines.length === 2 ? lines : null;
   /* A reply to an account the reader added: the account's news, then the reply. */
-  const ja = c.ask ? [c.on || c.ja[0], c.ja.join('')] : c.ja;
+  const ja = c.ask ? [c.on || c.ja[0], c.ja[1] || c.ja[0]] : c.ja;
   const base = { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.n || 'X'),
     src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [] };
   if (langId === 'en' && two) return { ...base, kw: storyWord(two.join(' '), ''), head: [two[0].toUpperCase()], jp: [two[1].toUpperCase()] };
@@ -7488,7 +7488,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'b364112e73d8';
+  const BUILD = '78d0876311b1';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
