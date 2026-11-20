@@ -123,6 +123,15 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .found .found-story { color: var(--mute); line-height: 1.5; }
 .found button { justify-self: start; padding: 8px 12px; font-size: 13px; }
 #xAccounts { margin-top: 8px; }
+/* Under the video the account row is as wide as the choices below it, and its names sit in the middle. */
+.stage .x-add { max-width: 400px; margin: 0 auto; gap: 6px; }
+.stage.wide .x-add { max-width: 100%; }
+.stage .x-add input { min-width: 0; padding: 8px 10px; }
+.stage .x-add button { padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+.stage #xAccounts { justify-content: center; }
+.stage #xAccounts:empty { display: none; }
+.stage #askedNote { text-align: center; }
+.stage #askedNote:empty { display: none; }
 #xAccounts button { flex: 0 1 auto; }
 .filter-row { display: flex; align-items: center; gap: 8px; }
 .filter-row .check { margin: 0; flex: 1; }
@@ -152,6 +161,16 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
+    <!-- The accounts whose replies and comments play, and the button that sends them to githito.xapi:
+         on the main screen, under the video (they used to be in Settings). -->
+    <p class="music-label">Accounts with replies and comments</p>
+    <div class="x-add">
+      <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Accounts with replies and comments">
+      <button type="button" id="addX">Add</button>
+      <button type="button" id="sendAccounts">Send to githito.xapi</button>
+    </div>
+    <div id="xAccounts" class="music"></div>
+    <p class="note" id="askedNote"></p>
     <p class="music-label">Items</p>
     <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
@@ -198,14 +217,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       </div>
       <div id="mediaFound" class="found" hidden></div>
       <div id="myMedia" class="music"></div>
-      <label for="xUser">Accounts with replies and comments</label>
-      <div class="x-add">
-        <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
-        <button type="button" id="addX">Add</button>
-      </div>
-      <div id="xAccounts" class="music"></div>
-      <button type="button" id="sendAccounts">Send to githito.xapi</button>
-      <p class="note" id="askedNote"></p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -6899,7 +6910,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'c1b4a3eca2f6';
+  const BUILD = '9f2425ab4d2c';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

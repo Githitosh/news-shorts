@@ -77,7 +77,7 @@ in about a second and Update answers at once.
   githito.xapi sends each headline's English with it (and one more line of the post when there is one);
   for a headline that has none yet the page asks for the translation itself, and without it the card is
   Japanese only.
-- **Replies only for the accounts added in Settings** (Accounts with replies and comments): up to half of
+- **Replies only for the accounts added under the video** (Accounts with replies and comments: the field, Add and Send to githito.xapi are on the main screen, under the video, no longer in Settings): up to half of
   a video is their posts and the earnest replies under them, a small line under each reply saying which
   post it answers. githito.xapi reads replies only for the accounts sent to it, and keeps only earnest
   ones (no insults, blame, mockery, politics or grave news). A post of an account that is not a news
