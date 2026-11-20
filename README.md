@@ -36,6 +36,22 @@ decoded file sample for sample; an audio element stopped for a moment at each re
 length and exporting leave it playing where it is. On News Pause stops it; on Humor
 the Music button turns it off and on, as on News. Humor has the same three songs. Reply News reads githito.xapi's stories whatever Language says: Japanese shows them as written (the corner says 恋愛), English puts their words into English on the cards.
 
+## The video stock (githito.xapi writes the words; the pages only play them)
+
+githito.xapi writes the words of every card and checks them after each collection, every half hour
+(`compose.mjs` there), and deals the cards into videos of ten, keeping about a hundred
+(`stock.mjs`, `v1/stock-news-ja.json` and `v1/stock-humor-ja.json`). The pages read those files and make no
+words of their own (`stockScript` in `src/app.html`, `stockRows` in `src/humor.html`):
+
+- **News** plays the newest video it has not played. A card is speed-read news in three beats: the keyword,
+  what happened, who (or the headline's two parts, or a short headline and the line its post added, or the
+  paper). Genres chosen, words in the lineup or accounts added: the cards are picked among the stock's.
+- **Reply News** plays one card per story in two beats that follow on: the post, then the reply. In the
+  morning a video of greetings comes first. For accounts a reader added: their replies first, the reply alone.
+- **English**: githito.xapi is refused by the translator where it runs, so the page puts the two parts into
+  English, a line each (kept in the browser), and asks for the next video's meanwhile.
+- Until the stock is there, the pages work as they did before (the prepared files below).
+
 ## The pages read githito.xapi only
 
 The pages ask X nothing themselves: News and Reply News (the page at `humor/`, formerly called Humor) play

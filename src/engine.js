@@ -531,6 +531,8 @@ function breakCost(s, i, quoted, cjk, words) {
   if (prev === ' ' || prev === '\u3000') c = KIND(s[i - 2] || '') === 'a' && KIND(next) === 'a' ? 4 : 0;
   else if ('、。，！？!?…‥／'.includes(prev)) c = 0;
   else if (OPENERS.includes(next)) c = 0.5;
+  /* After the word a name ends on (ルルちゃん|おはよ), the next word starts. */
+  else if (/(?:ちゃん|くん|さん|たん|さま|様|氏)$/.test(s.slice(Math.max(0, i - 3), i))) c = 1;
   else if (KIND(next) === 'h') {
     /* Hiragana at the head of a line is the end of the phrase before it (を, に, でない), unless a word
        starts there: one of three letters or more (こども), or お and ご before a word (お姉さん). */

@@ -3123,6 +3123,8 @@ function breakCost(s, i, quoted, cjk, words) {
   if (prev === ' ' || prev === '\u3000') c = KIND(s[i - 2] || '') === 'a' && KIND(next) === 'a' ? 4 : 0;
   else if ('、。，！？!?…‥／'.includes(prev)) c = 0;
   else if (OPENERS.includes(next)) c = 0.5;
+  /* After the word a name ends on (ルルちゃん|おはよ), the next word starts. */
+  else if (/(?:ちゃん|くん|さん|たん|さま|様|氏)$/.test(s.slice(Math.max(0, i - 3), i))) c = 1;
   else if (KIND(next) === 'h') {
     /* Hiragana at the head of a line is the end of the phrase before it (を, に, でない), unless a word
        starts there: one of three letters or more (こども), or お and ご before a word (お姉さん). */
@@ -4962,6 +4964,88 @@ async function prepared(lang) {
   }
   return PREP.lang === lang ? PREP.stories : [];
 }
+/* ---------- the video stock ---------- */
+/* githito.xapi writes every card and deals the cards into about a hundred videos of ten (stock.mjs there);
+   the page receives them and plays them. A card is one story in two beats that follow on from each other:
+   the post, then the reply to it ({ id, k (kind), a, b (who wrote them), kw, ja: [post, reply] }). Videos
+   marked m are greetings of the morning. replies: the replies to the accounts readers added (the reply
+   alone, in two parts). With English chosen the two parts are put into English here, a line each. */
+let STOCK = { cards: [], byId: new Map(), videos: [], replies: [], at: 0 };
+let stockLoading = null;
+function stockGood(d) {
+  const never = window.NSNever;
+  const ok = c => c && c.id && c.a && c.b && Array.isArray(c.ja) && c.ja[0] && !(never && never.slander(c.ja.join(' ')));
+  const cards = (Array.isArray(d && d.cards) ? d.cards : []).filter(ok);
+  const byId = new Map(cards.map(c => [String(c.id), c]));
+  const videos = (Array.isArray(d && d.videos) ? d.videos : []).filter(v => v && Array.isArray(v.c)).map(v => ({ i: v.i, at: v.at, m: !!v.m, c: v.c.map(String).filter(id => byId.has(id)) })).filter(v => v.c.length);
+  const replies = (Array.isArray(d && d.replies) ? d.replies : []).filter(c => ok(c) && c.ask);
+  return { cards, byId, videos, replies, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
+}
+function keptStock() {
+  try {
+    const d = JSON.parse(store.get('stock', 'null'));
+    const g = stockGood(d);
+    if (g.videos.length) { STOCK = { ...g, at: Number(d.at) || 0 }; ASKED = { ...ASKED, at: ASKED.at || 1, asked: g.asked }; paintAsked(); }
+  } catch (e) {}
+}
+function loadStock() {
+  if (stockLoading) return stockLoading;
+  stockLoading = (async () => {
+    try {
+      const res = await withTimeout(fetch(XAPI + 'stock-humor-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
+      if (!res.ok) return false;
+      const d = await res.json();
+      const g = stockGood(d);
+      if (!g.videos.length) return false;
+      STOCK = { ...g, at: Date.now() };
+      ASKED = { ...ASKED, at: Date.now(), asked: g.asked };
+      paintAsked();
+      try { store.set('stock', JSON.stringify({ at: STOCK.at, cards: d.cards, videos: d.videos, replies: d.replies, asked: d.asked })); }
+      catch (e) { try { store.set('stock', ''); } catch (e2) {} }
+      return true;
+    } catch (e) { console.warn(e); return false; }
+    finally { stockLoading = null; }
+  })();
+  return stockLoading;
+}
+async function stock() {
+  if (!STOCK.videos.length) keptStock();
+  if (!STOCK.videos.length) await loadStock();
+  else if (Date.now() - STOCK.at > 600000) { STOCK.at = Date.now(); await withTimeout(loadStock(), 2500).catch(() => {}); }
+  return STOCK;
+}
+const stockKeys = c => ['id:' + c.a.i, 'id:' + c.b.i, 't:' + squash(c.ja.join('')).slice(0, 50)].filter(k => k !== 'id:');
+/* A video from the stock: the accounts the reader added first (their replies, up to half), then the newest
+   video that has not played (in the morning, a video of greetings first). Null when there is no stock yet. */
+async function stockRows(N) {
+  const st = await stock();
+  if (!st.videos.length) return null;
+  const past = seenSet(SEEN_JOKES);
+  const now = playingKeys();
+  const seen = c => stockKeys(c).some(k => past.has(k));
+  const ok = c => !stockKeys(c).some(k => now.has(k)) && c.ja.every(t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !(sensitiveHidden() && suggestive(t)));
+  const picked = [];
+  const people = new Set();
+  const take = (list, n) => {
+    for (const c of list) {
+      if (n <= 0 || picked.length >= N) break;
+      const who = [c.a.h, c.b.h].map(h => String(h).toLowerCase());
+      if (picked.includes(c) || who.some(h => people.has(h)) || !ok(c)) continue;
+      picked.push(c); who.forEach(h => people.add(h)); n--;
+    }
+  };
+  const mine = new Set(xAccounts().map(n => n.toLowerCase()));
+  if (mine.size) {
+    const list = st.replies.filter(c => mine.has(String(c.ask).toLowerCase()));
+    take(list.filter(c => !seen(c)).concat(list.filter(seen)), Math.max(1, Math.floor(N / 2)));
+  }
+  const hour = new Date().getHours();
+  const morning = hour >= 4 && hour < 11;
+  const unseen = v => v.c.filter(id => !seen(st.byId.get(id))).length;
+  const order = st.videos.map((v, i) => [(v.m === morning ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
+  for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
+  return picked.map(c => ({ romance: true, stock: c, asked: !!c.ask, keys: stockKeys(c) }));
+}
 /* ---------- the accounts the reader added: their posts and the replies under them ---------- */
 /* githito.xapi collects these for the accounts sent to it and keeps them in its news file: `news` (the
    account's post) and `items` (an earnest reply to it). Reply News plays the replies alone, a card each,
@@ -5101,12 +5185,25 @@ async function preparedRows(need) {
    only: the words of a story are put into English first (englishStories), and a card whose words could
    not be translated stays as it was written. */
 const EN_KEPT = new Map();
+const EN_STOCK = new Map();
 /* The English of the two parts a card shows (E.cutJa), when the translator answered a line for each. */
 const EN_PARTS = new Map();
 async function englishStories(rows) {
+  /* A card of the stock: its two parts, a line each (EN_STOCK, by card). */
+  const fromStock = rows.filter(r => r.stock && !EN_STOCK.has(r.stock.id));
+  if (fromStock.length) {
+    try {
+      const got = await Promise.race([translateMany(fromStock.map(r => r.stock.ja.join('\n')), 'en'), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
+      fromStock.forEach((r, i) => {
+        const lines = String(got[i] || '').split('\n').map(x => x.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        if (lines.length && !lines.some(x => CJK.test(x))) EN_STOCK.set(r.stock.id, lines.length === r.stock.ja.length ? lines : [lines.join(' ')]);
+      });
+    } catch (e) { console.warn(e); }
+  }
   const texts = [];
   rows.forEach(r => {
     const st = r.story || {};
+    if (r.stock) return;
     [st.a, st.b].concat(st.cheers || []).forEach(x => { if (x && CJK.test(x.text) && !EN_KEPT.has(x.text) && !texts.includes(x.text)) texts.push(x.text); });
   });
   if (!texts.length) return;
@@ -5124,6 +5221,17 @@ async function englishStories(rows) {
   } catch (e) { console.warn(e); }
 }
 function romanceCards(r, langId) {
+  if (r.stock) {
+    /* The post on the second beat, the reply on the third: one story, one card. */
+    const c = r.stock;
+    const en = langId === 'en' ? EN_STOCK.get(c.id) : null;
+    const parts = en || c.ja;
+    const ja = !en;
+    const corner = r.asked ? (ja ? 'リプライ' : 'REPLY') : (ja ? '恋愛' : 'ROMANCE');
+    const kw = ja ? (c.kw || jaWord(parts.join(' '))) : storyWord(parts.join(' '), '');
+    return [{ kw, cat: corner, topic: ja ? '' : corner, head: [ja ? parts[0] : parts[0].toUpperCase()], sub: [], jp: parts[1] ? [ja ? parts[1] : parts[1].toUpperCase()] : [], tags: [],
+      src: 'X @' + c.b.h + ' → @' + c.a.h, url: 'https://x.com/' + c.b.h + '/status/' + c.b.i, key: r.keys }];
+  }
   const st = r.story;
   const ja = r.lang !== 'en';
   const en = langId === 'en';
@@ -5396,9 +5504,11 @@ async function collect() {
   {
     /* The accounts the reader added come first: the replies to their posts, a card each, up to half of
        the video. The stories fill the rest (two cards each). */
-    const mine = await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
-    const more = await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
-    const rows = mine.concat(more);
+    /* The stock githito.xapi made (a card a story); without it, the stories file as before. */
+    const fromStock = await stockRows(N).catch(e => { console.warn(e); return null; });
+    const mine = fromStock ? [] : await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
+    const more = fromStock ? [] : await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
+    const rows = fromStock || mine.concat(more);
     if (S.again || !rows.length) return null;
     if (lang.id === 'en') await englishStories(rows);
     /* Only what fits in the video counts as played. */
@@ -6516,7 +6626,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '2991d404bb42';
+  const BUILD = '498154fecb10';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
