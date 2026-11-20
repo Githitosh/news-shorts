@@ -27,7 +27,7 @@ python run.py --country JP --lang ja
 python run.py --x-user name --country US --lang en
 ```
 
-Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter.
+Wallpaper, under the picture: Morning is the original picture. Evening is warmer, Night is darker, and Pop is brighter. Both pages start with Morning, the dark picture (Reply News used to start with Day, the light one; a saved Day is moved to Morning once, and Day can be chosen again).
 
 Music, under the picture: **1**, **2** and **3**, each 8 bars (1 and 3 at 90 BPM, 21.3 seconds; 2 at 110 BPM,
 17.5 seconds), made from the MIDI files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to

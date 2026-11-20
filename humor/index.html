@@ -5342,7 +5342,7 @@ function usePace(sec) {
   reshow();
 }
 function useWall(id) {
-  const w = WALLS.find(x => x.id === id) || WALLS[2];
+  const w = WALLS.find(x => x.id === id) || WALLS[0];
   E.setWallpaper(w.id);
   store.set('wall', w.id);
   document.querySelectorAll('#walls button').forEach(b => b.classList.toggle('on', b.dataset.w === w.id));
@@ -5821,8 +5821,12 @@ function initUI() {
     b.onclick = () => useWall(w.id);
     $('walls').appendChild(b);
   });
-  const requestedWall = Q.get('wall') || store.get('wall', 'day');
-  useWall(WALLS.some(w => w.id === requestedWall) ? requestedWall : 'day');
+  /* The picture is dark unless another colour is chosen (Morning, as on News). It used to start light (Day),
+     and the page saved that at every start, so a saved Day is moved to the dark picture once; Day can
+     be chosen again in Settings and is then kept. */
+  if (store.get('wallV', '') !== '2') { if (store.get('wall', 'day') === 'day') store.set('wall', 'morning'); store.set('wallV', '2'); }
+  const requestedWall = Q.get('wall') || store.get('wall', 'morning');
+  useWall(WALLS.some(w => w.id === requestedWall) ? requestedWall : 'morning');
   PACES.forEach(p => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -5990,7 +5994,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '1d1dd49920cc';
+  const BUILD = 'bab6b21673c7';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
