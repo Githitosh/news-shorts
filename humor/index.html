@@ -179,7 +179,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
       <p class="set-title">Reply News settings</p>
-      <p class="note">These settings are for Reply News only. News keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -210,12 +209,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Politics&#10;Sports&#10;Romance&#10;Jokes"></textarea>
-      <p class="note">One request on each line. Jokes sets where the jokes play. Romance adds couples: a loving post, the partner's reply, and what others said, marked 恋愛 in the corner. Travel adds what people said at famous places, marked 観光. Each comment shows its short part first, then the whole comment. The number of items comes from Items under the video. Leave the lineup empty for a mix of all genres.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div class="music hides">
         <button type="button" id="hideSensitive" aria-pressed="false">Hide sensitive posts</button>
       </div>
-      <p class="note">Sensitive posts play at the start: couples' talk in Romance may be suggestive or sexual; jokes and places stay clean. Light Hide sensitive posts to leave them out everywhere. Violence and hard news such as deaths, accidents, disasters, illness, bullying and discrimination never play.</p>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
       <label for="xUser">X accounts</label>
@@ -224,7 +221,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
         <button type="button" id="addX">Add</button>
       </div>
       <div id="xAccounts" class="music"></div>
-      <p class="note">Add an account to load funny replies to its posts. Press Add again for another account. Press a name to remove it.</p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -6110,7 +6106,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '463eadd2037d';
+  const BUILD = '6c39f86983be';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

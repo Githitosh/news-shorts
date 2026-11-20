@@ -167,7 +167,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="studio-bar"><button type="button" id="backVideo">Back to video</button></div>
     <section class="card" id="setBox">
       <p class="set-title">News settings</p>
-      <p class="note">These settings are for News only. Reply News keeps its own.</p>
       <label for="layout">Layout</label>
       <select id="layout">
         <option value="auto">Auto</option>
@@ -183,18 +182,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="feed" hidden>
         <option value="news">News</option>
       </select>
-      <p class="note">News plays the headlines githito.xapi collects from X every half hour. A story that has played does not play again.</p>
       <label>Genres</label>
       <div id="genreChips" class="music"></div>
       <button type="button" id="lineupGo">Lineup</button>
       <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X&#10;SpaceX&#10;ABC&#10;Sports&#10;Food&#10;Restaurant"></textarea>
-      <p class="note">One request on each line. The number of stories comes from Items under the video.</p>
       <button id="applyLine" type="button">Apply lineup</button>
       <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
-      <p class="note">X is the source: the news githito.xapi collects from X. Nothing is read from the web, and no Japanese medium by RSS. The papers from abroad play when they are switched on and X is off.</p>
       <label for="mediaQ">Add a medium or a keyword</label>
       <div class="x-add">
         <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="Company name, Nikkei">
@@ -202,7 +198,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       </div>
       <div id="mediaFound" class="found" hidden></div>
       <div id="myMedia" class="music"></div>
-      <p class="note">Type the name of a medium or a word (your company, say) and press Search: it is looked for in the news githito.xapi collected from X, not on the web. Add what was found: its news plays first in every video. Press a name to remove it.</p>
       <label for="xUser">Accounts with replies and comments</label>
       <div class="x-add">
         <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
@@ -211,7 +206,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <div id="xAccounts" class="music"></div>
       <button type="button" id="sendAccounts">Send to githito.xapi</button>
       <p class="note" id="askedNote"></p>
-      <p class="note">News plays no replies. Add an account here, and its posts play with the replies and comments under them (up to half of a video). Press Send to githito.xapi and then Submit: githito.xapi reads that account's replies from its next run, every half hour. Press a name to remove it, and send again.</p>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
