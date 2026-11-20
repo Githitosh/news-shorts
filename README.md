@@ -43,7 +43,10 @@ githito.xapi writes the words of every card and checks them after each collectio
 (`stock.mjs`, `v1/stock-news-ja.json` and `v1/stock-humor-ja.json`). The pages read those files and make no
 words of their own (`stockScript` in `src/app.html`, `stockRows` in `src/humor.html`):
 
-- **News**: the top right corner of a card says what the news is about (githito.xapi's topic word), not the
+- **News is people's own words**: no paper or broadcaster is on the cards. Each card is one person's words
+  (githito.xapi finds them under the most answered news, people.mjs), with that person's name in the top
+  right corner; the page plays nothing else (no papers' headlines, no search).
+- **News** (before): the top right corner of a card said what the news is about, not the
   paper. About three cards in ten, at the end of a video, are what people said about the news (a reply
   with reach from a person, people.mjs there): their words, then their name; the ones a reader has not
   seen fill that place when the video has fewer.

@@ -6201,9 +6201,9 @@ async function stock(lang) {
 }
 const stockLink = c => 'https://x.com/' + (c.ask ? c.b.h : c.h) + '/status/' + c.id;
 const stockKeys = c => storyKeys({ headline: c.ja.join(' '), link: stockLink(c) });
-/* A card of the stock as the video draws it, in the language githito.xapi wrote it: the keyword, what
-   happened, who (the second and the third beat, in the same large letters). The top right corner says what
-   the news is about (githito.xapi's topic word), not the paper. */
+/* A card of the stock as the video draws it, in the language githito.xapi wrote it. News is people's own
+   words: the keyword, then their words in two beats, and in the top right corner the name of the person
+   who said them (nm). No paper or broadcaster is shown. */
 function stockCard(c) {
   const langId = c.lang === 'en' ? 'en' : 'ja';
   const g = GENRES.find(x => x.id === c.g);
@@ -6211,7 +6211,7 @@ function stockCard(c) {
   const md = Number.isNaN(d.getTime()) ? '' : (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
   /* A reply to an account the reader added: the account's news, then the reply. */
   const ja = c.ask ? [c.on || c.ja[0], c.ja[1] || c.ja[0]] : c.ja;
-  return { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.tp || ''),
+  return { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.nm || c.tp || ''),
     src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [],
     kw: c.kw || (langId === 'en' ? storyWord(ja[0], '') : jaWord(ja[0])), head: [ja[0]], jp: ja[1] ? [ja[1]] : [] };
 }
@@ -6253,18 +6253,6 @@ function pickStock(st, N, slots) {
     const unseen = v => v.c.filter(id => !seen(st.byId.get(id))).length;
     const order = st.videos.map((v, i) => [unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i, v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
     for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
-    /* About three cards in ten close the video with what people said about the news (githito.xapi deals
-       them into its videos; the ones this reader has not seen take the place of the last news cards). */
-    const isPerson = c => c && c.how === 'person';
-    if (st.cards.some(isPerson)) {
-      const want = Math.round(N * 0.3);
-      const more = st.cards.filter(c => isPerson(c) && !picked.includes(c) && !seen(c) && fits(c) && !people.has(String(c.h).toLowerCase())).sort((a, b) => (b.l || 0) - (a.l || 0));
-      const said = picked.filter(isPerson).filter(c => !seen(c));
-      const news = picked.filter(c => !isPerson(c));
-      while (said.length < want && more.length) { const c = more.shift(); said.push(c); people.add(String(c.h).toLowerCase()); }
-      picked.length = 0;
-      picked.push(...news.slice(0, Math.max(0, N - said.length)), ...said);
-    }
   }
   return picked;
 }
@@ -6618,16 +6606,12 @@ async function collect(date) {
   /* The stock githito.xapi made: the cards it wrote and checked, dealt into videos. */
   try { script = await stockScript(date, slots, N); } catch (e) { console.warn(e); }
   if (script) return script;
-  try { script = await preparedScript(date, slots, N); }
-  catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
+  /* (News is people's own words: the papers' headlines, githito.xapi's other file, do not play.) */
   /* (The page makes no search of its own: what githito.xapi holds is all it plays.) */
-  /* Nothing new for the lineup: the news of the chosen genres plays, not the same video again. */
-  if (!script && slots.length) script = await preparedScript(date, [], N).catch(() => null);
-  /* Nothing for what was asked and no video to keep playing, or the search failed: the news
-     githito.xapi holds plays, whatever the lineup and the genres say (when X is a source). */
-  if (!script && (!noNew || !S.show)) script = await preparedScript(date, [], N, true).catch(() => null);
+  /* Nothing for the lineup or the genres: the newest video, whatever they say. */
+  if (!script && slots.length) script = await stockScript(date, [], N).catch(() => null);
   if (script) return script;
-  throw noNew || failed || new Error('No news could be read. Press Update again later.');
+  throw noNew || failed || noNewError('No news from githito.xapi yet. Press Update again later.');
 }
 /* The search the page makes itself: the lineup's requests, or the front pages. */
 async function collectLive(date, slots) {
@@ -7507,7 +7491,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'e00b3f4a2c59';
+  const BUILD = '3c1183918dfa';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
