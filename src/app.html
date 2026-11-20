@@ -55,6 +55,14 @@ button.on, .music button.on { background: var(--ink); color: #111; border-color:
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 #storyLink { color: var(--acc); }
 .caption:empty { display: none; }
+/* The panel that comes up when the downloaded video is ready (see handOver). */
+.share { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.55); padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+.share-card { width: 100%; max-width: 420px; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.share-title { margin: 0 0 2px; text-align: center; font-weight: 700; font-size: 17px; }
+.share-note { margin: 0; text-align: center; color: var(--mute); font-size: 13px; }
+.share-card button, .share-card a { display: block; width: 100%; padding: 13px 12px; font-size: 16px; text-align: center; text-decoration: none; border-radius: 10px; }
+.share-card a { border: 1px solid var(--line); color: var(--ink); }
+.share-card .share-main { background: var(--acc); border-color: var(--acc); color: #111; font-weight: 700; }
 .terms-foot { text-align: center; margin: 28px auto 0; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); font-size: 13px; }
 .terms-foot a { color: var(--mute); text-decoration: underline; }
 .caption.err { color: #ff9b8a; }
@@ -235,6 +243,16 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   </div>
 <footer class="terms-foot"><a href="terms.html">Terms of Use</a></footer>
 </main>
+<div id="shareBox" class="share" hidden>
+  <div class="share-card" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <p id="shareTitle" class="share-title">The video is ready</p>
+    <button type="button" id="shareGo" class="share-main">Share or save (LINE, X…)</button>
+    <a id="shareX" target="_blank" rel="noopener">Post on X</a>
+    <a id="shareLine" target="_blank" rel="noopener">Send by LINE</a>
+    <p id="shareNote" class="share-note"></p>
+    <button type="button" id="shareClose">Close</button>
+  </div>
+</div>
 
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
@@ -3195,11 +3213,16 @@ async function exportMP4(formats) {
     return names;
   } finally { S.busy = false; setBusy(false); }
 }
-/* Download: the video on screen as an MP4 in the current layout.
-   Phones open the share sheet (Save Video); computers download the file. */
+/* Download: the video on screen as an MP4 in the current layout, and then the way to pass it on.
+   On a phone the system's own share sheet opens with the file in it (Save Video, LINE, X…), as after any
+   download. A browser opens that sheet only right after a tap, and making the MP4 takes longer than a tap
+   lasts: the page tries, and when the browser refuses a panel comes up whose one button opens the sheet.
+   Where a file cannot be shared (most computers) the file is downloaded, and the panel offers X and LINE
+   for the page's link (the file is attached there by hand). */
 const PHONE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
-function shareable(out) {
-  if (!PHONE || !navigator.canShare) return null;
+const SHARE_TITLE = 'News Shorts';
+function shareFile(out) {
+  if (!navigator.share || !navigator.canShare) return null;
   const file = new File([out.blob], out.name, { type: out.blob.type });
   try { return navigator.canShare({ files: [file] }) ? file : null; } catch (e) { return null; }
 }
@@ -3207,25 +3230,51 @@ function resetDownload() {
   const b = $('dl');
   if (!b) return;
   b.textContent = '⬇️';
-  delete b.dataset.ready;
   b.disabled = !S.show || !!S.busy;
 }
-function saveOut(out) {
-  const file = shareable(out);
-  if (file) navigator.share({ files: [file], title: 'News Shorts' }).catch(() => {});
-  else {
-    const a = document.createElement('a');
-    a.href = out.url; a.download = out.name; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-    say(`Downloaded ${out.name}`);
-  }
+function keepFile(out) {
+  const a = document.createElement('a');
+  a.href = out.url; a.download = out.name; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  say(`Downloaded ${out.name}`);
+}
+let shareOut = null;
+function closeShare() { $('shareBox').hidden = true; shareOut = null; }
+function openShare(out, downloaded) {
+  shareOut = out;
+  const file = shareFile(out);
+  const page = location.origin + location.pathname;
+  $('shareGo').hidden = !file;
+  /* Without a sheet that takes the file: the page's link on X and on LINE. */
+  $('shareX').hidden = $('shareLine').hidden = !!file;
+  $('shareX').href = 'https://x.com/intent/post?text=' + encodeURIComponent(SHARE_TITLE) + '&url=' + encodeURIComponent(page);
+  $('shareLine').href = 'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(page) + '&text=' + encodeURIComponent(SHARE_TITLE);
+  $('shareNote').textContent = downloaded ? (file ? 'The video was downloaded.' : 'The video was downloaded. To post it, attach the file on X or LINE.') : '';
+  $('shareBox').hidden = false;
+}
+/* The sheet itself; true when it opened (and the user used it or closed it). */
+async function openSheet(out) {
+  const file = shareFile(out);
+  if (!file) return false;
+  try { await navigator.share({ files: [file], title: SHARE_TITLE }); return true; }
+  catch (e) { return !!(e && e.name === 'AbortError'); }
+}
+/* The video is ready: hand it over. */
+async function handOver(out) {
   resetDownload();
+  if (PHONE && shareFile(out)) {
+    if (await openSheet(out)) return;
+    openShare(out, false);
+    return;
+  }
+  keepFile(out);
+  openShare(out, true);
 }
 async function download() {
   if (!S.script || S.busy) return;
   const fmt = S.format;
   const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script && !!o.mute === !!S.mute);
-  if (mine()) { saveOut(mine()); return; }
+  if (mine()) { handOver(mine()); return; }
   const was = S.playing;
   const b = $('dl');
   b.textContent = 'Making MP4…';
@@ -3235,12 +3284,7 @@ async function download() {
   resetDownload();
   if (!out) return;
   if (was && !S.playing) $('play').click();
-  if (shareable(out)) {
-    /* Making the MP4 took a while, so the share sheet needs one more tap. */
-    b.textContent = 'Save';
-    b.dataset.ready = '1';
-    say('The MP4 is ready. Press Save to keep it.');
-  } else saveOut(out);
+  handOver(out);
 }
 /* Browsers without WebCodecs record the playing picture. */
 async function recordRealtime() {
@@ -3633,6 +3677,9 @@ function initUI() {
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
   $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
   $('dl').onclick = () => download();
+  $('shareGo').onclick = async () => { const out = shareOut; if (out && await openSheet(out)) closeShare(); };
+  $('shareClose').onclick = () => closeShare();
+  $('shareBox').addEventListener('click', e => { if (e.target === $('shareBox')) closeShare(); });
   const lineup = $('lineup');
   lineup.value = store.get('lineup', '').split(/\n/).map(noCount).filter(Boolean).join('\n');
   store.set('lineup', lineup.value);

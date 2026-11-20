@@ -14,6 +14,10 @@ const JA = {
   'Story length': '1話の長さ', 'Wallpaper': '壁紙', 'Music': '音楽', 'Items': '表示数',
   'Download': 'ダウンロード', 'Saving…': '保存中…', 'Could not save the video.': '動画を保存できませんでした。', 'Making MP4…': '作成中…', 'Save': '保存',
   'The MP4 is ready. Press Save to keep it.': 'MP4ができました。「保存」を押すと保存できます。',
+  'Close': '閉じる',
+  'The video is ready': '動画ができました', 'Share or save (LINE, X…)': '共有・保存する（LINE、X など）', 'Post on X': 'Xに投稿', 'Send by LINE': 'LINEで送る',
+  'The video was downloaded.': '動画をダウンロードしました。',
+  'The video was downloaded. To post it, attach the file on X or LINE.': '動画をダウンロードしました。XやLINEの投稿画面で、このファイルを添付してください。',
   'Each story is 3.2 seconds. 4.2s and 5.2s add one or two seconds.': '1話は3.2秒です。4.2秒と5.2秒は1〜2秒長くなります。',
   'Opening the news video…': 'ニュース動画を開いています…', 'Opening the humor video…': 'ユーモア動画を開いています…',
   // Wallpapers and music
