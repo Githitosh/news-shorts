@@ -1,6 +1,6 @@
 # News Shorts
 
-Open the page and it creates a news video from today's headlines, then plays it. Tap the picture once for sound. The first word on each story is taken from that story. **Update** collects a new edition: the button says Creating… until the new video starts. Pull down at the top does the same. No API key. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button. Press a genre there, or write a lineup such as `Musk X, 3`. Each line is a request and a count. The first line opens the video. Genres are Space, Politics, Science, Culture, Local, Entertainment, Public safety, Sports, Food, and Restaurant. Each one can sit at the Top, Middle, or Bottom. Hide violent crime is on. Uncheck a source to leave it out.
+Open the page and it creates a news video from today's headlines, then plays it. The music is on: it starts at the first tap anywhere on the page (a browser allows sound only after one). The **Music** button under the video is lit while the music is on; press it and the music stops and the light goes out (the choice is kept, and a video downloaded then has no music). The button with the arrow (⬇️) downloads the video. The first word on each story is taken from that story. **Update** collects a new edition: the button says Creating… until the new video starts. Pull down at the top does the same. No API key. The picture keeps the original text size. Sources stay on the small credit line. Settings are behind the * button. Press a genre there, or write a lineup such as `Musk X, 3`. Each line is a request and a count. The first line opens the video. Genres are Space, Politics, Science, Culture, Local, Entertainment, Public safety, Sports, Food, and Restaurant. Each one can sit at the Top, Middle, or Bottom. Hide violent crime is on. Uncheck a source to leave it out.
 
 | Device | Picture | When it is chosen |
 |---|---|---|
@@ -18,7 +18,7 @@ Videos play from their first story: a new video, a new story length or layout, a
 * opens Settings. The device name (Phone, X, YouTube, or PC) is there, with the country, the language, and the X account.
 
 - **Layout** follows the device until you choose Phone, X, YouTube, or PC.
-- **Country** is Japan or the United States. **Language** is English, Japanese, or Both. English writes the cards in English only and Japanese in Japanese only; only Both writes the two on one card (the English headline large, the Japanese lines under it). Changing the country sets Japan to Both and the United States to English. A choice of Japanese saved before this (when Japanese still showed the English too) is moved to Both once.
+- **Country** is Japan or the United States. **Language** is English, Japanese, or Both. English writes the cards in English only and Japanese in Japanese only; only Both writes the two on one card (the English headline large, the Japanese lines under it). Japan starts with Japanese and the United States with English; Both is there to be chosen. (For a day a saved choice of Japanese was moved to Both; it is moved back once.)
 - **Accounts with replies and comments**, for example `@name`: News plays no replies, except for the accounts added here. Their posts play with the replies and comments under them, up to half of a video. **Send to githito.xapi** opens a GitHub issue titled `account` with the list; after Submit, githito.xapi reads those accounts' replies from its next run (every half hour). The note under the button says which accounts githito.xapi already reads. Opening the page from X adds no account; `?x=name` does.
 - Choices stay in this browser. The next visit collects again.
 
@@ -34,7 +34,7 @@ Music, under the picture: **1**, **2** and **3**, each 8 bars (1 and 3 at 90 BPM
 the video: it repeats without a gap (it plays through Web Audio, `src/music.js`, which repeats one song length of the
 decoded file sample for sample; an audio element stopped for a moment at each repeat), and a new video, Update, the video's own repeat, the seek bar, the story
 length and exporting leave it playing where it is. On News Pause stops it; on Humor
-the Sound button turns it off and on. Humor has the same three songs.
+the Music button turns it off and on, as on News. Humor has the same three songs. Reply News reads githito.xapi's stories whatever Language says: Japanese shows them as written (the corner says 恋愛), English puts their words into English on the cards.
 
 ## The pages read githito.xapi only
 

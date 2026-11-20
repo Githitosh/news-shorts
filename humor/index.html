@@ -145,10 +145,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <div class="linkbox"><a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a></div>
     <div class="ctl">
       <button id="play" disabled>Play</button>
-      <button id="sound" type="button" aria-pressed="false">Sound</button>
+      <button id="sound" type="button" class="on" aria-pressed="true">Music</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
-      <button id="dl" type="button" disabled>Download</button>
+      <button id="dl" type="button" disabled aria-label="Download" title="Download">⬇️</button>
     </div>
     <div class="seekrow">
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
@@ -3374,7 +3374,9 @@ const S = {
   audioOn: false, el: null, musicUrl: '', busy: false, again: null, pseudo: false, mute: true,
   vfull: false, fv: null, lastDraw: 0, tracks: {}, track: TRACKS[0], outs: [], jsonClean: '',
 };
-const TAP = ' Press Sound for music.';
+/* The music is on unless it was switched off with the Music button (the choice is kept; the key 'music'
+   holds the chosen song, so the switch has its own). */
+S.mute = store.get('musicOn', '1') === '0';
 
 /* ---------- small helpers ---------- */
 /* What is being searched ("Searching couples on X", "Selecting jokes…") is not shown under the video:
@@ -4557,7 +4559,10 @@ async function prepared(lang) {
 /* Stories for one video, read from the order githito.xapi chose (see below). Not played yet first; when
    those run out, played ones come round again, the one that played longest ago first. */
 async function preparedRows(need) {
-  const lang = jokeLang();
+  /* githito.xapi holds the stories in Japanese, whatever Language says (with English chosen the page asked
+     for a file that does not exist, and played nothing): English puts their words into English on the
+     cards (englishStories). */
+  const lang = 'ja';
   const all = await prepared(lang);
   if (!all.length) return [];
   const past = seenSet(SEEN_JOKES);
@@ -4638,17 +4643,35 @@ async function preparedRows(need) {
   });
 }
 /* One story becomes several cards: the post, the reply, then what others said. */
+/* Language: Japanese shows Japanese only (the corner says 恋愛, not ROMANCE), English shows English
+   only: the words of a story are put into English first (englishStories), and a card whose words could
+   not be translated stays as it was written. */
+const EN_KEPT = new Map();
+async function englishStories(rows) {
+  const texts = [];
+  rows.forEach(r => {
+    const st = r.story || {};
+    [st.a, st.b].concat(st.cheers || []).forEach(x => { if (x && CJK.test(x.text) && !EN_KEPT.has(x.text) && !texts.includes(x.text)) texts.push(x.text); });
+  });
+  if (!texts.length) return;
+  try {
+    const got = await Promise.race([translateMany(texts, 'en'), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
+    texts.forEach((t, i) => { const e = String(got[i] || '').replace(/\s+/g, ' ').trim(); if (e && e !== t && !/[\u3040-\u30ff]/.test(e)) EN_KEPT.set(t, e); });
+  } catch (e) { console.warn(e); }
+}
 function romanceCards(r, langId) {
   const st = r.story;
   const ja = r.lang !== 'en';
-  /* The top-right corner says 恋愛 (ROMANCE in English); that is enough to set the scene. */
-  const corner = ja && langId !== 'en' ? '恋愛' : 'ROMANCE';
-  const one = (text, src, url) => {
+  const en = langId === 'en';
+  /* The corner says 恋愛 (ROMANCE in English); that is enough to set the scene. */
+  const corner = ja && !en ? '恋愛' : 'ROMANCE';
+  const one = (said, src, url) => {
+    const text = en ? (EN_KEPT.get(said) || said) : said;
     let card;
-    if (ja && CJK.test(text) && langId !== 'en') {
+    if (ja && CJK.test(text) && !en) {
       const parts = largeJa(text);
       const kw = jaWord(text);
-      card = { kw, cat: 'ROMANCE', topic: corner, head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
+      card = { kw, cat: corner, topic: '', head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
     } else {
       const words = String(text).split(/\s+/).filter(Boolean);
       const kw = storyWord(text, '');
@@ -4901,6 +4924,7 @@ async function collect() {
   {
     const rows = await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
     if (S.again || !rows.length) return null;
+    if (lang.id === 'en') await englishStories(rows);
     const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
     return { date: chosenDate(), items, market: country.name + ' · ' + lang.name, played: { news: [], jokes: rows.flatMap(r => r.keys) } };
   }
@@ -5100,50 +5124,39 @@ function currentT() {
   return (+$('seek').value / 1000) * (S.show.duration || 0);
 }
 /* The music plays on its own and is not tied to the video: a new video, Update, the video repeating, Pause,
-   the story length, the seek bar and exporting leave it playing where it is. The Sound button turns it off
+   the story length, the seek bar and exporting leave it playing where it is. The Music button turns it off
    and on. This starts it if it is not playing, from where it was; it never moves the music. */
 function playSound() {
   if (!S.music || S.mute) return;
   NSMusic.play().then(ok => {
-    if (S.mute) { NSMusic.pause(); S.audioOn = false; paintSound(); return; }
+    if (S.mute) { NSMusic.pause(); S.audioOn = false; return; }
     S.audioOn = ok;
-    paintSound();
-    if (ok && $('caption').textContent.endsWith(TAP)) say(watchLine());
   });
 }
-NSMusic.onchange = heard => { S.audioOn = heard && !S.mute; paintSound(); };
+NSMusic.onchange = heard => { S.audioOn = heard && !S.mute; };
+/* The Music button is lit while the music is on, which it is unless it was switched off. */
 function paintSound() {
   const b = $('sound');
-  b.classList.toggle('on', !!S.audioOn);
-  b.classList.toggle('ask', !S.audioOn && !S.mute && !!S.playing);
-  b.setAttribute('aria-pressed', S.audioOn ? 'true' : 'false');
+  b.classList.toggle('on', !S.mute);
+  b.classList.remove('ask');
+  b.setAttribute('aria-pressed', S.mute ? 'false' : 'true');
 }
-/* The Sound button turns the music on, and off again. Turning it on also starts the video. */
+/* Pressing the Music button turns the music off, and its light goes out; pressing it again turns it on.
+   A browser lets a page make sound only after a tap, so with the music on it starts at the first tap
+   anywhere on the page. A video downloaded with the music off has no music. */
 function toggleSound() {
-  if (S.audioOn) {
-    S.mute = true;
-    NSMusic.pause();
-    S.audioOn = false;
-    paintSound();
-    if (S.playing) say('Sound off. Press Sound to hear the music.');
-    return;
-  }
-  if (!S.show) return;
-  S.mute = false;
-  if (!S.playing) {
-    let T0 = (+$('seek').value / 1000) * S.show.duration;
-    if (T0 >= S.show.duration - 0.05) T0 = 0;
-    beginPlayback(T0);
-  }
-  playSound(currentT());
-  say(watchLine());
+  S.mute = !S.mute;
+  store.set('musicOn', S.mute ? '0' : '1');
+  paintSound();
+  if (S.mute) { NSMusic.pause(); S.audioOn = false; return; }
+  if (S.show && S.playing) playSound(currentT());
 }
 function watchLine() {
   const items = (S.script && S.script.items) || [];
-  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE' || it.cat === 'TRAVEL').length;
+  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE' || it.cat === '恋愛' || it.cat === 'TRAVEL').length;
   const news = items.length - jokes;
   const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
-  return 'Playing ' + what + '.' + (S.audioOn ? '' : TAP);
+  return 'Playing ' + what + '.';
 }
 /* Stops the video. The music goes on. */
 function stop() {
@@ -5516,7 +5529,7 @@ async function recordRealtime(show) {
 function addOut(fmt, blob) {
   const name = fileName(S.script.date, fmt).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
   const url = URL.createObjectURL(blob);
-  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script });
+  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script, mute: !!S.mute });
   const box = $('out'); box.innerHTML = '';
   const order = ['x', 'youtube', 'pc'];
   S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
@@ -5544,7 +5557,7 @@ async function exportMP4(formats) {
     for (let i = 0; i < formats.length; i++) {
       const fmt = formats[i], show = E.prepare(S.script, PRESET[fmt], LOOK);
       const p0 = 0.3 + 0.68 * i / formats.length, p1 = 0.3 + 0.68 * (i + 1) / formats.length;
-      let blob = await encodeShow(show, FORMATS[fmt], p0, p1, aac);
+      let blob = await encodeShow(show, FORMATS[fmt], p0, p1, S.mute ? null : aac);
       if (!blob) blob = await recordRealtime(show);
       names.push(addOut(fmt, blob));
     }
@@ -5571,7 +5584,7 @@ function shareable(out) {
 function resetDownload() {
   const b = $('dl');
   if (!b) return;
-  b.textContent = 'Download';
+  b.textContent = '⬇️';
   delete b.dataset.ready;
   b.disabled = !S.show || !!S.busy;
 }
@@ -5614,7 +5627,7 @@ function saveOut(out) {
 async function download() {
   if (!S.script || S.busy) return;
   const fmt = S.format;
-  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script);
+  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script && !!o.mute === !!S.mute);
   if (mine()) { saveOut(mine()); return; }
   const was = S.playing;
   const b = $('dl');
@@ -5938,6 +5951,17 @@ function initUI() {
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
   $('sound').onclick = () => toggleSound();
+  paintSound();
+  /* With the music on, it starts at the first tap anywhere on the page: a browser allows sound only after one. */
+  let askedSound = 0;
+  const firstTap = e => {
+    if (S.mute || S.audioOn || !S.show || !S.playing) return;
+    if (e.target && e.target.closest && e.target.closest('#sound')) return;
+    if (performance.now() - askedSound < 500) return;
+    askedSound = performance.now();
+    playSound(currentT());
+  };
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, firstTap, true));
   $('seek').addEventListener('input', () => {
     if (!S.show) return;
     const T = (+$('seek').value / 1000) * S.show.duration;
@@ -5966,7 +5990,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '4f3b62ead683';
+  const BUILD = '1d1dd49920cc';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

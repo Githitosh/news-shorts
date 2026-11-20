@@ -132,9 +132,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <a id="storyLink" class="source-url" href="" target="_blank" rel="noopener" hidden></a>
     <div class="ctl">
       <button id="play" disabled>Play</button>
+      <button id="sound" type="button" class="on" aria-pressed="true">Music</button>
       <button id="full" type="button">Full screen</button>
       <button id="update" type="button">Update</button>
-      <button id="dl" type="button" disabled>Download</button>
+      <button id="dl" type="button" disabled aria-label="Download" title="Download">⬇️</button>
       <input type="range" id="seek" min="0" max="1000" value="0" disabled>
       <span id="time">0.0 / 0.0</span>
     </div>
@@ -253,7 +254,7 @@ const store = {
 };
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
 const COUNTRIES = [
-  { id: 'JP', name: 'Japan', lang: 'both' },
+  { id: 'JP', name: 'Japan', lang: 'ja' },
   { id: 'US', name: 'United States', lang: 'en' },
 ];
 /* The language on the cards. English: English only. Japanese: Japanese only. Both: the English headline
@@ -792,7 +793,7 @@ function soundOff() {
 /* Start the music if it is not playing, from where it was. It never moves the music. It plays through
    Web Audio (src/music.js), which repeats the song without a gap. */
 function playSound() {
-  if (!S.music) return;
+  if (!S.music || S.mute) return;
   const gen = ++S.audioGen;
   NSMusic.play().then(ok => {
     if (gen !== S.audioGen) return;
@@ -812,6 +813,24 @@ function pauseMusic() {
   S.audioGen++;
   NSMusic.pause();
   S.audioOn = false;
+}
+/* The Music button. It is lit while the music is on, which it is unless it was switched off here (the
+   choice is kept). Pressing it turns the music off, and the light goes out; pressing it again turns it on.
+   A browser lets a page make sound only after a tap, so with the music on it starts at the first tap
+   anywhere on the page (see keepInitTail). A video downloaded with the music off has no music. */
+S.mute = store.get('musicOn', '1') === '0';
+function paintMusic() {
+  const b = $('sound');
+  if (!b) return;
+  b.classList.toggle('on', !S.mute);
+  b.setAttribute('aria-pressed', S.mute ? 'false' : 'true');
+}
+function toggleMusic() {
+  S.mute = !S.mute;
+  store.set('musicOn', S.mute ? '0' : '1');
+  paintMusic();
+  if (S.mute) pauseMusic();
+  else if (S.show && S.playing) playSound();
 }
 /* Stops the video. The music goes on (pauseMusic stops it). */
 function stop() {
@@ -2315,7 +2334,7 @@ function replyCard(row, langId) {
 const SMALL_EN = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'for', 'from', 'by', 'with', 'and', 'or', 'as', 'is', 'are', 'was', 'were', 'be', 'its', 'his', 'her', 'their', 'over', 'after', 'before', 'into', 'amid', 'vs', 'not', 'that', 'this', 'it', 'will', 'has', 'have']);
 const PLAIN_EN = new Set(['the', 'a', 'an', 'in', 'on', 'at', 'after', 'before', 'this', 'that', 'it', 'there', 'about', 'approximately', 'largest', 'first', 'new', 'breaking', 'news', 'japan', 'japanese', 'prime', 'minister', 'president', 'government', 'police', 'former', 'two', 'three', 'four', 'five', 'six', 'what', 'why', 'how', 'when', 'who', 'video', 'photo', 'update', 'live']);
 function englishParts(en) {
-  const text = String(en || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"`]|''/g, '').replace(/\s+/g, ' ').trim();
+  const text = String(en || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"`]|''/g, '').replace(/[\[\]【】]/g, ' ').replace(/\s+/g, ' ').trim();
   const words = text.split(' ').filter(Boolean);
   const bare = w => String(w).replace(/[^A-Za-z0-9'’$%.-]/g, '').replace(/[.,:;]+$/, '');
   const small = w => SMALL_EN.has(bare(w).toLowerCase());
@@ -3077,13 +3096,15 @@ function fileName(date, fmt) {
 async function encodeShow(show, label, p0, p1) {
   const W = show.W, H = show.H, fps = E.FPS, dur = show.duration, N = Math.round(dur * fps);
   const vcfg = { codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: fps, avc: { format: 'avc' } };
+  /* The music is in the file unless it is switched off (the Music button). */
+  const song = S.mute ? null : S.aac;
   let ok = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined' && window.Mp4Muxer;
   if (ok) { try { ok = (await VideoEncoder.isConfigSupported(vcfg)).supported; } catch (e) { ok = false; } }
   if (!ok) return null;
   const muxer = new Mp4Muxer.Muxer({
     target: new Mp4Muxer.ArrayBufferTarget(),
     video: { codec: 'avc', width: W, height: H, frameRate: fps },
-    audio: S.aac ? { codec: 'aac', numberOfChannels: S.aac.channels, sampleRate: S.aac.rate } : undefined,
+    audio: song ? { codec: 'aac', numberOfChannels: song.channels, sampleRate: song.rate } : undefined,
     fastStart: 'in-memory', firstTimestampBehavior: 'offset',
   });
   let fail = null;
@@ -3102,10 +3123,10 @@ async function encodeShow(show, label, p0, p1) {
   }
   await enc.flush(); enc.close();
   if (fail) throw fail;
-  if (S.aac) {
+  if (song) {
     /* The song repeats under the whole video. Past the end of the file the frames are taken again from one
        song length earlier, where the file holds the same music, so the repeat has no seam. */
-    const A = S.aac, F = S.track && S.track.loop ? Math.round(S.track.loop * A.rate / 1024) : 0;
+    const A = song, F = S.track && S.track.loop ? Math.round(S.track.loop * A.rate / 1024) : 0;
     const K = F ? Math.floor((A.samples.length - 1) / F) : 0, wrap = K >= 2 ? K * F : A.samples.length;
     let first = true, t = 0, i = 0;
     while (t < dur - 1e-6) {
@@ -3123,7 +3144,7 @@ async function encodeShow(show, label, p0, p1) {
 function addOut(fmt, blob) {
   const name = fileName(S.script.date, fmt).replace(/\.mp4$/, blob.type.includes('webm') ? '.webm' : '.mp4');
   const url = URL.createObjectURL(blob);
-  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script });
+  S.outs = S.outs.filter(o => o.fmt !== fmt); S.outs.push({ fmt, name, blob, url, script: S.script, mute: !!S.mute });
   const box = $('out'); box.innerHTML = '';
   const order = ['x', 'youtube', 'pc'];
   S.outs.sort((a, b) => order.indexOf(a.fmt) - order.indexOf(b.fmt)).forEach(o => {
@@ -3168,7 +3189,7 @@ function shareable(out) {
 function resetDownload() {
   const b = $('dl');
   if (!b) return;
-  b.textContent = 'Download';
+  b.textContent = '⬇️';
   delete b.dataset.ready;
   b.disabled = !S.show || !!S.busy;
 }
@@ -3186,7 +3207,7 @@ function saveOut(out) {
 async function download() {
   if (!S.script || S.busy) return;
   const fmt = S.format;
-  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script);
+  const mine = () => S.outs.find(o => o.fmt === fmt && o.script === S.script && !!o.mute === !!S.mute);
   if (mine()) { saveOut(mine()); return; }
   const was = S.playing;
   const b = $('dl');
@@ -3559,9 +3580,10 @@ function initUI() {
     : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
   countryBox.value = pickedCountry;
   const countryDefault = (COUNTRIES.find(c => c.id === pickedCountry) || COUNTRIES[0]).lang;
-  /* Until now Japanese showed the English as well. That look is now called Both: a choice of Japanese
-     saved before is moved to it once, so the page looks as it did until Japanese is chosen again. */
-  if (store.get('langV', '') !== '2') { if (store.get('lang', '') === 'ja') store.set('lang', 'both'); store.set('langV', '2'); }
+  /* Japanese is Japanese only, English is English only, and only Both writes the two. For a day a choice
+     of Japanese saved earlier was moved to Both (Japanese used to show the English as well), so a reader
+     who had set Japanese saw both: it is moved back once. Both is there to be chosen. */
+  if (store.get('langV', '') !== '3') { if (store.get('lang', '') === 'both') store.set('lang', 'ja'); store.set('langV', '3'); }
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
     : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
   langBox.value = pickedLang;
@@ -3734,6 +3756,18 @@ function keepInitTail() {
     playSound(S.playing ? currentT() : 0);
   };
   $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
+  $('sound').onclick = () => toggleMusic();
+  paintMusic();
+  /* With the music on, it starts at the first tap anywhere on the page: a browser allows sound only after one. */
+  let askedSound = 0;
+  const firstTap = e => {
+    if (S.mute || S.audioOn || !S.show || !S.playing) return;
+    if (e.target && e.target.closest && e.target.closest('#sound, #play')) return;
+    if (performance.now() - askedSound < 500) return;
+    askedSound = performance.now();
+    playSound();
+  };
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, firstTap, true));
   /* The page stays where it is: there is no pull down to refresh. Update makes a new video. */
   /* Full screen. */
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
