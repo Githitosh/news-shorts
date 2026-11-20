@@ -2814,7 +2814,9 @@ const stockLoading = {};
 const stockKey = lang => (lang === 'en' ? 'stock.news.en' : 'stock.news');
 function stockGood(d) {
   const never = window.NSNever;
-  const ok = c => c && c.id && c.h && Array.isArray(c.ja) && c.ja[0] && !(never && never.news(c.ja.join(' ')));
+  /* (A person's reply that names a politician, a party, the government or a paper does not play; their own
+     post does not when it runs them down: never.news.) */
+  const ok = c => c && c.id && c.h && Array.isArray(c.ja) && c.ja[0] && !(never && (never.news(c.ja.join(' ')) || (c.how === 'person' && !c.own && never.politicsTarget && never.politicsTarget(c.ja.join(' ')))));
   const cards = (Array.isArray(d && d.cards) ? d.cards : []).filter(ok);
   const byId = new Map(cards.map(c => [String(c.id), c]));
   const videos = (Array.isArray(d && d.videos) ? d.videos : []).filter(v => v && Array.isArray(v.c) && v.c.length).map(v => ({ i: v.i, at: v.at, c: v.c.map(String).filter(id => byId.has(id)) })).filter(v => v.c.length);

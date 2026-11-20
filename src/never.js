@@ -59,6 +59,12 @@ const ALCOHOL = /お酒|酒(?![井田々])|飲酒|禁酒|晩酌|泥酔|酔っ|�
 const TOBACCO = /タバコ|たばこ|煙草|喫煙|禁煙|分煙|加熱式|アイコス|IQOS|ベイプ|VAPE|ヤニ(?!ヤ)|一服|紫煙|吸い殻|吸殻|灰皿|葉巻|シガー|シーシャ|ニコチン|スモーカー|🚬|\b(?:cigarettes?|cigars?|smok(?:e|es|ed|ing)|vap(?:e|es|ing)|nicotine|tobacco|juul)\b/i;
 const COMPANY = /アサヒ|キリン|サッポロ|サントリー|宝酒造|宝ホールディングス|白鶴|月桂冠|菊正宗|大関|黄桜|獺祭|旭酒造|オエノン|メルシャン|ニッカ|JT|日本たばこ|日本たばこ産業|フィリップ・?モリス|ブリティッシュ・?アメリカン・?タバコ|BAT|ハイネケン|ディアジオ|ペルノ|アンハイザー|バドワイザー|カールスバーグ|モルソン|コンステレーション|鳥貴族|ワタミ|串カツ田中|酒造|醸造|株式会社|ホールディングス|HD|グループ|社長|会長|CEO|決算|売上|業績|株価|株主|上場|買収|合併|提携|新商品|新製品|発売|値上げ|値下げ|出荷|工場|事業|市場|シェア|増益|減益|増収|減収|黒字|赤字|最高益|純利益|営業利益|輸出|販売|出店|閉店|店舗|メーカー|ブランド|企業/;
 const adult = text => ALCOHOL.test(String(text || '').replace(/(?:車|船|乗り物)酔い/g, '')) || TOBACCO.test(String(text || ''));
+/* Remarks about politicians, parties, the government, papers and broadcasters (POLITICAL_TARGET, ATTACK in
+   githito.xapi's filters.mjs): what runs them down never plays; a reply that names them does not play either. */
+const POLITICAL_TARGET = /麻生|安倍|岸田|石破|高市|萩生田|二階|枝野|玉木|榛葉|蓮舫|辻元|志位|山本太郎|小泉進次郎|河野太郎|茂木敏充|吉村洋文|橋下徹|小池百合子|野田佳彦|[一-鿿]{1,4}(?:首相|総理|大臣|防衛相|外相|法相|財務相|経産相|厚労相|文科相|国交相|総務相|農水相|環境相|官房長官|幹事長|党首|総裁|議員|知事|市長|元首相|前首相)|政府|政権|内閣|官邸|国会|与党|野党|自民|立憲|立民|維新|公明|共産党|国民民主|参政党|れいわ|社民|保守党|朝日新聞|毎日新聞|読売新聞|産経|日経新聞|NHK|ＮＨＫ|TBS|フジテレビ|テレ朝|日テレ|テレビ東京|マスコミ|マスゴミ|新聞社|共同通信|時事通信|文春|新潮|\b(?:Trump|Biden|Harris|Obama|Clinton|Pelosi|Vance|Newsom|DeSantis|Schumer|McConnell|Netanyahu|Putin|Zelensky|Democrats?|Republicans?|GOP|White House|Congress|Senate|Senator|Governor|President|CNN|Fox News|MSNBC|New York Times|Washington Post)\b/;
+const ATTACK = /酷い|ひどい|最悪|最低|無能|辞めろ|辞任しろ|やめろ|説明しろ|責任取れ|責任とれ|しろや|しろよ|せえや|売国|嘘つき|ウソつき|嘘ばかり|恥を知れ|恥ずかし|情けない|ふざけ|許せない|許さない|ありえない|あり得ない|おかし[いな]|ケチ|バカ|馬鹿|アホ|クズ|老害|税金泥棒|裏切|反日|媚中|媚韓|国賊|害悪|独裁|腐って|腐敗|利権|癒着|無責任|開き直|居直|逃げ[るた]|ダメだ|呆れ|あきれ|失望|茶番|ポンコツ|頑なに|いい加減に|\b(?:stupid|corrupt|liar|lies|lying|disgrace\w*|terrible|worst|failed|incompetent|resign|shame\w*|pathetic|fraud|evil|traitor|clown|idiot\w*|moron\w*|criminal|dictator)\b/i;
+const politicsTarget = text => POLITICAL_TARGET.test(String(text || ''));
+const politicsAttack = text => POLITICAL_TARGET.test(String(text || '')) && ATTACK.test(String(text || ''));
 /* news: a headline (with the line under it) that may not play. */
-global.NSNever = { cruel, personal, slander, adult, news: text => cruel(text) || personal(text) || (adult(text) && !COMPANY.test(String(text || ''))) };
+global.NSNever = { cruel, personal, slander, adult, politicsTarget, politicsAttack, news: text => cruel(text) || personal(text) || politicsAttack(text) || (adult(text) && !COMPANY.test(String(text || ''))) };
 })(typeof window !== 'undefined' ? window : globalThis);
