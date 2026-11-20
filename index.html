@@ -3679,7 +3679,7 @@ const TRACKS = [
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
 /* same: with one language on the cards (Japanese, English) a card's two parts are written the same size. */
-const LOOK = { uniform: true, jp: 2, get lang() { return wordsLang(); }, get same() { return ((document.getElementById('lang') || {}).value || '') !== 'both'; } };
+const LOOK = { uniform: true, jp: 2, same: true, get lang() { return wordsLang(); } };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
@@ -4361,7 +4361,10 @@ function feedUrl(section) {
   const base = section ? 'https://news.google.com/rss/headlines/section/topic/' + section : 'https://news.google.com/rss';
   return base + '?hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
 }
+/* The page reads githito.xapi and nothing else: no search of its own, no translator (no unofficial service). */
+const ALLOWED = /^https:\/\/raw\.githubusercontent\.com\/Githitosh\/githito\.xapi\//;
 async function getText(url) {
+  if (!ALLOWED.test(String(url))) throw new Error('Only githito.xapi is read.');
   const res = await fetch(url);
   if (!res.ok) throw new Error('Could not load news (' + res.status + ').');
   return res.text();
@@ -4610,7 +4613,10 @@ async function newsRows(rss, cat) {
    site is left out for that site for ten minutes; while every relay is out for a site, that site is
    passed over and the other sources carry the video. */
 const timed = (job, ms) => Promise.race([job, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
-const RELAYS = {
+/* (No relay is used any more: the page reads githito.xapi only. Every relay refuses at once.) */
+const NO_RELAY = async () => { throw new Error('Only githito.xapi is read.'); };
+const RELAYS = { rss2json: { ms: 1, get: NO_RELAY }, allorigins: { ms: 1, get: NO_RELAY }, jina: { ms: 1, get: NO_RELAY } };
+const RELAYS_UNUSED = {
   rss2json: { ms: 9000, get: async rss => {
     const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss));
     if (!res.ok) throw new Error('rss2json ' + res.status);
@@ -5054,7 +5060,12 @@ async function followedPosts(handle) {
   const matched = rows.filter(r => !r.lang || !want || r.lang.toLowerCase().startsWith(want));
   return (matched.length >= 4 ? matched : rows).slice(0, 6);
 }
+/* Nothing is translated on this page any more (Google's translation without a key is no official service):
+   githito.xapi writes the English from English news. The texts come back as they were. */
 async function translateMany(texts, tl) {
+  return texts.slice();
+}
+async function translateManyUnused(texts, tl) {
   const sep = '\n###\n';
   const out = texts.slice();
   for (let i = 0; i < texts.length; i += 5) {
@@ -6139,8 +6150,11 @@ async function preparedScript(date, slots, room, anyway) {
    its own. A card: { id, h (the account), n (its name), g (genre), at, kw (the first beat), ja: [the second
    beat, the third] } — speed-read news: what happened, then who. With English chosen the two parts are put
    into English here, a line each (githito.xapi is refused by the translator where it runs). */
-let STOCK = { cards: [], byId: new Map(), videos: [], replies: [], at: 0 };
-let stockLoading = null;
+/* One stock for each language: stock-news-ja.json, and stock-news-en.json (githito.xapi writes the English
+   cards from English news; nothing is translated). */
+const STOCKS = { ja: { cards: [], byId: new Map(), videos: [], replies: [], at: 0 }, en: { cards: [], byId: new Map(), videos: [], replies: [], at: 0 } };
+const stockLoading = {};
+const stockKey = lang => (lang === 'en' ? 'stock.news.en' : 'stock.news');
 function stockGood(d) {
   const never = window.NSNever;
   const ok = c => c && c.id && c.h && Array.isArray(c.ja) && c.ja[0] && !(never && never.news(c.ja.join(' ')));
@@ -6150,86 +6164,60 @@ function stockGood(d) {
   const replies = (Array.isArray(d && d.replies) ? d.replies : []).filter(c => c && c.id && c.ask && Array.isArray(c.ja) && c.ja[0] && !(never && never.slander(c.ja.join(' '))));
   return { cards, byId, videos, replies, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
 }
-function keptStock() {
+function keptStock(lang) {
   try {
-    const d = JSON.parse(store.get('stock.news', 'null'));
+    const d = JSON.parse(store.get(stockKey(lang), 'null'));
     const g = stockGood(d);
-    if (g.videos.length) { STOCK = { ...g, at: Number(d.at) || 0 }; PREP.asked = g.asked; paintAsked(); }
+    if (g.videos.length) { STOCKS[lang] = { ...g, at: Number(d.at) || 0 }; if (lang === 'ja') { PREP.asked = g.asked; paintAsked(); } }
   } catch (e) {}
 }
-function loadStock() {
-  if (stockLoading) return stockLoading;
-  stockLoading = (async () => {
+function loadStock(lang) {
+  if (stockLoading[lang]) return stockLoading[lang];
+  stockLoading[lang] = (async () => {
     try {
-      const res = await timed(fetch(XAPI + 'stock-news-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
+      const res = await timed(fetch(XAPI + 'stock-news-' + lang + '.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
       if (!res.ok) return false;
       const d = await res.json();
       const g = stockGood(d);
       if (!g.videos.length) return false;
-      STOCK = { ...g, at: Date.now() };
-      PREP.asked = g.asked;
-      paintAsked();
-      try { store.set('stock.news', JSON.stringify({ at: STOCK.at, cards: d.cards, videos: d.videos, replies: d.replies, asked: d.asked })); }
-      catch (e) { try { store.set('stock.news', ''); } catch (e2) {} }
+      STOCKS[lang] = { ...g, at: Date.now() };
+      if (lang === 'ja') { PREP.asked = g.asked; paintAsked(); }
+      try { store.set(stockKey(lang), JSON.stringify({ at: Date.now(), cards: d.cards, videos: d.videos, replies: d.replies, asked: d.asked })); }
+      catch (e) { try { store.set(stockKey(lang), ''); } catch (e2) {} }
       return true;
     } catch (e) { console.warn(e); return false; }
-    finally { stockLoading = null; }
+    finally { stockLoading[lang] = null; }
   })();
-  return stockLoading;
+  return stockLoading[lang];
 }
 /* The kept copy at once; the file when there is no copy; a fresh read (two and a half seconds at most)
    when what is held is more than ten minutes old. */
-async function stock() {
-  if (!STOCK.videos.length) keptStock();
-  if (!STOCK.videos.length) await loadStock();
-  else if (Date.now() - STOCK.at > 600000) { STOCK.at = Date.now(); await timed(loadStock(), 2500).catch(() => {}); }
-  return STOCK;
+async function stock(lang) {
+  const st = () => STOCKS[lang];
+  if (!st().videos.length) keptStock(lang);
+  if (!st().videos.length) await loadStock(lang);
+  else if (Date.now() - st().at > 600000) { st().at = Date.now(); await timed(loadStock(lang), 2500).catch(() => {}); }
+  return st();
 }
 const stockLink = c => 'https://x.com/' + (c.ask ? c.b.h : c.h) + '/status/' + c.id;
 const stockKeys = c => storyKeys({ headline: c.ja.join(' '), link: stockLink(c) });
-/* The English of the cards' two parts, a line each, kept in the browser (news.en4, by card). */
-async function stockEnglish(cards, wait) {
-  const known = englishKept('news.en4');
-  const ask = cards.filter(c => !known[c.id]);
-  if (ask.length) {
-    const job = englishFor(ask.map(c => ({ key: c.id, text: c.ja.join('\n') })), 'news.en4');
-    const got = await timed(job, wait).catch(e => { console.warn(e); return null; });
-    if (got) Object.assign(known, got);
-  }
-  return known;
-}
-/* A card of the stock as the video draws it. One language: the keyword, what happened, who (the second and
-   the third beat, in the same large letters). Both: the English large, the Japanese lines under it. */
-function stockCard(c, langId, en) {
+/* A card of the stock as the video draws it, in the language githito.xapi wrote it: the keyword, what
+   happened, who (the second and the third beat, in the same large letters). The top right corner says what
+   the news is about (githito.xapi's topic word), not the paper. */
+function stockCard(c) {
+  const langId = c.lang === 'en' ? 'en' : 'ja';
   const g = GENRES.find(x => x.id === c.g);
   const d = new Date(String(c.at || ''));
   const md = Number.isNaN(d.getTime()) ? '' : (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
-  /* (The translator writes some quotation marks as `` and ''.) */
-  const lines = String(en || '').split('\n').map(t => t.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim()).filter(Boolean);
-  const two = lines.length === 2 ? lines : null;
   /* A reply to an account the reader added: the account's news, then the reply. */
   const ja = c.ask ? [c.on || c.ja[0], c.ja[1] || c.ja[0]] : c.ja;
-  /* The top right corner says what the news is about (githito.xapi's topic word), not the paper. */
-  const base = { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.tp || ''),
-    src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [] };
-  if (langId === 'en' && two) return { ...base, kw: storyWord(two.join(' '), ''), head: [two[0].toUpperCase()], jp: [two[1].toUpperCase()] };
-  if (langId === 'both' && lines.length) {
-    const card = bothCard({ en: lines.join(' '), headline: ja[0], detail: ja[1], genre: c.g, pubDate: c.at, source: c.ask ? c.b.h : c.h, link: stockLink(c) });
-    card.jp = ja.filter(Boolean);
-    return card;
-  }
-  return { ...base, kw: c.kw || jaWord(ja[0]), head: [ja[0]], jp: ja[1] ? [ja[1]] : [] };
+  return { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.tp || ''),
+    src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [],
+    kw: c.kw || (langId === 'en' ? storyWord(ja[0], '') : jaWord(ja[0])), head: [ja[0]], jp: ja[1] ? [ja[1]] : [] };
 }
-/* A video from the stock, or null when there is none yet (the page then works as it did). The newest video
-   that has not played, as githito.xapi dealt it; with fewer cards wanted, its first ones; with more, the
-   next video's too. Genres chosen, words in the lineup or accounts added: the cards are chosen among the
-   stock's, what has not played first, the newest first, nobody twice. */
-async function stockScript(date, slots, room) {
-  if (!prepWanted()) return null;
-  const st = await stock();
-  if (!st.videos.length) return null;
-  const { country, lang } = market();
-  const N = Math.max(1, room || total());
+/* The cards for one video from one stock: the accounts the reader added first; the lineup's words or genres;
+   or the newest video not played yet, closed with what people said (Japanese). */
+function pickStock(st, N, slots) {
   const past = seenKeys();
   const seen = c => stockKeys(c).some(k => past.has(k));
   const genres = genreChoices();
@@ -6243,6 +6231,7 @@ async function stockScript(date, slots, room) {
     let got = 0;
     for (const c of list) {
       if (got >= n || picked.length >= N) break;
+      if (!c) continue;
       const who = String(c.ask ? c.b.h : c.h).toLowerCase();
       if (picked.includes(c) || people.has(who) || !fits(c)) continue;
       picked.push(c); people.add(who); got++;
@@ -6250,7 +6239,6 @@ async function stockScript(date, slots, room) {
     return got;
   };
   const fresh = list => list.filter(c => !seen(c)).concat(list.filter(seen));
-  /* The accounts the reader added: the replies to their posts and their own posts first, up to half. */
   if (asked.size) {
     const half = Math.ceil(N / 2);
     take(fresh(st.replies.filter(c => asked.has(String(c.ask).toLowerCase()))), half);
@@ -6267,25 +6255,41 @@ async function stockScript(date, slots, room) {
     for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
     /* About three cards in ten close the video with what people said about the news (githito.xapi deals
        them into its videos; the ones this reader has not seen take the place of the last news cards). */
-    const want = Math.round(N * 0.3);
     const isPerson = c => c && c.how === 'person';
-    const more = st.cards.filter(c => isPerson(c) && !picked.includes(c) && !seen(c) && fits(c) && !people.has(String(c.h).toLowerCase())).sort((a, b) => (b.l || 0) - (a.l || 0));
-    const said = picked.filter(isPerson).filter(c => !seen(c));
-    const news = picked.filter(c => !isPerson(c));
-    while (said.length < want && more.length) { const c = more.shift(); said.push(c); people.add(String(c.h).toLowerCase()); }
-    picked.length = 0;
-    picked.push(...news.slice(0, Math.max(0, N - said.length)), ...said);
+    if (st.cards.some(isPerson)) {
+      const want = Math.round(N * 0.3);
+      const more = st.cards.filter(c => isPerson(c) && !picked.includes(c) && !seen(c) && fits(c) && !people.has(String(c.h).toLowerCase())).sort((a, b) => (b.l || 0) - (a.l || 0));
+      const said = picked.filter(isPerson).filter(c => !seen(c));
+      const news = picked.filter(c => !isPerson(c));
+      while (said.length < want && more.length) { const c = more.shift(); said.push(c); people.add(String(c.h).toLowerCase()); }
+      picked.length = 0;
+      picked.push(...news.slice(0, Math.max(0, N - said.length)), ...said);
+    }
+  }
+  return picked;
+}
+/* A video from the stock, or null when there is none yet. Japanese: the Japanese stock. English: the English
+   stock (the Japanese one while githito.xapi has no English yet). Both: English and Japanese cards in turn,
+   the English first, each in its own language. */
+async function stockScript(date, slots, room) {
+  if (!prepWanted()) return null;
+  const { country, lang } = market();
+  const N = Math.max(1, room || total());
+  const ja = lang.id === 'en' ? null : await stock('ja');
+  const en = lang.id === 'ja' ? null : await stock('en');
+  let picked = [];
+  if (lang.id === 'both' && en.videos.length && ja.videos.length) {
+    const a = pickStock(en, Math.floor(N / 2), slots).map(c => ({ ...c, lang: 'en' }));
+    const b = pickStock(ja, N - a.length, slots);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) { if (a[i]) picked.push(a[i]); if (b[i]) picked.push(b[i]); }
+  } else {
+    const st = lang.id === 'en' && en.videos.length ? en : (ja && ja.videos.length ? ja : await stock('ja'));
+    if (!st.videos.length) return null;
+    picked = pickStock(st, N, slots).map(c => (st === en ? { ...c, lang: 'en' } : c));
   }
   if (!picked.length) return null;
   S.pendingKeys = picked.flatMap(stockKeys);
-  let english = {};
-  if (lang.id !== 'ja') {
-    english = await stockEnglish(picked, 8000);
-    /* The next video's cards are put into English meanwhile, so it does not wait. */
-    const next = st.videos.flatMap(v => v.c).map(id => st.byId.get(id)).filter(c => c && !seen(c) && !picked.includes(c)).slice(0, 20);
-    if (next.length) stockEnglish(next, 60000).catch(() => {});
-  }
-  return { date, items: picked.map(c => stockCard(c, lang.id, english[c.id])), market: country.name + ' · ' + lang.name };
+  return { date, items: picked.map(stockCard), market: country.name + ' · ' + lang.name };
 }
 /* ---------- media and keywords the user added ---------- */
 /* X is the page's source. A user can add a medium or a keyword (their own company, say): it is looked
@@ -6616,11 +6620,7 @@ async function collect(date) {
   if (script) return script;
   try { script = await preparedScript(date, slots, N); }
   catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
-  /* Without it (X switched off, a coffee break or a paper from abroad in the lineup): the page's own search. */
-  if (!script && !noNew) {
-    try { script = await collectLive(date, slots); }
-    catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
-  }
+  /* (The page makes no search of its own: what githito.xapi holds is all it plays.) */
   /* Nothing new for the lineup: the news of the chosen genres plays, not the same video again. */
   if (!script && slots.length) script = await preparedScript(date, [], N).catch(() => null);
   /* Nothing for what was asked and no video to keep playing, or the search failed: the news
@@ -7507,7 +7507,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'be19fac5e863';
+  const BUILD = 'e00b3f4a2c59';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

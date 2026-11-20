@@ -54,8 +54,11 @@ words of their own (`stockScript` in `src/app.html`, `stockRows` in `src/humor.h
   people), loving greetings first, in the order of the day. Each message is a card in two beats: a part of
   it taken out, large, then the whole message. In the morning a video of morning greetings comes first. For
   accounts a reader added: their replies first, a card each.
-- **English**: githito.xapi is refused by the translator where it runs, so the page puts the two parts into
-  English, a line each (kept in the browser), and asks for the next video's meanwhile.
+- **English**: nothing is translated (no unofficial translator) and the page reads githito.xapi only
+  (`getText` refuses any other address; the old feed relays refuse at once). githito.xapi collects English news
+  from English-language news accounts (english.mjs) and writes the English cards itself
+  (`stock-news-en.json`). Both: English and Japanese cards in turn, the English first, each in its own
+  language. Reply News has no English stories yet and plays them as written.
 - Until the stock is there, the pages work as they did before (the prepared files below).
 
 ## The pages read githito.xapi only

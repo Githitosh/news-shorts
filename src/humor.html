@@ -453,7 +453,10 @@ function shuffle(list) {
 function withTimeout(job, ms) {
   return Promise.race([job, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
 }
+/* The page reads githito.xapi and nothing else: no search of its own, no translator (no unofficial service). */
+const ALLOWED = /^https:\/\/raw\.githubusercontent\.com\/Githitosh\/githito\.xapi\//;
 async function getText(url, ms) {
+  if (!ALLOWED.test(String(url))) throw new Error('Only githito.xapi is read.');
   const res = await withTimeout(fetch(url), ms || 12000);
   if (!res.ok) throw new Error('Could not load (' + res.status + ').');
   return res.text();
@@ -751,7 +754,10 @@ function realLink(link) {
   if (!m) return u;
   try { return decodeURIComponent(m[1]); } catch (e) { return u; }
 }
-const RELAYS = {
+/* (No relay is used any more: the page reads githito.xapi only. Every relay refuses at once.) */
+const NO_RELAY = async () => { throw new Error('Only githito.xapi is read.'); };
+const RELAYS = { rss2json: { ms: 1, get: NO_RELAY }, allorigins: { ms: 1, get: NO_RELAY }, jina: { ms: 1, get: NO_RELAY } };
+const RELAYS_UNUSED = {
   rss2json: { ms: 9000, get: async rss => {
     const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rss));
     if (!res.ok) throw new Error('rss2json ' + res.status);
@@ -2078,7 +2084,12 @@ function beats(r, card, langId) {
 }
 
 /* ---------- text for the picture ---------- */
+/* Nothing is translated on this page any more (Google's translation without a key is no official service):
+   the stories play as they were written. */
 async function translateMany(texts, tl) {
+  return texts.slice();
+}
+async function translateManyUnused(texts, tl) {
   const sep = '\n###\n';
   const out = texts.slice();
   for (let i = 0; i < texts.length; i += 5) {

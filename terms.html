@@ -47,9 +47,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
   <li>動画にする内容は、運営者のGitHub（<a href="https://github.com/Githitosh/githito.xapi">https://github.com/Githitosh/githito.xapi</a>）に置いたファイルから読み込みます。<strong>本サービスのページが X（旧Twitter）に直接つながることはありません。</strong></li>
   <li>ページがつなぐ外部のサービスは次のとおりです。その際、IPアドレスなどの通信情報が各サービスに送られ、各サービスの規約とプライバシーポリシーに従って扱われます。
     <ul>
-      <li>GitHub（ページとデータの配信）、Google Fonts（文字の読み込み）</li>
-      <li>Google 翻訳（ニュースの見出しを英語でも表示するため。見出しの文が送られます）</li>
-      <li>利用者が設定で海外のメディア（BBC・ABC・ロイター）をオンにしたとき：そのメディアの公開フィードと、それを読むための中継サービス（rss2json、allorigins、r.jina.ai）。日本のメディアのRSSやウェブのニュース検索は使いません。</li>
+      <li>GitHub（ページとデータの配信）、Google Fonts（文字の読み込み）。これ以外にはつなぎません（翻訳サービスや、ページ自身による検索は使いません。英語のニュースは、英語のニュースアカウントの投稿から作ります）。</li>
       <li><strong>アカウントを「追加」したとき</strong>（ニュース・リプライニュースの動画の下の入力欄）：追加したXのアカウント名は、収集の依頼として運営者のプログラム（githito.xapi）に追加されます。そのために GitHub の画面が開き、利用者が自分の GitHub アカウントで送信します。依頼は GitHub 上で公開され（送信した方の GitHub アカウント名と、追加したアカウント名の一覧が誰でも見られます）、受け付けられたアカウントの投稿と、それに付いた返信を githito.xapi が集めます。アカウントを外したときも、同じ方法で一覧を送り直します。</li>
     </ul>
   </li>
@@ -122,9 +120,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
   <li>What a video shows is loaded from files on the Operator's GitHub (<a href="https://github.com/Githitosh/githito.xapi">https://github.com/Githitosh/githito.xapi</a>). <strong>The pages do not connect to X (formerly Twitter) themselves.</strong></li>
   <li>The outside services a page connects to are listed here. Connection data such as your IP address then goes to each of them, under its own terms and privacy policy.
     <ul>
-      <li>GitHub (the pages and the data) and Google Fonts (the letters)</li>
-      <li>Google Translate (to show a news headline in English too; the headline's words are sent)</li>
-      <li>When you switch a paper from abroad on in Settings (BBC, ABC, Reuters): that paper's public feed and the relays that read it (rss2json, allorigins, r.jina.ai). No Japanese medium's RSS and no news search of the web is used.</li>
+      <li>GitHub (the pages and the data) and Google Fonts (the letters). Nothing else: no translation service and no search by the page itself (the English news is made from English-language news accounts' posts).</li>
       <li><strong>When you add an account</strong> (the field under the video, on News and on Reply News): the name of the X account you add is added to the Operator's program (githito.xapi) as a request to collect it. For that GitHub opens, and you send the request yourself with your own GitHub account. The request is public on GitHub (your GitHub account's name and the list of account names you added can be seen by anyone), and githito.xapi collects the posts of the accounts that are accepted and the replies under them. Taking an account away sends the list again in the same way.</li>
     </ul>
   </li>
