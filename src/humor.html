@@ -251,6 +251,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
 <script>/*__MUSIC__*/</script>
+<script>/*__NEVER__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>
 (() => {
@@ -1539,7 +1540,10 @@ async function collectRomance(need, place) {
    morning greetings come first. */
 const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
 let PREP = { lang: '', stories: [], play: null, at: 0 };
-const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && s.a.handle && s.b.handle && s.a.id && s.b.id);
+/* A story with slander in it is never shown (src/never.js, the same list githito.xapi collects by): insults,
+   slurs, threats, charges against a person, anything pointing at where somebody lives or works. */
+const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && s.a.handle && s.b.handle && s.a.id && s.b.id
+  && !(window.NSNever && NSNever.slander(s.a.text + ' ' + s.b.text)));
 const goodPlay = p => (p && typeof p === 'object' && ['morning', 'day', 'night'].every(k => Array.isArray(p[k])) ? p : null);
 function keptPrep(lang) {
   try {

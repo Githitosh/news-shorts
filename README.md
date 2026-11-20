@@ -51,6 +51,15 @@ again and again, with this page's own address as the link.) The page's own words
 playing, the news githito.xapi holds plays instead. The sample never plays in the place of the news: when no
 news can be read at all, the page says so and tries again every quarter of a minute.
 
+**Never shown, whatever the switches say** (`src/never.js`, the same three lists as githito.xapi's
+`filters.mjs`; change the two together): cruel news (killing, bodies, torture, sexual violence, abuse,
+suicide, violence that reached children); news that touches one person's honour or private life (an
+arrest, a suspect, a charge, a sentence; an allegation, an exposure, an affair, a pile-on); and slander in
+what people write themselves, in replies and in the Reply News stories (insults, slurs, threats, charges
+against a person, anything pointing at where somebody lives or works). githito.xapi leaves these out when
+it collects; the pages sift what they read once more, so a change holds at once and an older file's
+contents do not play. "Turn violence off" in Settings is a further, wider switch.
+
 Before a video shows, the picture says **SEARCHING News**: on opening the page until the first video, and
 after Update or at the end of a video when the next one takes more than half a second. A translator that
 does not answer holds a video back eight seconds at most.
@@ -147,6 +156,7 @@ python run.py --formats x     # one format: x, youtube, or pc
 | `manifest.webmanifest`, `*.png` | Name and icons for Add to Home Screen |
 | `run.py` | Runs `index.html` without a window and saves the MP4 files |
 | `src/engine.js` | Drawing for the three layouts |
+| `src/never.js` | What the pages never show: cruel news, news on a person's honour or private life, slander (the same lists as githito.xapi's `filters.mjs`) |
 | `src/music.js` | The music player: the song repeated without a gap (Web Audio), for News and Humor |
 | `src/app.html` | The page, news collection, the coffee break, and MP4 export |
 | `assets/` | Five backgrounds, the songs (`song_1.m4a`, `song_2.m4a`, `song_3.m4a`, from `midi/1.mid`, `2.mid`, `3.mid`) and an older recording no page plays (`sandman_1920.m4a`) |

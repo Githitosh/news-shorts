@@ -17,12 +17,14 @@ def b64(path: Path) -> str:
 
 UI_JA = (ROOT / "src" / "ui_ja.js").read_text(encoding="utf-8")
 MUSIC = (ROOT / "src" / "music.js").read_text(encoding="utf-8")
+NEVER = (ROOT / "src" / "never.js").read_text(encoding="utf-8")
 
 
 def pack(html: str, engine: str, assets: dict, muxer: str = "", sample: str = "") -> str:
     return (
         html.replace("/*__UIJA__*/", UI_JA)
         .replace("/*__MUSIC__*/", MUSIC)
+        .replace("/*__NEVER__*/", NEVER)
         .replace("/*__MUXER__*/", muxer)
         .replace("/*__ENGINE__*/", engine)
         .replace("/*__ASSETS__*/", json.dumps(assets))
@@ -45,7 +47,7 @@ def main() -> None:
     )
     assets = {f"bg_{g}": b64(ROOT / "assets" / f"bg_{g}.jpg") for g in "ABCDE"}
     assets["tracks"] = {n: b64(ROOT / "assets" / f"song_{n}.m4a") for n in ("1", "2", "3")}
-    for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine), ("ui_ja.js", UI_JA), ("music.js", MUSIC)):
+    for name, code in (("mp4-muxer.js", muxer), ("engine.js", engine), ("ui_ja.js", UI_JA), ("music.js", MUSIC), ("never.js", NEVER)):
         if "</script" in code.lower():
             raise SystemExit(f"{name} contains </script")
     license_note = "/* mp4-muxer 5.2.2 (MIT License, Copyright (c) 2023 Vanilagy) — lib/mp4-muxer.LICENSE */\n"

@@ -239,6 +239,7 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
 <script>/*__MUXER__*/</script>
 <script>/*__UIJA__*/</script>
 <script>/*__MUSIC__*/</script>
+<script>/*__NEVER__*/</script>
 <script>/*__ENGINE__*/</script>
 <script>
 const ASSETS = /*__ASSETS__*/;
@@ -1065,6 +1066,12 @@ function sourceId(row) {
   if (/yomiuri|読売/i.test(s)) return 'yomiuri';
   return 'web';
 }
+/* A headline that may not play: never the cruel or the personal (src/never.js), and the violent when
+   "Turn violence off" is lit. */
+function barred(text) {
+  const never = window.NSNever;
+  return !!(never && never.news(text)) || (violentHidden() && VIOLENT.test(String(text || '')));
+}
 function violentHidden() {
   const box = $('hideViolent');
   return box ? box.checked : store.get('hideViolent', '0') === '1';
@@ -1318,7 +1325,7 @@ function rowFromStatus(st, minLen) {
   const author = String((st.author && st.author.screen_name) || '').replace(/^@+/, '');
   const text = String(st.text || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
   const floor = minLen == null ? 12 : minLen;
-  if (!author || text.length < floor || (violentHidden() && VIOLENT.test(text))) return null;
+  if (!author || text.length < floor || barred(text)) return null;
   const created = st.created_at ? new Date(st.created_at) : null;
   return {
     headline: text.slice(0, 480),
@@ -1364,7 +1371,7 @@ function replyLineFrom(st, handle, mode) {
   if (!author || (handle && author.toLowerCase() === handle.toLowerCase())) return null;
   const text = String((st && st.text) || '').replace(/https?:\/\/\S+/g, ' ').replace(/@\w+/g, ' ').replace(/[#＃][^\s#＃]+/g, ' ').replace(/\s+/g, ' ').trim();
   const letters = (text.match(/[A-Za-z0-9\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
-  if (letters < 10 || (violentHidden() && VIOLENT.test(text))) return null;
+  if (letters < 10 || barred(text)) return null;
   const lang = replyLang(st, text);
   if (mode && lang !== mode) return null;
   let body = text;
@@ -1560,7 +1567,7 @@ function postsFromJina(text, name) {
       const timed = tail.match(/\[\d+\s*[smhdw]\]\([^)]*\)\s+([^\n\[]+)/i);
       const tm = timed || (loose ? tail.match(/\n+([^\n#*\[\]()]{4,200})/) : null);
       const headline = readableLine(tm && tm[1]);
-      if (!headline || headline.length < 12 || ui.test(headline) || (violentHidden() && VIOLENT.test(headline))) continue;
+      if (!headline || headline.length < 12 || ui.test(headline) || barred(headline)) continue;
       rows.push({
         headline: headline.slice(0, 480),
         link: 'https://x.com/' + author + '/status/' + id,
@@ -2034,7 +2041,7 @@ function linkFits(slot, row) {
   return true;
 }
 async function rowsForSlot(slot) {
-  const blocked = text => violentHidden() && VIOLENT.test(text);
+  const blocked = text => barred(text);
   const need = slot.count || 1;
   let rows = [];
   try {
@@ -2231,8 +2238,12 @@ let prepLoading = null;
 const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
 function prepGood(d) {
   const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
-  const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h);
-  const heads = (Array.isArray(d && d.heads) ? d.heads : []).filter(x => x && x.id && x.h && x.t);
+  /* Never shown, whatever the switches say (src/never.js, the same lists githito.xapi collects by): cruel
+     news, news that touches one person's honour or private life, and replies that slander. */
+  const never = window.NSNever;
+  const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h
+    && !(never && (never.slander(x.t) || never.news(news[x.n].t))));
+  const heads = (Array.isArray(d && d.heads) ? d.heads : []).filter(x => x && x.id && x.h && x.t && !(never && never.news(x.t + ' ' + (x.d || ''))));
   const p = d && d.play;
   const play = p && typeof p === 'object' && Array.isArray(p.replies) && Array.isArray(p.news) ? { replies: p.replies, news: p.news, genre: (p.genre && typeof p.genre === 'object') ? p.genre : {} } : null;
   const asked = (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h);
@@ -2453,7 +2464,7 @@ async function preparedScript(date, slots, room, anyway) {
   const askedHead = x => asked.has(String(x.h).toLowerCase());
   const askedReply = x => !!prep.news[x.n] && asked.has(String(prep.news[x.n].h).toLowerCase());
   const withReplies = asked.size > 0;
-  const blocked = t => violentHidden() && VIOLENT.test(t);
+  const blocked = t => barred(t);
   const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
   const now = Date.now();
   const seen = x => past.has('u:' + replyLink(x)) || past.has(String(x.t).toLowerCase().slice(0, 90));
@@ -2710,7 +2721,7 @@ async function findMedia() {
   const line = (text, cls) => { const p = document.createElement('p'); p.className = cls || 'found-line'; p.textContent = text; box.appendChild(p); return p; };
   const button = (text, item) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => addMedia(item); box.appendChild(b); return b; };
   const asked = new Set(xAccounts().map(n => n.toLowerCase()));
-  const heads = (prep.heads || []).filter(x => (!x.q || asked.has(lowText(x.h))) && !(violentHidden() && VIOLENT.test(x.t)));
+  const heads = (prep.heads || []).filter(x => (!x.q || asked.has(lowText(x.h))) && !barred(x.t));
   const when = x => Date.parse(x.at || x.found || 0) || 0;
   const rows = heads.filter(x => mediaHit(m, x)).sort((a, b) => when(b) - when(a));
   if (rows.length) {
@@ -2784,7 +2795,7 @@ async function loadDetails(slots, used) {
       if (got >= n || rows.length >= 8) return;
       const key = keyOf(r);
       if (!r || !key || used.has(key) || rows.some(x => keyOf(x) === key)) continue;
-      if (violentHidden() && VIOLENT.test(r.headline)) continue;
+      if (barred(r.headline)) continue;
       used.add(key);
       rows.push({ ...r, place: place || r.place || 'middle' });
       got++;
@@ -2965,7 +2976,7 @@ async function collectLive(date, slots) {
   const genres = genreChoices();
   if (!genres.length) throw new Error('Choose at least one genre in Settings.');
   if (genres.length !== GENRES.length) return collectGenres(date, genres);
-  const blocked = text => violentHidden() && VIOLENT.test(text);
+  const blocked = text => barred(text);
   const past = seenKeys();
   progress(0.08);
   let xrows = [];
