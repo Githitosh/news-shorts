@@ -6171,7 +6171,8 @@ function initUI() {
   let askedSound = 0;
   const firstTap = e => {
     if (S.mute || S.audioOn || !S.show || !S.playing) return;
-    if (e.target && e.target.closest && e.target.closest('#sound')) return;
+    /* Not on the picture either: a tap there pauses, and the next one plays with the music. */
+    if (e.target && e.target.closest && e.target.closest('#sound, #cv')) return;
     if (performance.now() - askedSound < 500) return;
     askedSound = performance.now();
     playSound(currentT());
@@ -6205,7 +6206,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '2bac6f5af535';
+  const BUILD = '136306c9757d';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

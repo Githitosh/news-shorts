@@ -3125,7 +3125,8 @@ function initUI() {
   let askedSound = 0;
   const firstTap = e => {
     if (S.mute || S.audioOn || !S.show || !S.playing) return;
-    if (e.target && e.target.closest && e.target.closest('#sound')) return;
+    /* Not on the picture either: a tap there pauses, and the next one plays with the music. */
+    if (e.target && e.target.closest && e.target.closest('#sound, #cv')) return;
     if (performance.now() - askedSound < 500) return;
     askedSound = performance.now();
     playSound(currentT());

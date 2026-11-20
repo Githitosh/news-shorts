@@ -829,7 +829,7 @@ function playSound() {
 NSMusic.onchange = heard => { if (heard) soundOn(); else soundOff(); };
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); return; }
+  if (S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
@@ -3475,7 +3475,7 @@ function setupVideoFull() {
   v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
   v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
   /* Pause and play in the system player pause and play the video and the music. */
-  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); pauseMusic(); say('Paused. Press Play to continue.'); } }, 300); });
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); } }, 300); });
   v.addEventListener('play', () => { if (S.vfull && !S.playing && S.show) { play().catch(() => {}); playSound(currentT()); } });
 }
 function videoFull() {
@@ -3820,18 +3820,16 @@ function keepInitTail() {
     play().catch(e => say(e.message, true));
     playSound(currentT());
   };
-  const tapSound = () => {
-    if (!S.playing && S.show) beginPlayback((+$('seek').value / 1000) * (S.show.duration || 0));
-    playSound(S.playing ? currentT() : 0);
-  };
-  $('cv').addEventListener('pointerdown', () => { if (!S.audioOn) tapSound(); });
+  /* A tap or click on the picture pauses the video, and plays it again: the same as the Play button. */
+  $('cv').addEventListener('click', () => { if (S.show && !$('play').disabled) $('play').onclick(); });
   $('sound').onclick = () => toggleMusic();
   paintMusic();
   /* With the music on, it starts at the first tap anywhere on the page: a browser allows sound only after one. */
   let askedSound = 0;
   const firstTap = e => {
     if (S.mute || S.audioOn || !S.show || !S.playing) return;
-    if (e.target && e.target.closest && e.target.closest('#sound, #play')) return;
+    /* Not on the picture either: a tap there pauses, and the next one plays with the music. */
+    if (e.target && e.target.closest && e.target.closest('#sound, #play, #cv')) return;
     if (performance.now() - askedSound < 500) return;
     askedSound = performance.now();
     playSound();
