@@ -43,6 +43,10 @@ githito.xapi writes the words of every card and checks them after each collectio
 (`stock.mjs`, `v1/stock-news-ja.json` and `v1/stock-humor-ja.json`). The pages read those files and make no
 words of their own (`stockScript` in `src/app.html`, `stockRows` in `src/humor.html`):
 
+- **News**: the top right corner of a card says what the news is about (githito.xapi's topic word), not the
+  paper. About three cards in ten, at the end of a video, are what people said about the news (a reply
+  with reach from a person, people.mjs there): their words, then their name; the ones a reader has not
+  seen fill that place when the video has fewer.
 - **News** plays the newest video it has not played. A card is speed-read news in three beats: the keyword,
   what happened, who (or the headline's two parts, or a short headline and the line its post added, or the
   paper). Genres chosen, words in the lineup or accounts added: the cards are picked among the stock's.

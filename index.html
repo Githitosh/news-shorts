@@ -5718,7 +5718,7 @@ function replyCard(row, langId) {
   card.jp = (card.jp || []).filter(t => t && t !== card.kw);
   card.kw = (en && r.newsEn ? storyWord(r.newsEn, '') : newsWord(r.news, en)) || card.kw;
   card.cat = cornerGenre(g, langId, 'REPLY', 'リプライ');
-  card.topic = r.name || 'X';
+  card.topic = '';
   card.tags = [];
   card.sub = card.sub || [];
   card.src = ('X @' + r.handle + ' → @' + r.to).slice(0, 46);
@@ -5936,7 +5936,8 @@ function headCard(row, langId) {
   /* Japanese only: the line the post added to its headline goes under it, as on the card with both languages. */
   /* Japanese only: what happened, then who (twoJapanese). */
   if (langId === 'ja') { const two = twoJapanese(row); card.head = [two[0]]; card.jp = two[1] ? [two[1]] : []; }
-  card.topic = row.name || 'X';
+  /* The top right corner: not the paper. */
+  card.topic = '';
   card.tags = [];
   return card;
 }
@@ -6208,7 +6209,8 @@ function stockCard(c, langId, en) {
   const two = lines.length === 2 ? lines : null;
   /* A reply to an account the reader added: the account's news, then the reply. */
   const ja = c.ask ? [c.on || c.ja[0], c.ja[1] || c.ja[0]] : c.ja;
-  const base = { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.n || 'X'),
+  /* The top right corner says what the news is about (githito.xapi's topic word), not the paper. */
+  const base = { cat: cornerGenre(g, langId, c.ask ? 'REPLY' : 'NEWS', c.ask ? 'リプライ' : 'ニュース'), topic: c.ask ? '@' + c.ask : (c.tp || ''),
     src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [] };
   if (langId === 'en' && two) return { ...base, kw: storyWord(two.join(' '), ''), head: [two[0].toUpperCase()], jp: [two[1].toUpperCase()] };
   if (langId === 'both' && lines.length) {
@@ -6263,6 +6265,16 @@ async function stockScript(date, slots, room) {
     const unseen = v => v.c.filter(id => !seen(st.byId.get(id))).length;
     const order = st.videos.map((v, i) => [unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i, v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
     for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
+    /* About three cards in ten close the video with what people said about the news (githito.xapi deals
+       them into its videos; the ones this reader has not seen take the place of the last news cards). */
+    const want = Math.round(N * 0.3);
+    const isPerson = c => c && c.how === 'person';
+    const more = st.cards.filter(c => isPerson(c) && !picked.includes(c) && !seen(c) && fits(c) && !people.has(String(c.h).toLowerCase())).sort((a, b) => (b.l || 0) - (a.l || 0));
+    const said = picked.filter(isPerson).filter(c => !seen(c));
+    const news = picked.filter(c => !isPerson(c));
+    while (said.length < want && more.length) { const c = more.shift(); said.push(c); people.add(String(c.h).toLowerCase()); }
+    picked.length = 0;
+    picked.push(...news.slice(0, Math.max(0, N - said.length)), ...said);
   }
   if (!picked.length) return null;
   S.pendingKeys = picked.flatMap(stockKeys);
@@ -7495,7 +7507,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'e6d54faaecab';
+  const BUILD = 'be19fac5e863';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
