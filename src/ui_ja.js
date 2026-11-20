@@ -57,7 +57,7 @@ const JA = {
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
   'X accounts': 'Xアカウント', 'Add': '追加',
-  'Accounts with replies and comments': 'リプライとコメントを流すアカウント', 'Send to githito.xapi': 'xapiに送る',
+  'Reply request': 'リプライリクエスト', 'Accounts with replies and comments': 'リプライとコメントを流すアカウント', 'Send to githito.xapi': 'xapiに送る',
   'News plays no replies. Add an account here, and its posts play with the replies and comments under them (up to half of a video). Press Send to githito.xapi and then Submit: githito.xapi reads that account\'s replies from its next run, every half hour. Press a name to remove it, and send again.':
     'ニュースはふだんリプライを流しません。ここにアカウントを追加すると、そのアカウントの投稿と、それに付いたリプライとコメントを流します（動画の半分まで）。「xapiに送る」を押して GitHub で Submit を押すと、30分ごとの次の収集から、そのアカウントへのリプライを集めます。名前を押すと外せます（外したら、もう一度送ります）。',
   'News plays the headlines from X, without replies. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.':

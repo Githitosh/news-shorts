@@ -175,9 +175,9 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
   <p id="caption" class="caption"></p>
   <!-- The accounts whose posts play with the replies under them: on the main screen, under the video, as on
        News (one list for the two pages). Add also sends the list to githito.xapi. -->
-  <p class="music-label">Accounts with replies and comments</p>
+  <p class="music-label">Reply request</p>
   <div class="x-add">
-    <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Accounts with replies and comments">
+    <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Reply request">
     <button type="button" id="addX">Add</button>
   </div>
   <div id="xAccounts" class="music"></div>
@@ -2236,7 +2236,7 @@ const JA = {
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
   'X accounts': 'Xアカウント', 'Add': '追加',
-  'Accounts with replies and comments': 'リプライとコメントを流すアカウント', 'Send to githito.xapi': 'xapiに送る',
+  'Reply request': 'リプライリクエスト', 'Accounts with replies and comments': 'リプライとコメントを流すアカウント', 'Send to githito.xapi': 'xapiに送る',
   'News plays no replies. Add an account here, and its posts play with the replies and comments under them (up to half of a video). Press Send to githito.xapi and then Submit: githito.xapi reads that account\'s replies from its next run, every half hour. Press a name to remove it, and send again.':
     'ニュースはふだんリプライを流しません。ここにアカウントを追加すると、そのアカウントの投稿と、それに付いたリプライとコメントを流します（動画の半分まで）。「xapiに送る」を押して GitHub で Submit を押すと、30分ごとの次の収集から、そのアカウントへのリプライを集めます。名前を押すと外せます（外したら、もう一度送ります）。',
   'News plays the headlines from X, without replies. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.':
@@ -6206,7 +6206,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '136306c9757d';
+  const BUILD = '8551dae01a04';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
