@@ -263,12 +263,10 @@ const LANGS = [
   { id: 'ja', name: 'Japanese' },
   { id: 'both', name: 'Both' },
 ];
-/* The language of the page's own words and of the date line: Japanese for Japanese, and for Both in Japan. */
+/* The language of the page's own words and of the date line: English for English, Japanese for
+   Japanese and for Both, whatever the country. */
 function wordsLang() {
-  const v = (document.getElementById('lang') || {}).value || '';
-  if (v === 'en') return 'en';
-  if (v === 'both' && ((document.getElementById('country') || {}).value || 'JP') !== 'JP') return 'en';
-  return 'ja';
+  return ((document.getElementById('lang') || {}).value || '') === 'en' ? 'en' : 'ja';
 }
 const WALLS = [
   { id: 'morning', name: 'Morning' },
@@ -2268,9 +2266,11 @@ async function prepared() {
   }
   return PREP;
 }
-/* Whether Update can be answered from the prepared file (see above). */
+/* Whether Update can be answered from the prepared file (see above). The country does not matter: the
+   file is the page's news whatever country is chosen. (It used to be read for Japan only; with the
+   United States chosen the page searched the web instead, and played the sample when that failed.) */
 function prepWanted() {
-  if (feedMode() === 'x' || market().country.id !== 'JP' || !sourceOn('x')) return false;
+  if (feedMode() === 'x' || !sourceOn('x')) return false;
   return true;
 }
 function prepAtHand() {
@@ -2410,10 +2410,11 @@ function headCard(row, langId) {
 /* A video from the prepared file, with room for `room` cards, or null when the page should search
    instead. What has not played yet comes first, newer news before older; one reply for one piece of
    news, nobody twice, and no paper or genre taking most of the video. */
-async function preparedScript(date, slots, room) {
+async function preparedScript(date, slots, room, anyway) {
   if (!prepWanted()) return null;
   const { country, lang } = market();
-  const genres = genreChoices();
+  /* anyway: every genre, whatever is chosen (asked for when the page's own search failed). */
+  const genres = anyway ? GENRES.slice() : genreChoices();
   if (!genres.length) return null;
   const wants = slots.map(s => ({ gid: slotGenre(s), count: s.count || 1 }));
   if (wants.some(w => !w.gid)) return null;
@@ -2897,7 +2898,15 @@ async function collect(date) {
   catch (e) { if (e && e.noNew) noNew = e; else console.warn(e); }
   if (!script && !noNew) {
     try { script = await collectLive(date, slots); }
-    catch (e) { if (e && e.noNew && mine.length) noNew = e; else throw e; }
+    catch (e) {
+      /* The page's own search failed (a lineup or a genre choice sent it to the web, and the web did
+         not answer), or it found nothing and no video is there to keep playing: the news githito.xapi
+         holds plays instead, when X is a source. */
+      const spare = e && e.noNew && S.show ? null : await preparedScript(date, [], N - mine.length, true).catch(() => null);
+      if (spare) { console.warn(e); script = spare; }
+      else if (e && e.noNew && mine.length) noNew = e;
+      else throw e;
+    }
   }
   if (!mine.length) { if (script) return script; throw noNew; }
   if (lang.id === 'ja') mine.forEach(r => { r._en = r.headline; r._local = r.headline; });
@@ -3282,10 +3291,22 @@ async function runAll(opts) {
 }
 let customNews = false;
 let refreshTimer = 0;
+/* No news could be read (no connection, say): the page says so and tries again by itself, every quarter
+   of a minute, until a video plays. */
+let retryTimer = 0;
+function retryLater() {
+  clearTimeout(retryTimer);
+  if (Q.get('auto') === '1' || Q.get('sample') === '1') return;
+  retryTimer = setTimeout(() => {
+    retryTimer = 0;
+    if (S.busy || S.playing || !$('studio').hidden) return;
+    runAll({ download: false, export: false }).catch(() => retryLater());
+  }, 15000);
+}
 function refreshMarket() {
   if (Q.get('auto') === '1') return;
   customNews = true;
-  runAll({ download: false, export: false }).catch(() => {});
+  runAll({ download: false, export: false }).catch(() => { if (!S.playing) retryLater(); });
 }
 function scheduleRefresh(delay) {
   clearTimeout(refreshTimer);
@@ -3779,11 +3800,12 @@ window.NS = {
     } else {
       await runAll({ download: false, export: false });
     }
-    if (!S.script && !customNews) await setScript(SAMPLE, true);
   } catch (e) {
     console.error(e);
-    if (!S.script && !customNews) { try { await setScript(SAMPLE, true); } catch (err) {} }
     say(e.message || String(e), true); window.NS.error = String(e && e.message || e);
+    /* The sample is not played in the place of the news: it is old news, and its link is this page's own
+       address. (It plays from its button in Settings, or with ?sample=1.) */
+    retryLater();
   }
 })();
 })();

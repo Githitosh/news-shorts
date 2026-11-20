@@ -44,6 +44,13 @@ FxTwitter, Bluesky or X's own pages gets nothing now, the "X posts" feed is gone
 on Reply News every lineup plays the prepared stories. The terms of use are in `terms.html`, linked at the
 foot of both pages.
 
+News reads githito.xapi whatever **Country** is chosen. (It used to read it for Japan only: with the United
+States chosen it searched the web instead, and when the web did not answer it played the sample of Nov 14,
+again and again, with this page's own address as the link.) The page's own words are English only when
+**Language** is English. When the page's own search fails, or finds nothing and no video is there to keep
+playing, the news githito.xapi holds plays instead. The sample never plays in the place of the news: when no
+news can be read at all, the page says so and tries again every quarter of a minute.
+
 ## Where the news comes from
 
 **In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it
