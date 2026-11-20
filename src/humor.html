@@ -1705,7 +1705,8 @@ async function stockRows(N) {
   if (!st.videos.length) return null;
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  const okText = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !notForMinors(t) && !(sensitiveHidden() && suggestive(t));
+  /* (No advertising either: githito.xapi's principles.) */
+  const okText = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !notForMinors(t) && !(window.NSNever && NSNever.advert && NSNever.advert(t)) && !(sensitiveHidden() && suggestive(t));
   const seenMsg = x => msgKeys(x).some(k => past.has(k));
   const rows = [];
   const people = new Set();

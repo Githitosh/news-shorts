@@ -1,4 +1,6 @@
-/* What the pages never show, whatever their own switches say: cruel news, news that touches one person's
+/* The pages are a place to enjoy replies and to watch the news lightly (githito.xapi PRINCIPLES.md): no fear of
+   being swayed by advertising, not a place for slander, nothing that upsets anyone.
+   What the pages never show, whatever their own switches say: cruel news, news that touches one person's
    honour or private life, and slander in what people themselves write. These are the same three lists as
    githito.xapi's filters.mjs, which leaves the same things out when it collects; the pages apply them
    again to what they read, so that a change holds at once and what an older file still holds does not
@@ -69,8 +71,12 @@ const NEGATIVE = /最悪|最低|うざ|ウザ|キモ|きもい|気持ち悪|く�
 const politicsTarget = text => POLITICAL_TARGET.test(String(text || ''));
 const politicsAttack = text => POLITICAL_TARGET.test(String(text || '')) && ATTACK.test(String(text || ''));
 /* news: a headline (with the line under it) that may not play. */
+/* Advertising (githito.xapi's principle 2: no fear of being swayed by ads): promotions, sponsored posts, PR,
+   calls to buy or enter. */
+const ADVERT = /#PR\b|＃PR|【PR】|［PR］|\[PR\]|〈PR〉|\bPR\b|広告|宣伝|案件|タイアップ|プロモーション|スポンサー|アフィリエイト|楽天ROOM|購入はこちら|ご購入|お買い求め|予約はこちら|ご予約|予約受付|予約開始|発売中|発売しました|発売開始|好評発売|販売中|ご注文|通販|グッズ|クーポン|割引|[0-9０-９]+[%％]\s*(?:オフ|OFF|off)|セール|期間限定|今だけ|キャンペーン|応募|抽選で|当選|フォロー[&＆]\s*(?:RT|リポスト)|リポストで|詳しくはプロフ|プロフのリンク|リンクから|LINEスタンプ|BuyPR|\b(?:ad|ads|#ad|sponsored|promo|promotion|partnered|partnership|use code|discount|sale|buy now|shop now|order now|pre-?orders?|link in bio|out now|on sale|available now|giveaway|subscribe|merch|affiliate|coupon)\b/i;
+const advert = text => ADVERT.test(String(text || ''));
 /* The check githito.xapi makes twice (filters.mjs safeWords), made a third time here on each card of what
    people said: own: a well-known person's own post. */
-const safeWords = (text, own) => !(cruel(text) || personal(text) || slander(text) || SLANDER_EN.test(String(text || '')) || adult(text) || (own ? politicsAttack(text) : politicsTarget(text) || NEGATIVE.test(String(text || ''))));
-global.NSNever = { cruel, personal, slander, adult, politicsTarget, politicsAttack, safeWords, news: text => cruel(text) || personal(text) || politicsAttack(text) || (adult(text) && !COMPANY.test(String(text || ''))) };
+const safeWords = (text, own) => !(cruel(text) || personal(text) || slander(text) || SLANDER_EN.test(String(text || '')) || adult(text) || advert(text) || (own ? politicsAttack(text) : politicsTarget(text) || NEGATIVE.test(String(text || ''))));
+global.NSNever = { cruel, personal, slander, adult, advert, politicsTarget, politicsAttack, safeWords, news: text => cruel(text) || personal(text) || politicsAttack(text) || (adult(text) && !COMPANY.test(String(text || ''))) };
 })(typeof window !== 'undefined' ? window : globalThis);
