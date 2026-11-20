@@ -59,8 +59,7 @@ body.lock { overflow: hidden; }
 .source-url:active { background: var(--card); }
 .ctl { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
 .ctl button { white-space: nowrap; padding: 10px 11px; font-size: 14px; }
-/* Sound: lit while the music plays, outlined while the video plays without it. */
-button#sound.ask { border-color: var(--acc); color: var(--acc); }
+/* Music: lit while the music is on. */
 button#sound.on { background: var(--acc); border-color: var(--acc); color: var(--on); }
 /* On a narrow phone the seek bar and time move to a second row instead of running off the screen. */
 .ctl input[type=range] { flex: 1 1 200px; min-width: 0; accent-color: var(--acc); }
@@ -70,7 +69,8 @@ button#sound.on { background: var(--acc); border-color: var(--acc); color: var(-
 .seekrow span { flex: none; color: var(--mute); font-variant-numeric: tabular-nums; min-width: 84px; text-align: right; font-size: 13px; }
 /* Play/Pause and Update/Creating keep one width, so the buttons stay on one row and in place. */
 #play, #update { min-width: 5.4em; }
-#dl { width: 7.4em; overflow: hidden; text-overflow: ellipsis; }
+/* Download is an arrow now, so it is as narrow as its mark and the five buttons fit on one row. */
+#dl { min-width: 2.8em; }
 @media (max-width: 480px) { .ctl { gap: 6px; } .ctl button { padding: 9px 8px; font-size: 13px; } }
 /* The link keeps the same height for every story, so nothing below it moves. */
 .linkbox { height: calc(2 * 1.3 * 26px + 22px); display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -88,6 +88,8 @@ button:disabled { opacity: .45; cursor: default; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin-top: 14px; margin-bottom: 4px; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; }
 .music button { flex: 1 1 28%; padding: 8px 6px; font-size: 13px; }
+/* The choices under the video (Items, Story length, Wallpaper, Music) are in three columns. */
+#counts, #paces, #walls, #music { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* Settings: the same panel as the News page. */
 .studio { display: grid; gap: 12px; margin-top: 16px; }
 .studio:not([hidden]) { position: fixed; z-index: 35; left: 0; right: 0; bottom: 0; top: var(--header-h, 64px); margin: 0; padding: 8px 16px calc(92px + env(safe-area-inset-bottom)); overflow: auto; background: var(--bg); }
@@ -5994,7 +5996,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'bab6b21673c7';
+  const BUILD = '9716c04e5f55';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

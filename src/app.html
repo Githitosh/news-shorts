@@ -27,6 +27,8 @@ button.title { background: none; border: 0; border-radius: 0; padding: 0; color:
 main { display: block; padding: 0 12px calc(24px + env(safe-area-inset-bottom)); max-width: 440px; margin: 0 auto; }
 main.wide { max-width: 960px; }
 .stage { position: sticky; top: 8px; }
+/* While a video plays the block scrolls with the page: held in place, its last line lay over the Terms link. */
+body.watching .stage { position: static; }
 body:has(#studio:not([hidden])) .stage { position: static; }
 .frame { position: relative; max-width: 400px; margin: 0 auto; transition: transform .18s ease; }
 .frame.pulling { transition: none; }
@@ -45,6 +47,8 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 #lineupGo, #applyLine, #backVideo { width: 100%; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
+/* The choices under the video (Items, Story length, Wallpaper, Music) are in three columns. */
+#counts, #paces, #walls, #music { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 button.on, .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
 .filter-row:has(input:checked), .check:has(input:checked) { color: var(--acc); }
 #lineup.live { border-color: var(--acc); }
@@ -2438,8 +2442,8 @@ async function preparedScript(date, slots, room, anyway) {
   const genres = anyway ? GENRES.slice() : genreChoices();
   if (!genres.length) return null;
   /* A line of the lineup is a genre, or words to look for in the news from X (an account, a keyword). */
-  const wants = slots.map(s => ({ gid: slotGenre(s), q: slotWords(s), count: s.count || 1 }));
-  if (wants.some(w => !w.gid && !w.q)) return null;
+  /* A line that is neither (a coffee break, a paper from abroad) is left out: the news is from X. */
+  const wants = slots.map(s => ({ gid: slotGenre(s), q: slotWords(s), count: s.count || 1 })).filter(w => w.gid || w.q);
   const prep = await prepared();
   if (!prep.items.length && !prep.heads.length) return null;
   const N = Math.max(1, room || total());
@@ -2946,6 +2950,8 @@ async function collect(date) {
     try { script = await collectLive(date, slots); }
     catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
   }
+  /* Nothing new for the lineup: the news of the chosen genres plays, not the same video again. */
+  if (!script && slots.length) script = await preparedScript(date, [], N).catch(() => null);
   /* Nothing for what was asked and no video to keep playing, or the search failed: the news
      githito.xapi holds plays, whatever the lineup and the genres say (when X is a source). */
   if (!script && (!noNew || !S.show)) script = await preparedScript(date, [], N, true).catch(() => null);
