@@ -54,11 +54,16 @@ def main() -> None:
     print(f"index.html {len(out.encode('utf-8')) / 1048576:.2f} MB")
     ja_assets = {"bg_" + g: assets["bg_" + g] for g in "ABCDE"}
     ja_assets["track"] = assets["tracks"]["1"]
-    ja = pack((ROOT / "src" / "ja.html").read_text(encoding="utf-8"), engine, ja_assets)
+    # ja/ was a page of its own that read NHK's and Asahi's RSS. No Japanese medium is read by RSS any
+    # more: the address opens News with Japanese cards, which plays the news githito.xapi collects from X.
+    ja = ('<!doctype html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n'
+          '<meta http-equiv="refresh" content="0; url=../?lang=ja">\n<title>News Shorts</title>\n</head>\n'
+          '<body>\n<p><a href="../?lang=ja">News Shorts</a></p>\n'
+          '<script>location.replace("../?lang=ja");</script>\n</body>\n</html>\n')
     dest = ROOT / "ja" / "index.html"
     dest.parent.mkdir(exist_ok=True)
     dest.write_text(ja, encoding="utf-8")
-    print(f"ja/index.html {len(ja.encode('utf-8')) / 1048576:.2f} MB")
+    print(f"ja/index.html {len(ja.encode('utf-8'))} bytes (opens News in Japanese)")
     humor, humor_id = stamp(pack((ROOT / "src" / "humor.html").read_text(encoding="utf-8"), engine, ja_assets, license_note + muxer))
     humor_dest = ROOT / "humor" / "index.html"
     humor_dest.parent.mkdir(exist_ok=True)

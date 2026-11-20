@@ -33,8 +33,8 @@ Music, under the picture: **1**, **2** and **3**, each 8 bars (1 and 3 at 90 BPM
 17.5 seconds), made from the MIDI files `assets/midi/1.mid`, `2.mid` and `3.mid`. 1 plays first. The music plays on its own and is not tied to
 the video: it repeats without a gap (it plays through Web Audio, `src/music.js`, which repeats one song length of the
 decoded file sample for sample; an audio element stopped for a moment at each repeat), and a new video, Update, the video's own repeat, the seek bar, the story
-length and exporting leave it playing where it is. On News and the Japanese page Pause stops it; on Humor
-the Sound button turns it off and on. Humor has the same three songs; the Japanese page plays 1.
+length and exporting leave it playing where it is. On News Pause stops it; on Humor
+the Sound button turns it off and on. Humor has the same three songs.
 
 ## The pages read githito.xapi only
 
@@ -74,27 +74,37 @@ in about a second and Update answers at once.
   ones (no insults, blame, mockery, politics or grave news). A post of an account that is not a news
   account plays only for a reader who added it.
 - A genre chip plays that genre's headlines.
-- **Sources**: X only, unless the web or a paper from abroad is switched on in Settings. A genre keeps to
-  these switches (it used to read web feeds whatever they said).
-- **Add a medium, a website or a keyword** (Settings): type a company name, a medium or `example.com`, press
-  Search, and add what was found. Its news is searched on the web (Google News and Bing News) and plays
-  first in every video, up to half of it. Up to eight can be added.
+- **Sources**: X only (the news githito.xapi collects there). Nothing is read from the web, and **no
+  Japanese medium is read by RSS**: the web source (Google News, Bing News, Yahoo! News' topic feeds, NPR)
+  is gone from the page, and so is the old page at `ja/`, which read NHK's and Asahi's RSS (its address now
+  opens News with Japanese cards). The papers from abroad (BBC, ABC, Reuters) are still switches: they play
+  when they are switched on and X is switched off.
+- **Add a medium or a keyword** (Settings): type a medium's name or a word (a company's name, say), press
+  Search, and add what was found. It is looked for in the news githito.xapi collected from X, by the
+  account's name and by the words of the headline, not on the web, and plays first in every video, up to
+  half of it. Up to eight can be added. A medium githito.xapi does not read yet is added by its X account
+  under Accounts and sent to githito.xapi.
+- **Words in the lineup** (a line that is no genre) are looked for in the same news from X.
 - **What plays is chosen by githito.xapi, at random**, after every hourly collection (the `play` orders in
   its files). The pages only read an order from the top, leaving out what the reader has already seen;
   they do no searching and no choosing of their own for this. The same holds for Humor's romance stories
   (one order each for the morning, the day and the night).
-- With another edition, or with a lineup line that is not a genre, the page searches as described below. There is no pull down to refresh. Update makes a new video.
+- There is no pull down to refresh. Update makes a new video.
 
-The searches the page makes itself:
+**The cards and the wide page.** With Language on Both a card has the English first (the headline, large)
+and the Japanese after it; on the wide page (PC) the English is on the left and the Japanese on the right,
+with no line between them. A card in one language (Japanese only, English only) is one block in the middle
+of the wide page.
 
-No API key. The page reads public feeds, from more than one source and through more than one relay, so that one of them refusing or being slow does not stop the video.
+The searches the page makes itself (only with X switched off and a paper from abroad switched on):
 
-| Edition | Front pages | A genre |
-|---|---|---|
-| Japan | Google News, Yahoo! News (its main topics and one section in turn), and one paper from abroad in turn (BBC, ABC, Reuters) | Yahoo! News' topic page where it has one, a search of Google News and of Bing News, and the BBC's section |
-| United States | Google News, NPR, and BBC, ABC or Reuters in turn | A search of Google News and of Bing News, and the BBC's section |
+No API key. The page reads the papers' public feeds through more than one relay, so that one of them refusing or being slow does not stop the video.
 
-- In Japan seven stories in ten are the edition's own; elsewhere half.
+| Paper | How it is read |
+|---|---|
+| BBC, ABC | their own RSS (English), translated by the page |
+| Reuters | a news search limited to reuters.com |
+
 - A feed cannot be read by a page directly, so it goes through a relay: rss2json, allorigins or r.jina.ai. Each refuses some sites (r.jina.ai refuses Google News at times, rss2json cannot read Yahoo! News, allorigins cannot read Google News), so for each site the relay that reads it best is asked first and the next one takes over when it fails or does not answer in two and a half seconds. A relay that failed for a site rests for ten minutes.
 - What a feed returned is kept for four minutes, so pressing Update again does not ask for the same page.
 - GDELT is asked last, only when the others are short: it is slow and often refuses.
@@ -137,7 +147,7 @@ python run.py --formats x     # one format: x, youtube, or pc
 | `manifest.webmanifest`, `*.png` | Name and icons for Add to Home Screen |
 | `run.py` | Runs `index.html` without a window and saves the MP4 files |
 | `src/engine.js` | Drawing for the three layouts |
-| `src/music.js` | The music player: the song repeated without a gap (Web Audio), for News, Humor and the Japanese page |
+| `src/music.js` | The music player: the song repeated without a gap (Web Audio), for News and Humor |
 | `src/app.html` | The page, news collection, the coffee break, and MP4 export |
 | `assets/` | Five backgrounds, the songs (`song_1.m4a`, `song_2.m4a`, `song_3.m4a`, from `midi/1.mid`, `2.mid`, `3.mid`) and an older recording no page plays (`sandman_1920.m4a`) |
 | `song.py` | Makes `assets/song_1.m4a`, `song_2.m4a` and `song_3.m4a` from the MIDI files |

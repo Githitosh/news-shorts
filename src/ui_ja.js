@@ -65,6 +65,15 @@ const JA = {
     '「リプライあり」は、ニュースへの真面目なリプライを1枚ずつ流し、その下にどのニュースへのコメントかを出します。政治と治安のニュースは、リプライなしで流します。「リプライなし」は、見出しだけを流します。',
   'X is the source. The web and the papers from abroad play only when they are switched on here.':
     '情報源はXです。ウェブと海外のメディアは、ここでオンにしたときだけ流します。',
+  'X is the source: the news githito.xapi collects from X. Nothing is read from the web, and no Japanese medium by RSS. The papers from abroad play when they are switched on and X is off.':
+    '情報源はXです（githito.xapi がXから集めたニュース）。ウェブからは取りません。日本のメディアのRSSも使いません。海外のメディアは、オンにしてXをオフにしたときに流します。',
+  'Add a medium or a keyword': 'メディア・キーワードを追加', 'Company name, Nikkei': '会社名、日経 など',
+  'Type the name of a medium or a word (your company, say) and press Search: it is looked for in the news githito.xapi collected from X, not on the web. Add what was found: its news plays first in every video. Press a name to remove it.':
+    'メディア名や言葉（自分の会社名など）を入れて「検索」を押します。ウェブではなく、githito.xapi がXから集めたニュースの中から探します。見つかったものを追加すると、そのニュースが毎回の動画の最初に流れます。名前を押すと外せます。',
+  'Or one account only:': 'アカウントを1つだけ追加する場合：',
+  'A medium githito.xapi does not read yet: add its X account under Accounts below and send it.':
+    'githito.xapi がまだ集めていないメディアは、下の「アカウント」にそのXアカウントを追加して送ってください。',
+  'No news could be read. Press Update again later.': 'ニュースを読み込めませんでした。しばらくしてから更新を押してください。',
   'Add a medium, a website or a keyword': 'メディア・サイト・キーワードを追加', 'Company name, example.com': '会社名、example.com', 'Search': '検索', 'Searching…': '検索中…',
   'Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.':
     '会社名、メディア名、サイトのアドレスなどを入れて「検索」を押します。見つかったものを追加すると、そのニュースが毎回の動画の最初に流れます。名前を押すと外せます。',
@@ -116,6 +125,7 @@ const PATTERNS = [
   [/^Removed (@\w+)$/, m => `${m[1]}を外しました`],
   [/^Already added (@\w+)$/, m => `${m[1]}はもう追加されています`],
   [/^Found (\d+) stories$/, m => `${m[1]}件のニュースが見つかりました`],
+  [/^No news from X for (.+) yet\. Added, it plays when there is some\.$/, m => `「${m[1]}」のXのニュースはまだありません。追加しておくと、出たときに流れます。`],
   [/^Add: (.+)$/, m => `「${m[1]}」を追加`],
   [/^Added (.+)$/, m => `${m[1]}を追加しました`],
   [/^Removed (.+)$/, m => `${m[1]}を外しました`],

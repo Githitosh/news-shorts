@@ -181,15 +181,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
-      <p class="note">X is the source. The web and the papers from abroad play only when they are switched on here.</p>
-      <label for="mediaQ">Add a medium, a website or a keyword</label>
+      <p class="note">X is the source: the news githito.xapi collects from X. Nothing is read from the web, and no Japanese medium by RSS. The papers from abroad play when they are switched on and X is off.</p>
+      <label for="mediaQ">Add a medium or a keyword</label>
       <div class="x-add">
-        <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="Company name, example.com">
+        <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="Company name, Nikkei">
         <button type="button" id="mediaFind">Search</button>
       </div>
       <div id="mediaFound" class="found" hidden></div>
       <div id="myMedia" class="music"></div>
-      <p class="note">Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.</p>
+      <p class="note">Type the name of a medium or a word (your company, say) and press Search: it is looked for in the news githito.xapi collected from X, not on the web. Add what was found: its news plays first in every video. Press a name to remove it.</p>
       <label for="xUser">Accounts with replies and comments</label>
       <div class="x-add">
         <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
@@ -950,8 +950,7 @@ const GENRES = [
   { id: 'restaurant', name: 'Restaurant', place: 'bottom', q: { JP: 'レストラン', US: 'restaurant' } },
 ];
 const SOURCES = [
-  { id: 'x', name: 'X', group: 'X and web' },
-  { id: 'web', name: 'Other web', group: 'X and web' },
+  { id: 'x', name: 'X', group: 'X' },
   { id: 'bbc', name: 'BBC', group: 'International' },
   { id: 'abc', name: 'ABC', group: 'International' },
   { id: 'reuters', name: 'Reuters', group: 'International' },
@@ -1002,7 +1001,10 @@ function genreChoices() {
 }
 /* Sources taken out of the settings (NHK, Asahi, Yomiuri, AP, CNN, The New York Times):
    never read, and their stories are skipped. Abroad means BBC, ABC and Reuters only. */
-const GONE = new Set(['nhk', 'asahi', 'yomiuri', 'ap', 'cnn', 'nyt']);
+/* Sources the page no longer reads. 'web': the news searches and front pages of the web (Google News,
+   Bing News, Yahoo! News' topic feeds). The page's news is what githito.xapi collects from X, and no
+   Japanese medium is read from the web or by RSS. */
+const GONE = new Set(['web', 'nhk', 'asahi', 'yomiuri', 'ap', 'cnn', 'nyt']);
 function sourceOn(id) {
   if (GONE.has(id)) return false;
   const box = document.querySelector('.srcf[value="' + id + '"]');
@@ -1010,12 +1012,10 @@ function sourceOn(id) {
   const saved = savedJson('sourcesOn');
   return typeof saved[id] === 'boolean' ? saved[id] : sourceDefault(id);
 }
-/* In Japan the page's source is X: the web and the papers from abroad play when they are switched on.
-   Other editions have no prepared file from X, so there everything is on until switched off. */
+/* The page's source is X, whatever the country: the news githito.xapi collects there. The papers from
+   abroad play when they are switched on. */
 function sourceDefault(id) {
-  if (id === 'x') return true;
-  const c = store.get('country', '') || ((navigator.language || 'en').toLowerCase().startsWith('ja') ? 'JP' : 'US');
-  return c !== 'JP';
+  return id === 'x';
 }
 function matchedGenre(text, countryId) {
   const hay = String(text || '').toLowerCase();
@@ -1050,26 +1050,14 @@ function searchFeed(query) {
   const e = edition();
   return 'https://news.google.com/rss/search?q=' + encodeURIComponent('(' + query + ') when:2d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
 }
-/* More than one source of news: Google News, Bing News, and in Japan Yahoo! News' topics. */
 function bingFeed(query) {
   const e = edition();
   return 'https://www.bing.com/news/search?q=' + encodeURIComponent(query) + '&format=rss&setlang=' + (e.hl === 'ja' ? 'ja' : 'en-US') + '&cc=' + e.gl;
 }
-const yahooFeed = name => 'https://news.yahoo.co.jp/rss/topics/' + name + '.xml';
-const yahooOn = () => { const e = edition(); return e.gl === 'JP' && e.hl === 'ja'; };
-/* The front pages of the edition, read together: Google News' front page; in Japan, Yahoo! News' main
-   topics and one of its sections, which take turns; in the United States, NPR's top stories. */
-const YAHOO_TURNS = ['domestic', 'world', 'business', 'it', 'science', 'entertainment', 'sports', 'local'];
-function homeFeeds(turn) {
-  const e = edition();
-  if (!sourceOn('web')) return [];
-  const out = [[feedUrl(''), '']];
-  if (yahooOn()) {
-    out.push([yahooFeed('top-picks'), 'Yahoo!ニュース']);
-    out.push([yahooFeed(YAHOO_TURNS[(turn || 0) % YAHOO_TURNS.length]), 'Yahoo!ニュース']);
-  } else if (e.gl === 'US') out.push(['https://feeds.npr.org/1001/rss.xml', 'NPR']);
-  else out.push([bingFeed('速報'), '']);
-  return out;
+/* The web's front pages are not read: the page's news is what githito.xapi collects from X. (Google
+   News' front page, Yahoo! News' topic feeds and NPR used to be read here.) */
+function homeFeeds() {
+  return [];
 }
 /* Stories in a script the edition does not read (Korean, Russian, Thai, Arabic) are left out, by the
    headline or by the paper's name. */
@@ -1117,6 +1105,7 @@ function orderStories(rows, limit) {
   return [...bands.top.slice(0, keep.top), ...bands.middle.slice(0, keep.middle), ...bands.bottom.slice(0, keep.bottom)];
 }
 function topicFeeds() {
+  if (!sourceOn('web')) return [];
   const { country } = market();
   const topics = country.id === 'JP'
     ? ['日本', '政治', '経済', 'スポーツ', '科学', '国際', '社会', '文化']
@@ -1245,7 +1234,6 @@ const RELAYS = {
 function relayOrder(site) {
   /* allorigins cannot read Google News and takes ten seconds to say so. */
   if (/news\.google\.com$/.test(site)) return ['rss2json', 'jina'];
-  if (/news\.yahoo\.co\.jp$/.test(site)) return ['allorigins', 'jina'];
   if (/bing\.com$/.test(site)) return ['allorigins', 'rss2json'];
   return ['allorigins', 'jina', 'rss2json'];
 }
@@ -1792,13 +1780,23 @@ function storyFrom(raw, english, local, langId) {
       const d = new Date(stamp.includes('T') ? stamp : stamp.replace(' ', 'T') + 'Z');
       if (!Number.isNaN(d.getTime())) md = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
     }
+    const src = (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40);
+    /* Both languages: the English first (the headline, large), the Japanese lines after it, as on the
+       cards from X. */
+    if (langId === 'both' && en && en !== jaText && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(en)) {
+      const p = englishParts(en);
+      return {
+        kw: p.kw, cat: raw.cat && raw.cat !== 'NEWS' ? raw.cat : p.kw, topic: p.tags.find(t => t !== p.kw) || p.kw,
+        head: [p.head], sub: p.sub ? [p.sub] : [], jp: [jaText], tags: p.tags, src, date: md, url: raw.link || '',
+      };
+    }
     return {
       kw, cat: raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, topic: kw,
       head: parts.head.length ? parts.head : [kw],
       sub: [],
       jp: body,
       tags: [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3),
-      src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
+      src,
       date: md,
       url: raw.link || '',
     };
@@ -1910,8 +1908,8 @@ function classifyRequest(text) {
   const genre = GENRES.find(g => g.name.toLowerCase() === low || (g.q.JP && name.includes(g.q.JP.split(' ')[0]) && g.q.JP.split(' ')[0].length > 1));
   if (genre) return Object.assign(requestForGenre(genre), { label: name });
   if (/スポーツ|^sports$/.test(low)) return requestForGenre(GENRES.find(g => g.id === 'sports'));
-  /* Words typed by the user: searched on the web whatever the source switches say. */
-  return Object.assign(searchSlot(name, name.toUpperCase().slice(0, 16), name), { own: true });
+  /* Words typed by the user: looked for in the news githito.xapi collected from X (see preparedScript). */
+  return Object.assign(searchSlot(name, name.toUpperCase().slice(0, 16), name), { words: name });
 }
 /* A request that reads several sources together: a search of Google News and of Bing News for the words,
    and whatever else is given (Yahoo! News' topics, a BBC section). GDELT is asked only when these are short. */
@@ -1919,7 +1917,6 @@ function searchSlot(q, cat, label, more) {
   const feeds = [{ url: searchFeed(q), source: '' }, { url: bingFeed(q), source: '' }];
   return { type: 'feeds', feeds: (more || []).concat(feeds), q, gdelt: q, cat, source: 'News', label };
 }
-const YAHOO_TOPIC = { politics: 'domestic', science: 'science', entertainment: 'entertainment', sports: 'sports', local: 'local' };
 const BBC_SECTION = { sports: 'sport', science: 'science', space: 'science', politics: 'politics', culture: 'culture', entertainment: 'culture', safety: 'bbc' };
 const BBC_HINT = {
   space: /space|nasa|rocket|satellite|telescope|astronaut|moon|mars|宇宙|ロケット/i,
@@ -1930,8 +1927,6 @@ function requestForGenre(g) {
   const { country } = market();
   const q = g.q[country.id] || g.q.US;
   const more = [];
-  /* In Japan the topic pages of Yahoo! News come first: they are chosen by editors. */
-  if (yahooOn() && YAHOO_TOPIC[g.id]) more.push({ url: yahooFeed(YAHOO_TOPIC[g.id]), source: 'Yahoo!ニュース' });
   const slot = searchSlot(q, name.toUpperCase(), name, more);
   slot.gid = g.id;
   /* One story in every round comes from the BBC's section, where it has one. */
@@ -2033,16 +2028,15 @@ async function rowsForSlot(slot) {
       if (slot.hint) rows = rows.filter(r => slot.hint.test(r.headline));
       if (rows.length < need && slot.gdelt) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
     } else if (slot.type === 'feeds') {
-      /* A genre keeps to the source switches: with the web switched off it reads no web feed. Words the
-         user typed themselves are searched on the web all the same. */
-      const feeds = slot.feeds.filter(f => slot.own || sourceOn(f.source === 'BBC' ? 'bbc' : 'web'));
+      /* A request keeps to the source switches: the web is no source, so only a BBC section is read here. */
+      const feeds = slot.feeds.filter(f => sourceOn(f.source === 'BBC' ? 'bbc' : 'web'));
       const lists = await Promise.all(feeds.map(f => cachedNews(f.url).then(items => {
         const got = rowsFromItems(items, f.source, slot.cat);
         return f.hint ? got.filter(r => f.hint.test(r.headline)) : got;
       }).catch(() => [])));
       rows = mergeRows(weave(lists), []);
-      if (rows.length < need && slot.gdelt && (slot.own || sourceOn('web'))) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
-    } else if (slot.type === 'gdelt' && (slot.own || sourceOn('web'))) {
+      if (rows.length < need && slot.gdelt && sourceOn('web')) rows = mergeRows(rows, await gdeltRows(slot.gdelt, slot.cat, slot.source));
+    } else if (slot.type === 'gdelt' && sourceOn('web')) {
       rows = rowsFromItems(await cachedNews(searchFeed(slot.q)), '', slot.cat);
       if (rows.length < need) rows = mergeRows(rows, await gdeltRows(slot.q, slot.cat, slot.source));
     }
@@ -2274,12 +2268,12 @@ function prepWanted() {
   return true;
 }
 function prepAtHand() {
-  if (!prepWanted() || myMedia().length) return false;
+  if (!prepWanted()) return false;
   if (PREP.items.length || PREP.heads.length) return true;
   try { return !!store.get('prep.news', ''); } catch (e) { return false; }
 }
 const slotGenre = slot => {
-  if (!slot || slot.type !== 'feeds' || slot.own) return '';
+  if (!slot || slot.type !== 'feeds' || slot.words) return '';
   if (slot.gid) return slot.gid;
   const g = GENRES.find(x => x.name.toUpperCase() === String(slot.cat || '').toUpperCase());
   return g ? g.id : '';
@@ -2374,6 +2368,14 @@ function englishFor(list) {
   englishAsking = run.catch(() => {});
   return run;
 }
+/* The line a post adds to its headline, unless it only says the headline again. */
+function extraLine(row) {
+  const d = String(row.detail || '').trim();
+  if (!d) return '';
+  const bare = t => String(t || '').replace(/【[^】]*】/g, '').replace(/[\s、。，．・「」『』（）()！!？?…]/g, '');
+  const a = bare(row.headline), b = bare(d);
+  return !b || a.includes(b) || b.includes(a) || a.slice(0, 12) === b.slice(0, 12) ? '' : d;
+}
 /* A headline from X as the first News videos showed one: the English headline large with the rest of
    it under, the Japanese lines below, tags at the foot. githito.xapi sends the English with the headline.
    englishOnly (Language: English): no Japanese; the lines below are the whole English sentence when the
@@ -2388,7 +2390,7 @@ function bothCard(row, englishOnly) {
     /* The corner: the second thing the news is about, as in the first videos (the paper is at the foot). */
     kw: p.kw, cat: g ? g.name.toUpperCase() : 'NEWS', topic: p.tags.find(t => t !== p.kw) || p.kw,
     head: [p.head], sub: p.sub ? [p.sub] : [],
-    jp: englishOnly ? (p.whole ? [] : [p.text]) : [row.headline, row.detail].filter(Boolean),
+    jp: englishOnly ? (p.whole ? [] : [p.text]) : [row.headline, extraLine(row)].filter(Boolean),
     tags: p.tags, src: ('X @' + String(row.source || '')).slice(0, 40), date: md, url: row.link || '',
   };
 }
@@ -2402,7 +2404,7 @@ function headCard(row, langId) {
   card.kw = newsWord(row.headline, langId === 'en') || card.kw;
   card.cat = cornerGenre(g, langId, 'NEWS', 'ニュース');
   /* Japanese only: the line the post added to its headline goes under it, as on the card with both languages. */
-  if (langId === 'ja' && row.detail && !(card.jp || []).includes(row.detail)) card.jp = (card.jp || []).concat(row.detail);
+  if (langId === 'ja' && extraLine(row) && !(card.jp || []).includes(row.detail)) card.jp = (card.jp || []).concat(row.detail);
   card.topic = row.name || 'X';
   card.tags = [];
   return card;
@@ -2416,8 +2418,9 @@ async function preparedScript(date, slots, room, anyway) {
   /* anyway: every genre, whatever is chosen (asked for when the page's own search failed). */
   const genres = anyway ? GENRES.slice() : genreChoices();
   if (!genres.length) return null;
-  const wants = slots.map(s => ({ gid: slotGenre(s), count: s.count || 1 }));
-  if (wants.some(w => !w.gid)) return null;
+  /* A line of the lineup is a genre, or words to look for in the news from X (an account, a keyword). */
+  const wants = slots.map(s => ({ gid: slotGenre(s), q: slotWords(s), count: s.count || 1 }));
+  if (wants.some(w => !w.gid && !w.q)) return null;
   const prep = await prepared();
   if (!prep.items.length && !prep.heads.length) return null;
   const N = Math.max(1, room || total());
@@ -2472,6 +2475,12 @@ async function preparedScript(date, slots, room, anyway) {
     return got;
   };
   const caps = { source: Math.max(2, Math.ceil(N / 4)), genre: Math.max(2, Math.ceil(N / 3)) };
+  /* What the reader added in Settings (a medium's account, a keyword) plays first, up to half of the
+     video: its headlines in the file, the newest first, what has not played before what has. */
+  const added = wants.length ? [] : myMedia();
+  if (added.length) {
+    takeHeads(sorted(prep.heads.filter(x => (!x.q || askedHead(x)) && !blocked(x.t) && added.some(m => mediaHit(m, x))), x => -ageOf(x.at || x.found)), Math.ceil(N / 2));
+  }
   /* githito.xapi chooses the order, at random, after every collection: replies with headlines among
      them, headlines alone, and one order for each genre. The page only reads it from the top: what has
      not played yet first, then what has. (One reply for a piece of news and nobody twice in a video.) */
@@ -2498,6 +2507,8 @@ async function preparedScript(date, slots, room, anyway) {
     };
     if (wants.length) {
       for (const w of wants) {
+        /* Words that find nothing leave their line out; a genre with nothing stops the video. */
+        if (!w.gid) { read(play.news, w.count, e => !!e.head && wordsHit(w.q, e.head)); continue; }
         if (!read(play.genre[w.gid], w.count)) { if (sourceOn('web')) return null; throw noNewError('No news from X for this genre yet. Press Update again later.'); }
       }
     } else {
@@ -2512,6 +2523,7 @@ async function preparedScript(date, slots, room, anyway) {
   } else if (wants.length) {
     /* Each line of the lineup is a genre: its replies, or its headlines when it has no replies. */
     for (const w of wants) {
+      if (!w.gid) { takeHeads(heads.filter(x => wordsHit(w.q, x)), w.count); continue; }
       const ofGenre = x => (x.g || '') === w.gid;
       let got = withReplies ? takeReplies(replies.filter(x => ofGenre(prep.news[x.n])), w.count) : 0;
       if (got < w.count) got += takeHeads(heads.filter(ofGenre), w.count - got);
@@ -2584,14 +2596,15 @@ async function preparedScript(date, slots, room, anyway) {
   return { date, items: rows.map(r => (r.reply ? replyCard(r, lang.id) : headCard(r, lang.id))), market: country.name + ' · ' + lang.name };
 }
 
-/* ---------- media, websites and keywords the user added ---------- */
-/* X is the page's source. A user can add a medium, a website or a keyword (their own company, say):
-   the page searches the news for it and plays what it finds first, up to half of a video. An added
-   name is searched on the web whatever the source switches say, because it was asked for by name. */
+/* ---------- media and keywords the user added ---------- */
+/* X is the page's source. A user can add a medium or a keyword (their own company, say): it is looked
+   for in the news githito.xapi collected from X, by the account's name and by the words of the headline,
+   and what is found plays first, up to half of a video. Nothing is searched on the web. (A medium
+   githito.xapi does not read yet is added under Accounts and sent to it.) */
 function myMedia() {
   try {
     const list = JSON.parse(store.get('myMedia', '[]'));
-    return (Array.isArray(list) ? list : []).filter(m => m && m.q && ['word', 'site', 'pub'].includes(m.kind)).slice(0, 8);
+    return (Array.isArray(list) ? list : []).filter(m => m && m.q && ['word', 'site', 'pub', 'x'].includes(m.kind)).slice(0, 8);
   } catch (e) { return []; }
 }
 const mediaName = m => m.name || (m.kind === 'pub' ? m.pub : m.q);
@@ -2601,28 +2614,32 @@ function domainOf(text) {
   const m = String(text || '').trim().match(/^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[\/?#].*)?$/i);
   return m ? m[1].toLowerCase().replace(/^www\./, '') : '';
 }
-function mediaFeeds(m) {
-  const e = edition();
-  const q = m.kind === 'site' ? 'site:' + m.q : m.q;
-  const google = 'https://news.google.com/rss/search?q=' + encodeURIComponent(q + ' when:7d') + '&hl=' + encodeURIComponent(e.hl) + '&gl=' + e.gl + '&ceid=' + encodeURIComponent(e.ceid);
-  return [google, bingFeed(q)];
+/* Whether a headline from X belongs to what was added. x: that account. site, pub (added when the web
+   was still searched): the account whose name holds the site's or the medium's name. word: the words in
+   the headline, in the line under it, or in the account's name. */
+const lowText = t => String(t || '').toLowerCase();
+function mediaHit(m, x) {
+  const h = lowText(x.h), n = lowText(x.n);
+  if (m.kind === 'x') return h === lowText(m.q);
+  const q = lowText(m.kind === 'site' ? String(m.q).split('.')[0] : (m.kind === 'pub' ? (m.pub || m.q) : m.q)).trim();
+  /* One letter is too little to look for; one Japanese character (株, 円, 雪) is a word. */
+  if (!q || (q.length < 2 && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(q))) return false;
+  const byName = h === q || n.includes(q) || (q.length >= 4 && h.includes(q));
+  if (m.kind !== 'word') return byName;
+  return byName || lowText(x.t).includes(q) || lowText(x.d).includes(q);
 }
-async function mediaRows(m) {
-  const lists = await Promise.all(mediaFeeds(m).map(u => cachedNews(u).then(items => rowsFromItems(items, '', 'NEWS')).catch(() => [])));
-  let rows = mergeRows(weave(lists), []).filter(r => r.headline && !FOREIGN.test(r.headline) && !(violentHidden() && VIOLENT.test(r.headline)));
-  const low = String(m.q).toLowerCase();
-  /* A medium: its own stories among what was found. A keyword: the stories that name it come first. */
-  if (m.kind === 'pub') rows = rows.filter(r => String(r.source || '').toLowerCase().includes(String(m.pub).toLowerCase()));
-  else if (m.kind === 'word') rows = rows.filter(r => r.headline.toLowerCase().includes(low)).concat(rows.filter(r => !r.headline.toLowerCase().includes(low)));
-  return rows.map(r => ({ ...r, cat: mediaName(m).toUpperCase().slice(0, 16), place: 'top', mine: true }));
+/* What a lineup line that is no genre asks for, as words to look for in the X news: an account
+   ("@name"), the words typed, or "*" for any news from X. '' when the line is something else (a coffee
+   break, a paper from abroad). */
+function slotWords(slot) {
+  if (!slot) return '';
+  if (slot.words) return String(slot.words);
+  if (slot.type !== 'x') return '';
+  if (slot.who) return '@' + slot.who;
+  const q = String(slot.q || '').trim();
+  return q && q !== 'news' && !/^from:/.test(q) ? q : '*';
 }
-async function myMediaRows(need) {
-  const list = myMedia();
-  if (!list.length || need <= 0) return [];
-  const past = seenKeys();
-  const lists = await Promise.all(list.map(m => mediaRows(m).then(rows => rows.filter(r => !isSeen(r, past))).catch(e => { console.warn(e); return []; })));
-  return mergeRows(weave(lists), []).slice(0, need);
-}
+const wordsHit = (q, x) => q === '*' || (q[0] === '@' ? lowText(x.h) === lowText(q.slice(1)) : mediaHit({ kind: 'word', q }, x));
 function paintMedia() {
   const box = $('myMedia');
   if (!box) return;
@@ -2653,33 +2670,41 @@ function addMedia(m) {
   say('Added ' + mediaName(m));
   refreshMarket();
 }
-/* Search for what was typed and show what was found, with a button to add it. */
+/* Look for what was typed in the news from X and show what was found, with a button to add it. */
 async function findMedia() {
   const raw = $('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60);
   const box = $('mediaFound');
   if (!raw) return;
   const site = domainOf(raw);
-  const m = site ? { kind: 'site', q: site, name: site } : { kind: 'word', q: raw, name: raw };
+  const handle = /^[@＠]/.test(raw) && validHandle(cleanHandle(raw)) ? cleanHandle(raw) : '';
+  const m = handle ? { kind: 'x', q: handle, name: '@' + handle } : site ? { kind: 'site', q: site, name: site } : { kind: 'word', q: raw, name: raw };
   box.hidden = false;
   box.textContent = 'Searching…';
-  let rows = [];
-  try { rows = await mediaRows(m); } catch (e) { console.warn(e); }
+  let prep = PREP;
+  try { prep = await prepared(); } catch (e) { console.warn(e); }
   if ($('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60) !== raw) return;
   box.innerHTML = '';
   const line = (text, cls) => { const p = document.createElement('p'); p.className = cls || 'found-line'; p.textContent = text; box.appendChild(p); return p; };
   const button = (text, item) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => addMedia(item); box.appendChild(b); return b; };
-  if (!rows.length) { line('No news found for ' + raw + '. Try other words, or a website such as example.com.'); return; }
-  line('Found ' + rows.length + ' stories');
-  rows.slice(0, 4).forEach(r => line('・' + r.headline + (r.source ? '（' + r.source + '）' : ''), 'found-story'));
+  const asked = new Set(xAccounts().map(n => n.toLowerCase()));
+  const heads = (prep.heads || []).filter(x => (!x.q || asked.has(lowText(x.h))) && !(violentHidden() && VIOLENT.test(x.t)));
+  const when = x => Date.parse(x.at || x.found || 0) || 0;
+  const rows = heads.filter(x => mediaHit(m, x)).sort((a, b) => when(b) - when(a));
+  if (rows.length) {
+    line('Found ' + rows.length + ' stories');
+    rows.slice(0, 4).forEach(x => line('・' + x.t + '（' + (x.n || '@' + x.h) + '）', 'found-story'));
+  } else line('No news from X for ' + raw + ' yet. Added, it plays when there is some.');
   button('Add: ' + mediaName(m), m);
-  if (!site) {
-    /* The media that wrote them: one of them can be added on its own. */
-    const by = {};
-    rows.forEach(r => { const s = String(r.source || '').trim(); if (s && s !== 'News') by[s] = (by[s] || 0) + 1; });
-    const pubs = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 4);
-    if (pubs.length) line('Or one medium only:', 'found-line');
-    pubs.forEach(([name]) => button('Add: ' + name, { kind: 'pub', q: raw, pub: name, name }));
+  if (m.kind !== 'x') {
+    /* The accounts whose name holds what was typed: one of them can be added on its own. */
+    const q = lowText(site ? site.split('.')[0] : raw);
+    const by = new Map();
+    if (q.length >= 2) heads.forEach(x => { if (lowText(x.h).includes(q) || lowText(x.n).includes(q)) by.set(x.h, x.n || x.h); });
+    const accounts = [...by.entries()].slice(0, 4);
+    if (accounts.length) line('Or one account only:', 'found-line');
+    accounts.forEach(([h, n]) => button('Add: ' + n + ' @' + h, { kind: 'x', q: h, name: n }));
   }
+  if (!rows.length) line('A medium githito.xapi does not read yet: add its X account under Accounts below and send it.', 'found-line');
 }
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
@@ -2890,35 +2915,23 @@ async function collect(date) {
   beginCollect();
   const slots = parseLineup(lineupText());
   const N = total();
-  const { country, lang } = market();
-  /* What the user added by name plays first, up to half of the video. */
-  const mine = slots.length ? [] : await myMediaRows(Math.ceil(N / 2)).catch(e => { console.warn(e); return []; });
-  /* Then the prepared file, which plays at once; without it the news is searched as before. */
+  /* The prepared file (the news githito.xapi collected from X), which plays at once. What the reader
+     added in Settings and the words of a lineup are looked for in it too. */
   let script = null;
   let noNew = null;
-  try { script = await preparedScript(date, slots, N - mine.length); }
-  catch (e) { if (e && e.noNew) noNew = e; else console.warn(e); }
+  let failed = null;
+  try { script = await preparedScript(date, slots, N); }
+  catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
+  /* Without it (X switched off, a coffee break or a paper from abroad in the lineup): the page's own search. */
   if (!script && !noNew) {
     try { script = await collectLive(date, slots); }
-    catch (e) {
-      /* The page's own search failed (a lineup or a genre choice sent it to the web, and the web did
-         not answer), or it found nothing and no video is there to keep playing: the news githito.xapi
-         holds plays instead, when X is a source. */
-      const spare = e && e.noNew && S.show ? null : await preparedScript(date, [], N - mine.length, true).catch(() => null);
-      if (spare) { console.warn(e); script = spare; }
-      else if (e && e.noNew && mine.length) noNew = e;
-      else throw e;
-    }
+    catch (e) { if (e && e.noNew) noNew = e; else { console.warn(e); failed = e; } }
   }
-  if (!mine.length) { if (script) return script; throw noNew; }
-  if (lang.id === 'ja') mine.forEach(r => { r._en = r.headline; r._local = r.headline; });
-  else await timed(fillText(mine, lang), 8000).catch(e => console.warn(e));
-  const cards = mine.map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
-  const keys = mine.flatMap(storyKeys);
-  if (!script) { S.pendingKeys = keys; return { date, items: cards, market: country.name + ' · ' + lang.name }; }
-  S.pendingKeys = keys.concat(S.pendingKeys || []);
-  script.items = cards.concat(script.items).slice(0, Math.max(N, cards.length));
-  return script;
+  /* Nothing for what was asked and no video to keep playing, or the search failed: the news
+     githito.xapi holds plays, whatever the lineup and the genres say (when X is a source). */
+  if (!script && (!noNew || !S.show)) script = await preparedScript(date, [], N, true).catch(() => null);
+  if (script) return script;
+  throw noNew || failed || new Error('No news could be read. Press Update again later.');
 }
 /* The search the page makes itself: the lineup's requests, or the front pages. */
 async function collectLive(date, slots) {
@@ -3003,8 +3016,8 @@ async function collectLive(date, slots) {
       try { addItems((await newsRows(url, 'NEWS')).map(it => ({ ...it, source: it.source || (/^[A-Z]+$/.test(label) ? '' : label) }))); } catch (e) { console.warn(e); }
     }
   }
-  /* Still short: GDELT's index of the edition's press, which is slow and often refuses, so it is asked last. */
-  if (!S.again && freshRows().length < total()) {
+  /* Still short: GDELT's index of the edition's press (only with the web as a source, which it no longer is). */
+  if (sourceOn('web') && !S.again && freshRows().length < total()) {
     try {
       const terms = genres.map(g => {
         const text = g.q[country.id] || g.q.US;

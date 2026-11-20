@@ -97,6 +97,15 @@ const PRESETS = {
     zoom: 0.018,
   },
 };
+/* The wide page (PC) has two columns for a card in two languages: the headline on the left (English), the
+   lines in the other language on the right, and no line between them. A card in one language (Japanese
+   only, English only) is one block in the middle of the page: the same letters, stacked, over the whole width. */
+PRESETS.pc.one = {
+  ...PRESETS.pc, layout: 'stack',
+  head: { ...PRESETS.pc.head, maxW: 1560 },
+  sub: { ...PRESETS.pc.sub, maxW: 1560 },
+  jp: { ...PRESETS.pc.jp, maxW: 1600 },
+};
 const TIMING = { fade: 0.2, t1: 23 / 30, t2: 47 / 30, t3: 71 / 30 };
 let P = PRESETS.youtube;
 let W = P.W, H = P.H;
@@ -184,6 +193,8 @@ function breakPoints(s) {
     !(/[0-9A-Za-z]/.test(s[i - 1]) && /[0-9A-Za-z.,]/.test(s[i]))).sort((a, b) => a - b);
 }
 function splitBalanced(s) {
+  if (!s) return [];
+  if (jpWidth(s) <= P.jp.maxW) return [s];
   const pts = breakPoints(s);
   let best = null;
   for (const i of pts) {
@@ -194,7 +205,15 @@ function splitBalanced(s) {
     const score = Math.max(wa, wb) + particle;
     if (!best || score < best.score) best = { score, a, b, wb };
   }
-  if (!best) { const h = Math.ceil(s.length / 2); return [s.slice(0, h), ...splitBalanced(s.slice(h))].filter(Boolean); }
+  if (!best) {
+    /* Nowhere to break (a long run of marks such as ！！！！, of letters or of digits): the line is cut
+       where it is full, a character at a time. (Cutting in halves never ended on such a run.) */
+    const chars = [...s];
+    let n = 1;
+    while (n < chars.length && jpWidth(chars.slice(0, n + 1).join('')) <= P.jp.maxW) n++;
+    const rest = chars.slice(n).join('');
+    return rest ? [chars.slice(0, n).join(''), ...splitBalanced(rest)] : [s];
+  }
   return best.wb > P.jp.maxW ? [best.a, ...splitBalanced(best.b)] : [best.a, best.b];
 }
 
@@ -312,9 +331,20 @@ function layoutStill(it) {
     ruleX: [P.left, P.right], cxHead: P.cx, cxJp: P.left,
   };
 }
+/* Whether a card is in one language: no lines under the headline, or both in the same writing. */
+const HAS_JA = /[\u3040-\u30ff\u4e00-\u9fff]/;
+function oneLanguage(it) {
+  const a = [].concat(it.head && it.head.length ? it.head : [it.kw || ''], it.sub || []).join(' ');
+  const b = (it.jp || []).join(' ');
+  if (!a.trim() || !b.trim()) return true;
+  return HAS_JA.test(a) === HAS_JA.test(b);
+}
+/* The positions a card is laid out with: on the wide page, the middle block for a card in one language. */
+function presetOf(it) { return P.one && oneLanguage(it) ? P.one : P; }
+function inPreset(Q, job) { const keep = P; P = Q; try { return job(); } finally { P = keep; } }
 function layout(it) {
   if (it.still && !(it.jp && it.jp.length)) return layoutStill(it);
-  return layoutAt(it, OPT.jp || 1);
+  return inPreset(presetOf(it), () => layoutAt(it, OPT.jp || 1));
 }
 /* A headline split into n lines. Japanese breaks between words, English between words with spaces. */
 const CJK_HEAD = /[\u3040-\u30ff\u4e00-\u9fff]/;
@@ -352,7 +382,8 @@ function splitHead(text, n) {
 function uniformLayout(items) {
   const avail = P.box.bottom - P.box.top;
   const sizeOf = lines => Math.min(P.head.max[Math.min(lines.length, P.head.max.length) - 1], P.head.maxW / Math.max(...lines.map(headW)));
-  const choices = items.map(it => {
+  const pres = items.map(presetOf);
+  const choices = items.map((it, i) => inPreset(pres[i], () => {
     const text = headText(it) || String(it.kw || 'NEWS');
     const list = [];
     for (let n = 1; n <= 4; n++) {
@@ -361,13 +392,13 @@ function uniformLayout(items) {
       list.push({ lines, size: sizeOf(lines) });
     }
     return list;
-  });
+  }));
   const pick = (list, S) => list.find(c => c.size >= S - 0.5) || list.reduce((a, b) => (b.size > a.size ? b : a));
   const S0 = Math.min(...choices.map(list => Math.max(...list.map(c => c.size))));
   const J0 = OPT.jp || 1;
   let S = S0, J = J0;
   for (let k = 0; k < 120; k++) {
-    const Ls = items.map((it, i) => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); });
+    const Ls = items.map((it, i) => inPreset(pres[i], () => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); }));
     if (Ls.every(L => L.blockH <= avail + 0.5 && (L.jpH || 0) <= avail + 0.5)) { items.forEach((it, i) => { it.L = Ls[i]; }); return; }
     /* The news lines keep their size first. The headline gives way, but stays larger than the news lines;
        past that point both get smaller together. */
@@ -376,7 +407,7 @@ function uniformLayout(items) {
     else if (J > 0.6) { J *= 0.95; S = Math.max(Math.min(S, S0), Math.min(S0, J * P.jp.size * 1.12)); }
     else S *= 0.95;
   }
-  items.forEach(it => { it.L = layoutAt(it, J0); });
+  items.forEach((it, i) => { it.L = inPreset(pres[i], () => layoutAt(it, J0)); });
 }
 /* A note under the text: a line or two in small letters that says what the words above are about
    (on News: which news a reply answers). The text gives it room and stays centred together with it. */
@@ -460,6 +491,7 @@ function layoutCore(it, scale, forced) {
   L.head.forEach(l => l.base += off); L.sub.forEach(l => l.base += off);
   L.rule += off; L.bottom += off;
   if (P.layout === 'columns') {
+    L.columns = true;
     L.cxHead = P.colL.cx; L.ruleX = [P.colL.left, P.colL.right]; L.cxJp = P.colR.cx;
     const line = P.jp.line * jpScale, para = P.jp.para * jpScale, inkH = P.jp.inkH * jpScale;
     const jh = jp.length ? (jp.length - 1) * line + jp.filter(l => l.para).length * (para - line) + inkH : 0;
@@ -645,8 +677,8 @@ function drawItem(ctx, show, i, t, bgs) {
     L.head.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.head.sx, 'center'));
     /* No rules in the middle of the card: only the one under the top line and the one above the foot. */
     L.sub.forEach(l => subLine(ctx, l.t, L.Ss, l.base, L.cxHead));
-    if (L.note && P.layout === 'columns') { ctx.font = font(P.jp.w, L.noteSize, F_SERIF); L.note.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.jp.sx, 'center')); }
-    if (P.layout === 'columns') ctx.fillRect(P.divider - 1, P.box.top + 10, 2, P.box.bottom - P.box.top - 20);
+    if (L.note && L.columns) { ctx.font = font(P.jp.w, L.noteSize, F_SERIF); L.note.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.jp.sx, 'center')); }
+    /* No line between the two columns of the wide page. */
     ctx.fillRect(P.left, P.rule2, P.right - P.left, P.rule);
     ctx.font = font(P.foot.w, P.foot.size, F_SERIF);
     textX(ctx, it.foot, P.left, P.foot.base, P.foot.sx, 'left');
@@ -657,7 +689,7 @@ function drawItem(ctx, show, i, t, bgs) {
     ctx.globalAlpha = a2 * a1;
     ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
     L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
-    if (L.note && P.layout !== 'columns') {
+    if (L.note && !L.columns) {
       ctx.globalAlpha = a2 * a1 * 0.92;
       ctx.font = font(P.jp.w, L.noteSize, F_SERIF);
       L.note.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.jp.sx, 'center'));

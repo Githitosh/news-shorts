@@ -717,7 +717,6 @@ const RELAYS = {
 function relayOrder(site) {
   /* allorigins cannot read Google News and takes ten seconds to say so. */
   if (/news\.google\.com$/.test(site)) return ['rss2json', 'jina'];
-  if (/news\.yahoo\.co\.jp$/.test(site)) return ['allorigins', 'jina'];
   if (/bing\.com$/.test(site)) return ['allorigins', 'rss2json'];
   return ['allorigins', 'jina', 'rss2json'];
 }
@@ -773,9 +772,7 @@ function bingFeed(query) {
   const e = edition();
   return 'https://www.bing.com/news/search?q=' + encodeURIComponent(query) + '&format=rss&setlang=' + (e.hl === 'ja' ? 'ja' : 'en-US') + '&cc=' + e.gl;
 }
-const yahooFeed = name => 'https://news.yahoo.co.jp/rss/topics/' + name + '.xml';
-const yahooOn = () => { const e = edition(); return e.gl === 'JP' && e.hl === 'ja' && !pastDay(); };
-const YAHOO_TOPIC = { politics: 'domestic', science: 'science', entertainment: 'entertainment', sports: 'sports', local: 'local' };
+/* No Japanese medium is read by RSS (Yahoo! News' topic feeds used to be read here). */
 function weave(lists) {
   const out = [];
   const n = Math.max(0, ...lists.map(l => l.length));
@@ -936,10 +933,6 @@ async function rowsForSlot(slot) {
     } else if (slot.type === 'gdelt') {
       rows = await searchRows(slot.q, slot.cat);
       if (rows.length < (slot.count || 1)) rows = mergeRows(rows, await gdeltRows(slot.q, slot.cat, slot.source));
-    }
-    if (slot.gid && yahooOn() && YAHOO_TOPIC[slot.gid]) {
-      const own = rowsFromItems(await cachedNews(yahooFeed(YAHOO_TOPIC[slot.gid])), 'Yahoo!ニュース', slot.cat);
-      rows = mergeRows(weave([own, rows]), []);
     }
   } catch (e) { console.warn(e); }
   return rows.filter(allowedRow);
