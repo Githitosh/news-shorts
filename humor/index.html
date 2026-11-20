@@ -181,7 +181,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     <button type="button" id="addX">Add</button>
   </div>
   <div id="xAccounts" class="music"></div>
-  <p class="note" id="askedNote"></p>
   <p class="music-label">Items</p>
   <div class="music" id="counts"></div>
   <p class="music-label">Story length</p>
@@ -4676,9 +4675,9 @@ async function prepared(lang) {
 }
 /* ---------- the accounts the reader added: their posts and the replies under them ---------- */
 /* githito.xapi collects these for the accounts sent to it and keeps them in its news file: `news` (the
-   account's post) and `items` (an earnest reply to it). Reply News plays them as pairs, the post and then
-   the reply, first in a video and up to a quarter of its cards as pairs (half of a video with News' share).
-   The file is read only when the reader has added an account. */
+   account's post) and `items` (an earnest reply to it). Reply News plays the replies alone, a card each,
+   first in a video and up to half of it: not the account's own posts, which would make the page read like
+   News. The file is read only when the reader has added an account. */
 let ASKED = { at: 0, items: [], news: {}, asked: [] };
 async function askedData() {
   if (ASKED.at && Date.now() - ASKED.at < 600000) return ASKED;
@@ -4848,6 +4847,9 @@ function romanceCards(r, langId) {
     card.key = r.keys;
     return card;
   };
+  /* An account the reader added: the reply alone. With the account's own post in front the page would read
+     like News; the line at the foot says whom the reply answers. */
+  if (r.asked) return [one(st.b.text, 'X @' + st.b.handle + ' → @' + st.a.handle, st.b.url)];
   return [
     one(st.a.text, 'X @' + st.a.handle, st.a.url),
     one(st.b.text, 'X @' + st.b.handle + ' → @' + st.a.handle, st.b.url),
@@ -5089,13 +5091,22 @@ async function collect() {
   /* The video is made of the stories githito.xapi prepared, whatever the lineup says: the page searches
      nothing itself (X is not asked from here), so it starts at once. With nothing prepared it says so. */
   {
-    /* The accounts the reader added come first: their posts with a reply under each. */
-    const mine = await askedRows(Math.max(1, Math.floor(N / 4))).catch(e => { console.warn(e); return []; });
-    const rows = mine.concat(await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; }));
+    /* The accounts the reader added come first: the replies to their posts, a card each, up to half of
+       the video. The stories fill the rest (two cards each). */
+    const mine = await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
+    const more = await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
+    const rows = mine.concat(more);
     if (S.again || !rows.length) return null;
     if (lang.id === 'en') await englishStories(rows);
-    const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
-    return { date: chosenDate(), items, market: country.name + ' · ' + lang.name, played: { news: [], jokes: rows.flatMap(r => r.keys) } };
+    /* Only what fits in the video counts as played. */
+    const items = [];
+    const shown = [];
+    for (const r of rows) {
+      if (items.length >= N) break;
+      items.push(...romanceCards(r, lang.id));
+      shown.push(r);
+    }
+    return { date: chosenDate(), items: items.slice(0, N), market: country.name + ' · ' + lang.name, played: { news: [], jokes: shown.flatMap(r => r.keys) } };
   }
   const SPECIAL = new Set(['jokes', 'romance', 'travel']);
   const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
@@ -6194,7 +6205,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'b6f3ddb4afc9';
+  const BUILD = '2bac6f5af535';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

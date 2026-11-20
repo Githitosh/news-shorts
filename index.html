@@ -169,7 +169,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <button type="button" id="addX">Add</button>
     </div>
     <div id="xAccounts" class="music"></div>
-    <p class="note" id="askedNote"></p>
     <p class="music-label">Items</p>
     <div class="music" id="counts"></div>
     <p class="music-label">Story length</p>
@@ -6911,7 +6910,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '6c6aa52630cd';
+  const BUILD = '6f802ffcd4ec';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

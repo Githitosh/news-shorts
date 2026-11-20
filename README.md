@@ -77,7 +77,7 @@ in about a second and Update answers at once.
   githito.xapi sends each headline's English with it (and one more line of the post when there is one);
   for a headline that has none yet the page asks for the translation itself, and without it the card is
   Japanese only.
-- **Replies only for the accounts added under the video** (Accounts with replies and comments: the field and Add are on the main screen, under the video, on News and on Reply News, and the list is one for the two pages. Add alone sends the list to githito.xapi: GitHub opens with the request written, and Submit there sends it; there is no separate send button. On Reply News an added account's posts play first, each with an earnest reply under it, marked リプライ in the corner): up to half of
+- **Replies only for the accounts added under the video** (Accounts with replies and comments: the field and Add are on the main screen, under the video, on News and on Reply News, and the list is one for the two pages. Add alone sends the list to githito.xapi: GitHub opens with the request written, and Submit there sends it; there is no separate send button. On Reply News only the replies to an added account's posts play, a card each, first in a video and up to half of it, marked リプライ in the corner; the account's own posts do not play there, which would make the page read like News. No line of small print sits under the accounts on either page): up to half of
   a video is their posts and the earnest replies under them, a small line under each reply saying which
   post it answers. githito.xapi reads replies only for the accounts sent to it, and keeps only earnest
   ones (no insults, blame, mockery, politics or grave news). A post of an account that is not a news
