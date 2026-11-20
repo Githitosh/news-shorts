@@ -1445,11 +1445,14 @@ const LONG = { ja: 60, en: 180 };
 /* Talk about alcohol is not played (githito.xapi leaves it out too: filters.mjs there). 酒井, 酒田 are names;
    car and sea sickness are no drinking. */
 const ALCOHOL = /お酒|酒(?![井田])|飲酒|禁酒|晩酌|泥酔|酔っ|酔い|酔う|酔え|二日酔|ほろ酔|ほろよい|呑[みむまん]|飲み会|飲みに|飲み過ぎ|飲みすぎ|飲んだくれ|宅飲み|家飲み|居酒屋|酒場|乾杯|カンパイ|かんぱい|ビール|ビア|ワイン|日本酒|焼酎|ハイボール|チューハイ|酎ハイ|サワー|カクテル|ウイスキー|ウィスキー|ウォッカ|テキーラ|シャンパン|梅酒|生中|ストゼロ|アルコール|酒豪|ベロンベロン|🍺|🍻|🥂|🍷|🍸|🍹|🥃|🍶|\b(?:beers?|wine|drunk|alcohol|whiske?y|vodka|tequila|cocktails?|hangover|tipsy|booze|sake)\b/i;
-const drinking = t => ALCOHOL.test(String(t || '').replace(/(?:車|船|乗り物)酔い/g, ''));
+/* Talk about smoking, its words and its emoji: the page is read by the young too (filters.mjs in githito.xapi). */
+const TOBACCO = /タバコ|たばこ|煙草|喫煙|禁煙|分煙|加熱式|アイコス|IQOS|ベイプ|VAPE|ヤニ(?!ヤ)|一服|紫煙|吸い殻|吸殻|灰皿|葉巻|シガー|シーシャ|ニコチン|スモーカー|🚬|\b(?:cigarettes?|cigars?|smok(?:e|es|ed|ing)|vap(?:e|es|ing)|nicotine|tobacco|juul)\b/i;
+/* Alcohol and smoking are left out. */
+const notForMinors = t => ALCOHOL.test(String(t || '').replace(/(?:車|船|乗り物)酔い/g, '')) || TOBACCO.test(String(t || ''));
 const UNSAFE_ROMANCE = /浮気|不倫|別れ|離婚|ブロック|死ね|殺|嫌い|最低|ストーカー|cheat|divorce|break ?up|hate you/i;
 function romanceText(st, lang) {
   const text = postText(st);
-  if (!text || NEVER.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || drinking(text) || heavy(text) || minorAccount(st)) return '';
+  if (!text || NEVER.test(text) || VIOLENT.test(text) || UNSAFE_ROMANCE.test(text) || notForMinors(text) || heavy(text) || minorAccount(st)) return '';
   /* Suggestive couple talk plays only with Hide sensitive posts off, and never next to children or school life. */
   if (suggestive(text, st) && (sensitiveHidden() || CHILD.test(text) || YOUTH.test(text))) return '';
   if (lang === 'en') {
@@ -1696,7 +1699,7 @@ async function stockRows(N) {
   if (!st.videos.length) return null;
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
-  const okText = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !drinking(t) && !(sensitiveHidden() && suggestive(t));
+  const okText = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !notForMinors(t) && !(sensitiveHidden() && suggestive(t));
   const seenMsg = x => msgKeys(x).some(k => past.has(k));
   const rows = [];
   const people = new Set();
@@ -1760,7 +1763,7 @@ async function askedRows(need) {
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
   const keysOf = x => ['id:' + x.id, 't:' + squash(x.t).slice(0, 50)];
-  const ok = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !drinking(t);
+  const ok = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !notForMinors(t);
   const list = d.items.filter(x => mine.has(String(d.news[x.n].h).toLowerCase()) && ok(x.t) && ok(d.news[x.n].t) && !keysOf(x).some(k => now.has(k)))
     .sort((x, y) => (Date.parse(y.at || 0) || 0) - (Date.parse(x.at || 0) || 0));
   const rows = [];
@@ -1791,7 +1794,7 @@ async function preparedRows(need) {
   const now = playingKeys();
   const keysOf = s => [s.a, s.b].flatMap(m => ['id:' + m.id, 't:' + squash(m.text).slice(0, 50)]);
   /* The page's own rules hold for what was prepared too. */
-  const ok = s => [s.a.text, s.b.text].every(t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !drinking(t) && !(sensitiveHidden() && suggestive(t)));
+  const ok = s => [s.a.text, s.b.text].every(t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t) && !UNSAFE_ROMANCE.test(t) && !notForMinors(t) && !(sensitiveHidden() && suggestive(t)));
   const pool = all.filter(s => ok(s) && !keysOf(s).some(k => now.has(k)));
   const rank = list => list.map(s => [(Number(s.score) || 0) + Math.random() * 8, s]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
   const unseen = rank(pool.filter(s => !keysOf(s).some(k => past.has(k))));
