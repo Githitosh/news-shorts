@@ -5518,9 +5518,11 @@ async function preparedScript(date, slots, room, anyway) {
        translated now, which takes a moment. */
     const known = englishKept();
     rows.forEach(r => { const e = !r.reply && (r.en || known[r.link]); if (e) r._en = e; });
-    await fillText(rows, lang);
+    /* A translator that does not answer does not hold the video back: after eight seconds the cards are
+       made with what there is. */
+    await timed(fillText(rows, lang), 8000).catch(e => console.warn(e));
     const rr = rows.filter(r => r.reply);
-    try { (await translateMany(rr.map(r => r.reply.news), 'en')).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
+    if (rr.length) try { (await timed(translateMany(rr.map(r => r.reply.news), 'en'), 5000)).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
   }
   return { date, items: rows.map(r => (r.reply ? replyCard(r, lang.id) : headCard(r, lang.id))), market: country.name + ' · ' + lang.name };
 }
@@ -5853,7 +5855,7 @@ async function collect(date) {
   }
   if (!mine.length) { if (script) return script; throw noNew; }
   if (lang.id === 'ja') mine.forEach(r => { r._en = r.headline; r._local = r.headline; });
-  else await fillText(mine, lang);
+  else await timed(fillText(mine, lang), 8000).catch(e => console.warn(e));
   const cards = mine.map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
   const keys = mine.flatMap(storyKeys);
   if (!script) { S.pendingKeys = keys; return { date, items: cards, market: country.name + ' · ' + lang.name }; }
@@ -6183,6 +6185,7 @@ function previewLabel() {
   const title = names.length ? frame + '\n' + names.map(n => '@' + n).join('\n') : frame;
   return { title, say: 'Reading ' + frame };
 }
+let waitCard = 0;
 async function runAll(opts) {
   opts = opts || {};
   if (S.busy) {
@@ -6195,13 +6198,17 @@ async function runAll(opts) {
   S.busy = true; S.grew = false; S.pendingKeys = null; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
-    /* With the prepared replies at hand the new video is there in a moment: no waiting card. */
-    if (!prepAtHand()) showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
+    /* Before a video shows, the card says SEARCHING News. With the prepared news at hand the new video is
+       usually there at once, so after a video the card comes only when the next one takes more than half
+       a second (no flash of it between two videos). */
+    clearTimeout(waitCard);
+    if (!prepAtHand() || !S.show) showWaiting(feedMode() === 'x' ? 'X posts' : 'News', []);
+    else waitCard = setTimeout(() => { if (S.busy && !S.playing) showWaiting('News', []); }, 500);
     say(feedMode() === 'x' ? 'Searching X' : 'Searching the news');
   }
   try {
     const date = opts.date || $('date').value || todayJST();
-    const script = opts.sample ? { ...SAMPLE } : await collect(date);
+    const script = opts.sample ? { ...SAMPLE } : await collect(date).finally(() => clearTimeout(waitCard));
     progress(0.7);
     if (S.again) {
       /* A newer update is waiting. Keep that search on screen. */
@@ -6684,7 +6691,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '1c90b07027c0';
+  const BUILD = '83ed93d5f61a';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
@@ -6729,10 +6736,8 @@ window.NS = {
       say('Searching the news');
     }
     await loadAssets();
-    if (!S.script) {
-      const preview = parseLineup(lineupText());
-      showWaiting('Comments', []);
-    }
+    /* Before the first video the card says SEARCHING News (drawn again, now over the picture). */
+    if (!S.script) showWaiting('News', []);
     window.NS.ready = true;
     if (Q.get('auto') === '1') {
       $('autoExport').checked = true;

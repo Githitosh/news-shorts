@@ -51,6 +51,10 @@ again and again, with this page's own address as the link.) The page's own words
 playing, the news githito.xapi holds plays instead. The sample never plays in the place of the news: when no
 news can be read at all, the page says so and tries again every quarter of a minute.
 
+Before a video shows, the picture says **SEARCHING News**: on opening the page until the first video, and
+after Update or at the end of a video when the next one takes more than half a second. A translator that
+does not answer holds a video back eight seconds at most.
+
 ## Where the news comes from
 
 **In Japan the News page's source is X.** [githito.xapi](https://github.com/Githitosh/githito.xapi) collects it
