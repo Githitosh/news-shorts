@@ -335,7 +335,8 @@ const TRACKS = [
 ];
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size (as on Humor). */
 /* lang: the date line at the top is in the chosen language only. */
-const LOOK = { uniform: true, jp: 2, get lang() { return wordsLang(); } };
+/* same: with one language on the cards (Japanese, English) a card's two parts are written the same size. */
+const LOOK = { uniform: true, jp: 2, get lang() { return wordsLang(); }, get same() { return ((document.getElementById('lang') || {}).value || '') !== 'both'; } };
 const S = { script: null, show: null, format: 'x', bgs: {}, music: null, aac: null, ac: null, abuf: null, playing: false, outs: [], busy: false, grew: false, audioOn: false, audioFailed: false, audioPending: false, audioGen: 0, origin: 0, t0perf: 0, raf: 0, pseudo: false, vfull: false, fv: null, lastDraw: 0, pendingKeys: null };
 const ctx = $('cv').getContext('2d');
 
@@ -1823,7 +1824,12 @@ function storyFrom(raw, english, local, langId) {
   const jaText = loc || en;
   const useJa = langId !== 'en' && /[\u3040-\u30ff\u4e00-\u9fff]/.test(jaText);
   if (useJa) {
-    const parts = largeJa(jaText);
+    /* The headline in two parts, cut where the sentence turns (E.cutJa): the first shows on the card's
+       second beat, the second on its third. (It used to be cut after forty characters, in mid-word.) */
+    /* One language: a headline too short to turn anywhere is cut all the same (force), so the third beat
+       always has words of its own and is not the second beat again. */
+    const cut = E.cutJa(jaText, langId !== 'both');
+    const parts = { head: [cut[0]], rest: cut[1] };
     const kw = jaWord(jaText);
     const body = [];
     if (parts.rest) body.push(parts.rest);
@@ -1849,7 +1855,8 @@ function storyFrom(raw, english, local, langId) {
       head: parts.head.length ? parts.head : [kw],
       sub: [],
       jp: body,
-      tags: [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3),
+      /* No small words at the foot of a card in one language. */
+      tags: langId === 'both' ? [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3) : [],
       src,
       date: md,
       url: raw.link || '',
@@ -1857,11 +1864,17 @@ function storyFrom(raw, english, local, langId) {
   }
   const kw = storyWord(en, loc);
   const words = (en || loc || kw).split(/\s+/).filter(Boolean);
-  const head = [words.slice(0, 12).join(' ') || kw];
-  const sub = words.length > 12 ? [words.slice(12, 22).join(' ')] : [];
+  let head = [words.slice(0, 12).join(' ') || kw];
+  let sub = words.length > 12 ? [words.slice(12, 22).join(' ')] : [];
   let jp;
-  if (langId === 'en') jp = en ? [en] : [];
-  else if (langId === 'ja') jp = [loc || en].filter(Boolean);
+  if (langId !== 'both') {
+    /* One language: the headline in two parts (E.cutEn), the first on the card's second beat and the
+       second on its third; nothing is written twice and nothing small is added. */
+    const cut = E.cutEn(en || loc || kw, true);
+    head = [cut[0] || kw];
+    sub = [];
+    jp = cut[1] ? [cut[1].toUpperCase()] : [];
+  }
   else {
     const ja = loc || en;
     jp = ja ? [ja] : [];
@@ -1877,8 +1890,9 @@ function storyFrom(raw, english, local, langId) {
     kw, cat: raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, topic: kw,
     head: head.length ? head : [kw],
     sub,
-    jp: jp.length ? jp : [kw],
-    tags: [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3),
+    /* One language: a headline too short to cut is written once, and nothing small stands at the foot. */
+    jp: jp.length || langId !== 'both' ? jp : [kw],
+    tags: langId === 'both' ? [raw.cat && raw.cat !== 'NEWS' ? raw.cat : kw, kw].filter((v, i, a) => a.indexOf(v) === i).slice(0, 3) : [],
     src: (raw.x ? ('X @' + String(raw.source || 'X').replace(/^X\s*@/, '')) : ('WEB ' + (raw.source || 'News'))).slice(0, 40),
     date: md,
     url: raw.link || '',
@@ -2405,22 +2419,37 @@ function englishParts(en) {
   return { kw, head: head || kw, sub, tags, text, whole: m >= words.length };
 }
 /* The English of headlines, kept in the browser (the newest 800), so a headline is asked for once. */
-function englishKept() { try { return JSON.parse(store.get('news.en', '{}')) || {}; } catch (e) { return {}; } }
+function englishKept(name) { try { return JSON.parse(store.get(name || 'news.en', '{}')) || {}; } catch (e) { return {}; } }
+/* The two parts of a headline, as its card shows them: cut where the sentence turns, or, when it does not
+   turn anywhere, the headline and the line the post added to it. Otherwise the headline alone (its English
+   is then cut as English is). */
+function twoJapanese(row) {
+  const cut = E.cutJa(row.headline);
+  const more = cut[1] || extraLine(row);
+  return more ? [cut[0], more] : [cut[0]];
+}
+/* The English of a headline asked for in two lines (news.en2): the whole of it, and its two parts when
+   the translator answered in two lines. */
+function twoEnglish(row, text) {
+  const lines = String(text || '').split('\n').map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  row._en = lines.join(' ');
+  row._enParts = lines.length === 2 ? lines : null;
+}
 let englishAsking = Promise.resolve();
-function englishFor(list) {
+function englishFor(list, name) {
   /* One request after another, five headlines each; what is already kept is not asked again. */
   const run = englishAsking.then(async () => {
-    const kept = englishKept();
+    const kept = englishKept(name);
     const todo = list.filter(x => x && x.key && x.text && !kept[x.key]);
     for (let i = 0; i < todo.length; i += 5) {
       const slice = todo.slice(i, i + 5);
       let got = [];
-      try { got = await translateMany(slice.map(x => x.text.replace(/【[^】]*】/g, ' ').trim() || x.text), 'en'); } catch (e) { console.warn(e); break; }
+      try { got = await translateMany(slice.map(x => x.text.replace(/【[^】]*】/g, ' ').replace(/[ \t]+/g, ' ').trim() || x.text), 'en'); } catch (e) { console.warn(e); break; }
       slice.forEach((x, k) => { const t = String(got[k] || '').trim(); if (t && /[A-Za-z]{3}/.test(t) && !/[\u3040-\u30ff]/.test(t)) kept[x.key] = t; });
     }
     const keys = Object.keys(kept);
     if (keys.length > 800) keys.slice(0, keys.length - 800).forEach(k => { delete kept[k]; });
-    try { store.set('news.en', JSON.stringify(kept)); } catch (e) {}
+    try { store.set(name || 'news.en', JSON.stringify(kept)); } catch (e) {}
     return kept;
   });
   englishAsking = run.catch(() => {});
@@ -2440,6 +2469,11 @@ function extraLine(row) {
    large lines had to cut it. */
 function bothCard(row, englishOnly) {
   const p = englishParts(row.en);
+  /* English only: the headline in two parts (E.cutEn), in the same capitals, the first on the card's
+     second beat and the second on its third. No line under the headline and no tags: nothing small. */
+  const tidy = t => String(t || '').replace(/^\s*(?:[\[(【][^\])】]{0,28}[\])】]\s*)+/, '').replace(/[“”"`]|''/g, '').replace(/[\[\]【】]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s,:;.\-–—]+|[\s,:;\-–—]+$/g, '').trim();
+  const two = englishOnly && row._enParts ? row._enParts.map(tidy) : null;
+  const cut = englishOnly ? (two && two[0] && two[1] ? two : E.cutEn(p.text, true)) : null;
   const g = GENRES.find(x => x.id === row.genre);
   let md = '';
   const d = new Date(String(row.pubDate || ''));
@@ -2447,9 +2481,9 @@ function bothCard(row, englishOnly) {
   return {
     /* The corner: the second thing the news is about, as in the first videos (the paper is at the foot). */
     kw: p.kw, cat: g ? g.name.toUpperCase() : 'NEWS', topic: p.tags.find(t => t !== p.kw) || p.kw,
-    head: [p.head], sub: p.sub ? [p.sub] : [],
-    jp: englishOnly ? (p.whole ? [] : [p.text]) : [row.headline, extraLine(row)].filter(Boolean),
-    tags: p.tags, src: ('X @' + String(row.source || '')).slice(0, 40), date: md, url: row.link || '',
+    head: cut ? [cut[0].toUpperCase()] : [p.head], sub: cut ? [] : (p.sub ? [p.sub] : []),
+    jp: cut ? (cut[1] ? [cut[1].toUpperCase()] : []) : [row.headline, extraLine(row)].filter(Boolean),
+    tags: cut ? [] : p.tags, src: ('X @' + String(row.source || '')).slice(0, 40), date: md, url: row.link || '',
   };
 }
 /* A headline from X becomes a card of its own: no reply, the corner names the paper. */
@@ -2457,12 +2491,13 @@ function headCard(row, langId) {
   if (langId === 'both' && row.en) return bothCard(row);
   /* English: the translated headline, and nothing Japanese on the card. */
   if (langId === 'en' && row._en && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(row._en)) return bothCard({ ...row, en: row._en }, true);
+  /* (bothCard reads row._enParts: the English of the headline's two parts.) */
   const card = storyFrom(row, row._en || row.headline, row._local || row.headline, langId);
   const g = GENRES.find(x => x.id === row.genre);
   card.kw = newsWord(row.headline, langId === 'en') || card.kw;
   card.cat = cornerGenre(g, langId, 'NEWS', 'ニュース');
   /* Japanese only: the line the post added to its headline goes under it, as on the card with both languages. */
-  if (langId === 'ja' && extraLine(row) && !(card.jp || []).includes(row.detail)) card.jp = (card.jp || []).concat(row.detail);
+  if (langId === 'ja' && extraLine(row) && !E.cutJa(row.headline)[1]) { card.head = [E.cutJa(row.headline)[0]]; card.jp = [row.detail]; }
   card.topic = row.name || 'X';
   card.tags = [];
   return card;
@@ -2617,7 +2652,7 @@ async function preparedScript(date, slots, room, anyway) {
       return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
     }
     const x = p.head;
-    return { headline: String(x.t).replace(/^【([^【】]+)】$/, '$1'), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '', en: x.e || '', detail: x.d || '' };
+    return { headline: E.wholeLine(String(x.t).replace(/^【([^【】]+)】$/, '$1')), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '', en: x.e || '', detail: x.d || '' };
   });
   S.pendingKeys = rows.flatMap(storyKeys);
   if (lang.id === 'ja') {
@@ -2643,10 +2678,15 @@ async function preparedScript(date, slots, room, anyway) {
   else {
     /* English only: the English githito.xapi sent or an earlier video asked for is used; the rest is
        translated now, which takes a moment. */
-    const known = englishKept();
-    rows.forEach(r => { const e = !r.reply && (r.en || known[r.link]); if (e) r._en = e; });
+    /* A headline is translated in the two parts its card shows (E.cutJa), a line each, so each part of the
+       English says what that part of the Japanese says. Kept in the browser like the other English. */
+    const known = englishKept('news.en2');
+    const heads = rows.filter(r => !r.reply);
+    heads.forEach(r => { if (known[r.link]) twoEnglish(r, known[r.link]); else if (r.en) r._en = r.en; });
+    const ask = heads.filter(r => !r._en && /[\u3040-\u30ff\u4e00-\u9fff]/.test(r.headline));
     /* A translator that does not answer does not hold the video back: after eight seconds the cards are
        made with what there is. */
+    if (ask.length) await timed(englishFor(ask.map(r => ({ key: r.link, text: twoJapanese(r).join('\n') })), 'news.en2'), 8000).then(got => ask.forEach(r => { if (got[r.link]) twoEnglish(r, got[r.link]); })).catch(e => console.warn(e));
     await timed(fillText(rows, lang), 8000).catch(e => console.warn(e));
     const rr = rows.filter(r => r.reply);
     if (rr.length) try { (await timed(translateMany(rr.map(r => r.reply.news), 'en'), 5000)).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }
@@ -3593,7 +3633,8 @@ function initUI() {
     };
     musicBox.appendChild(b);
   });
-  const requested = Q.get('music') || store.get('music', TRACKS[0].id);
+  /* The page opens with Music 1. Another song chosen here plays until the page is closed. */
+  const requested = Q.get('music') || TRACKS[0].id;
   useTrack(TRACKS.some(t => t.id === requested) ? requested : TRACKS[0].id);
   const wallBox = $('walls');
   WALLS.forEach(w => {
@@ -3820,20 +3861,28 @@ function keepInitTail() {
     play().catch(e => say(e.message, true));
     playSound(currentT());
   };
-  /* A tap or click on the picture pauses the video, and plays it again: the same as the Play button. */
-  $('cv').addEventListener('click', () => { if (S.show && !$('play').disabled) $('play').onclick(); });
-  $('sound').onclick = () => toggleMusic();
-  paintMusic();
-  /* With the music on, it starts at the first tap anywhere on the page: a browser allows sound only after one. */
-  let askedSound = 0;
+  /* With the music on and not heard yet (a browser lets a page make sound only after a tap), the first tap
+     starts it, wherever it lands. On the Music button that tap does not switch the music off, and on the
+     picture it does not pause: it only starts the sound. If the browser still refuses, the next tap is an
+     ordinary one. (Pause is always pause, and Play starts the music itself.) */
+  let soundTaps = 0, soundAsked = -1e9, soundTap = -1e9;
   const firstTap = e => {
     if (S.mute || S.audioOn || !S.show || !S.playing) return;
-    /* Not on the picture either: a tap there pauses, and the next one plays with the music. */
-    if (e.target && e.target.closest && e.target.closest('#sound, #play, #cv')) return;
-    if (performance.now() - askedSound < 500) return;
-    askedSound = performance.now();
+    const at = e.target && e.target.closest ? e.target.closest('#sound, #cv, #play') : null;
+    if (at && at.id === 'play') return;
+    const now = performance.now();
+    /* pointerup, touchend and click belong to one tap; the sound is asked for in each (which of them a
+       browser takes as the tap differs). */
+    if (now - soundAsked > 700) soundTaps++;
+    soundAsked = now;
     playSound();
+    if (at && soundTaps === 1) soundTap = now;
   };
+  const soundTapNow = () => performance.now() - soundTap < 700;
+  /* A tap or click on the picture pauses the video, and plays it again: the same as the Play button. */
+  $('cv').addEventListener('click', () => { if (soundTapNow()) return; if (S.show && !$('play').disabled) $('play').onclick(); });
+  $('sound').onclick = () => { if (!soundTapNow()) toggleMusic(); };
+  paintMusic();
   ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, firstTap, true));
   /* The page stays where it is: there is no pull down to refresh. Update makes a new video. */
   /* Full screen. */

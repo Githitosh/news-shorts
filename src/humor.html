@@ -297,7 +297,8 @@ const COUNTS = [5, 10, 20];
 const MAX_ITEMS = 24;
 /* Every card in a video gets the same headline size, and the Japanese lines below it are twice the usual size. */
 /* lang: the date line at the top is in the chosen language only. */
-const LOOK = { uniform: true, jp: 2, get lang() { const el = document.getElementById('lang'); return el && el.value === 'en' ? 'en' : 'ja'; } };
+/* same: these cards are always in one language, so a card's two parts are written the same size. */
+const LOOK = { uniform: true, jp: 2, same: true, get lang() { const el = document.getElementById('lang'); return el && el.value === 'en' ? 'en' : 'ja'; } };
 
 /* ---------- the same choices as the News page ---------- */
 const FORMATS = { x: 'Phone', youtube: 'YouTube', pc: 'PC' };
@@ -1766,6 +1767,8 @@ async function preparedRows(need) {
    only: the words of a story are put into English first (englishStories), and a card whose words could
    not be translated stays as it was written. */
 const EN_KEPT = new Map();
+/* The English of the two parts a card shows (E.cutJa), when the translator answered a line for each. */
+const EN_PARTS = new Map();
 async function englishStories(rows) {
   const texts = [];
   rows.forEach(r => {
@@ -1774,8 +1777,16 @@ async function englishStories(rows) {
   });
   if (!texts.length) return;
   try {
-    const got = await Promise.race([translateMany(texts, 'en'), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
-    texts.forEach((t, i) => { const e = String(got[i] || '').replace(/\s+/g, ' ').trim(); if (e && e !== t && !/[\u3040-\u30ff]/.test(e)) EN_KEPT.set(t, e); });
+    /* What was said is translated in the two parts its card shows, a line each, so each part of the English
+       says what that part of the Japanese says. */
+    const got = await Promise.race([translateMany(texts.map(t => E.cutJa(t).filter(Boolean).join('\n')), 'en'), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]);
+    texts.forEach((t, i) => {
+      const lines = String(got[i] || '').split('\n').map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      const e = lines.join(' ');
+      if (!e || e === t || CJK.test(e)) return;
+      EN_KEPT.set(t, e);
+      if (lines.length === 2) EN_PARTS.set(t, lines);
+    });
   } catch (e) { console.warn(e); }
 }
 function romanceCards(r, langId) {
@@ -1789,13 +1800,17 @@ function romanceCards(r, langId) {
     const text = en ? (EN_KEPT.get(said) || said) : said;
     let card;
     if (ja && CJK.test(text) && !en) {
-      const parts = largeJa(text);
+      /* What was said, in two parts cut where the sentence turns (E.cutJa): the first on the card's second
+         beat, the second on its third. (It used to be cut after forty characters, in mid-word.) */
+      /* Words too short to turn anywhere are cut all the same (force): the third beat always has words of
+         its own and is not the second beat again. */
+      const cut = E.cutJa(text, true);
       const kw = jaWord(text);
-      card = { kw, cat: corner, topic: '', head: parts.head, sub: [], jp: parts.rest ? [parts.rest] : [], tags: [], src };
+      card = { kw, cat: corner, topic: '', head: [cut[0]], sub: [], jp: cut[1] ? [cut[1]] : [], tags: [], src };
     } else {
-      const words = String(text).split(/\s+/).filter(Boolean);
+      const cut = (en && EN_PARTS.get(said)) || E.cutEn(String(text).replace(/\s+/g, ' ').trim(), true);
       const kw = storyWord(text, '');
-      card = { kw, cat: r.asked ? 'REPLY' : 'ROMANCE', topic: corner, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
+      card = { kw, cat: r.asked ? 'REPLY' : 'ROMANCE', topic: corner, head: [cut[0] || kw], sub: [], jp: cut[1] ? [cut[1].toUpperCase()] : [], tags: [], src };
     }
     card.url = url || '';
     card.key = r.keys;
@@ -3112,25 +3127,32 @@ function initUI() {
   $('lineupGo').onclick = applyLineup;
   $('play').onclick = toggle;
   /* A tap or click on the picture pauses and plays. */
-  $('cv').addEventListener('click', () => toggle());
+  /* With the music on and not heard yet (a browser lets a page make sound only after a tap), the first tap
+     starts it, wherever it lands. On the Music button that tap does not switch the music off, and on the
+     picture it does not pause: it only starts the sound. If the browser still refuses, the next tap is an
+     ordinary one. */
+  let soundTaps = 0, soundAsked = -1e9, soundTap = -1e9;
+  const firstTap = e => {
+    if (S.mute || S.audioOn || !S.show || !S.playing) return;
+    const at = e.target && e.target.closest ? e.target.closest('#sound, #cv') : null;
+    const now = performance.now();
+    /* pointerup, touchend and click belong to one tap; the sound is asked for in each (which of them a
+       browser takes as the tap differs). */
+    if (now - soundAsked > 700) soundTaps++;
+    soundAsked = now;
+    playSound(currentT());
+    if (at && soundTaps === 1) soundTap = now;
+  };
+  const soundTapNow = () => performance.now() - soundTap < 700;
+  $('cv').addEventListener('click', () => { if (!soundTapNow()) toggle(); });
   $('dl').onclick = () => download();
   $('shareGo').onclick = async () => { const out = shareOut; if (out && await openSheet(out)) closeShare(); };
   $('shareClose').onclick = () => closeShare();
   $('shareBox').addEventListener('click', e => { if (e.target === $('shareBox')) closeShare(); });
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
   $('update').onclick = () => { closeStudio(); refreshMarket(); };
-  $('sound').onclick = () => toggleSound();
+  $('sound').onclick = () => { if (!soundTapNow()) toggleSound(); };
   paintSound();
-  /* With the music on, it starts at the first tap anywhere on the page: a browser allows sound only after one. */
-  let askedSound = 0;
-  const firstTap = e => {
-    if (S.mute || S.audioOn || !S.show || !S.playing) return;
-    /* Not on the picture either: a tap there pauses, and the next one plays with the music. */
-    if (e.target && e.target.closest && e.target.closest('#sound, #cv')) return;
-    if (performance.now() - askedSound < 500) return;
-    askedSound = performance.now();
-    playSound(currentT());
-  };
   ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, firstTap, true));
   $('seek').addEventListener('input', () => {
     if (!S.show) return;
@@ -3193,7 +3215,8 @@ if (window.UIJA) {
 }
 loadAssets().then(() => {
   window.NS.ready = true;
-  const first = TRACKS[0].id, requested = Q.get('music') || store.get('music', first);
+  /* The page opens with Music 1. Another song chosen here plays until the page is closed. */
+  const first = TRACKS[0].id, requested = Q.get('music') || first;
   if (requested !== first && TRACKS.some(t => t.id === requested)) useTrack(requested);
   else document.querySelectorAll('#music button').forEach(b => b.classList.toggle('on', b.dataset.m === first));
   runAll({ export: false });

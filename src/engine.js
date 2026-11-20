@@ -192,6 +192,10 @@ function breakPoints(s) {
   return [...pts].filter(i => !NO_START.includes(s[i]) && !NO_END.includes(s[i - 1]) &&
     !(/[0-9A-Za-z]/.test(s[i - 1]) && /[0-9A-Za-z.,]/.test(s[i]))).sort((a, b) => a - b);
 }
+/* A line reads as a phrase when it begins with a word, not with the hiragana that ends the phrase before
+   it (を, に, すぎる): a break is a good one when what follows is not hiragana, or follows a mark. */
+const HIRAGANA = /[\u3041-\u309f]/;
+const lineStart = (s, i) => !HIRAGANA.test(s[i] || '') || /[、。！？!?」』）\s]/.test(s[i - 1] || '');
 function splitBalanced(s) {
   if (!s) return [];
   if (jpWidth(s) <= P.jp.maxW) return [s];
@@ -202,7 +206,8 @@ function splitBalanced(s) {
     const wa = jpWidth(a), wb = jpWidth(b);
     if (wa > P.jp.maxW) continue;
     const particle = /[のがをにはでとへもや、]$/.test(a) ? -40 : 0;
-    const score = Math.max(wa, wb) + particle;
+    /* A break that leaves hiragana at the head of the next line costs as much as a far less even split. */
+    const score = Math.max(wa, wb) + particle + (lineStart(s, i) ? 0 : 0.2 * P.jp.maxW);
     if (!best || score < best.score) best = { score, a, b, wb };
   }
   if (!best) {
@@ -340,7 +345,7 @@ function oneLanguage(it) {
   return HAS_JA.test(a) === HAS_JA.test(b);
 }
 /* The positions a card is laid out with: on the wide page, the middle block for a card in one language. */
-function presetOf(it) { return P.one && oneLanguage(it) ? P.one : P; }
+function presetOf(it) { return P.one && (OPT.same || oneLanguage(it)) ? P.one : P; }
 function inPreset(Q, job) { const keep = P; P = Q; try { return job(); } finally { P = keep; } }
 function layout(it) {
   if (it.still && !(it.jp && it.jp.length)) return layoutStill(it);
@@ -355,27 +360,283 @@ function headText(it) {
 function splitHead(text, n) {
   if (!CJK_HEAD.test(text)) return splitWords(text.split(/\s+/).filter(Boolean), n, headW);
   if (n <= 1) return [text.trim()];
-  const pts = breakPoints(text);
   const memo = new Map();
   const w = (a, b) => { const k = a + ':' + b; if (!memo.has(k)) memo.set(k, headW(text.slice(a, b).trim())); return memo.get(k); };
-  let best = null;
-  const rec = (start, left, acc) => {
-    if (left === 1) {
-      const cuts = [...acc, text.length];
-      let prev = 0, max = 0, sq = 0;
-      for (const c of cuts) { const x = w(prev, c); max = Math.max(max, x); sq += x * x; prev = c; }
-      if (!best || max < best.max - 0.005 || (Math.abs(max - best.max) <= 0.005 && sq < best.sq)) best = { max, sq, cuts };
-      return;
-    }
-    for (const p of pts) if (p > start && pts.filter(q => q > p).length >= left - 2) rec(p, left - 1, [...acc, p]);
+  const solve = pts => {
+    let best = null;
+    const rec = (start, left, acc) => {
+      if (left === 1) {
+        const cuts = [...acc, text.length];
+        let prev = 0, max = 0, sq = 0;
+        for (const c of cuts) { const x = w(prev, c); max = Math.max(max, x); sq += x * x; prev = c; }
+        if (!best || max < best.max - 0.005 || (Math.abs(max - best.max) <= 0.005 && sq < best.sq)) best = { max, sq, cuts };
+        return;
+      }
+      for (const p of pts) if (p > start && pts.filter(q => q > p).length >= left - 2) rec(p, left - 1, [...acc, p]);
+    };
+    rec(0, Math.min(n, pts.length + 1), []);
+    return best;
   };
-  rec(0, Math.min(n, pts.length + 1), []);
-  if (!best) return [text.trim()];
+  const every = breakPoints(text);
+  const all = solve(every);
+  if (!all) return [text.trim()];
+  /* Lines that begin with a word (lineStart) are taken when they give as many lines and are not much
+     less even: a line is then a phrase, not a sentence cut in its middle. */
+  const good = solve(every.filter(i => lineStart(text, i)));
+  const best = good && good.cuts.length === all.cuts.length && good.max <= all.max * 1.22 ? good : all;
   const out = [];
   let prev = 0;
   for (const c of best.cuts) { out.push(text.slice(prev, c).trim()); prev = c; }
   return out.filter(Boolean);
 }
+
+/* ---------- a headline in two parts ---------- */
+/* A card in one language shows its headline in two beats: the first part, then the second. The cut is
+   where the sentence turns, as near the middle as such a place is found, so that each part says something
+   by itself. A short headline is not cut (the second part is ''). */
+/* Ruled lines and blocks some accounts draw around a headline (╋━━━╋) are no words. */
+const plainLine = text => String(text || '').replace(/[\u2500-\u259f]+/g, ' ').replace(/\s+/g, ' ').trim();
+/* A headline githito.xapi cut short (it used to stop after 45 characters and add …): what follows the
+   last place the sentence turns is a broken word, and is left out with the dots. Dots a headline ends on
+   by itself are kept. */
+function wholeLine(text) {
+  const s = plainLine(text);
+  const c = [...s];
+  if (c.length !== 46 || c[45] !== '…') return s;
+  const turn = '\u3000 、。！？!?／｜|」』）)】〕';
+  for (let i = 45; i >= 20; i--) {
+    if (!turn.includes(c[i - 1])) continue;
+    const kept = c.slice(0, i).join('').replace(/[\s\u3000、／｜|―－–—]+$/, '').trim();
+    const open = ['「」', '『』', '【】', '（）', '()'].some(([a, b]) => kept.split(a).length > kept.split(b).length);
+    if (kept && !open) return kept;
+  }
+  return s;
+}
+/* force: a text too short to turn anywhere is still cut, at the least costly place near its middle (see
+   breakCost), so that the card's third beat has words of its own. Only a single word stays whole. */
+function forcedCut(s, cjk) {
+  let pts;
+  if (cjk) pts = breakPoints(s);
+  else { pts = []; for (let i = 1; i < s.length; i++) if (s[i - 1] === ' ' && s[i] !== ' ') pts.push(i); }
+  const depth = [0];
+  for (let i = 0, d = 0; i < s.length; i++) { if (OPENERS.includes(s[i])) d++; else if (CLOSERS.includes(s[i])) d = Math.max(0, d - 1); depth[i + 1] = d; }
+  let best = null;
+  for (const i of pts) {
+    const a = s.slice(0, i).replace(/[\s\u3000、，,;:―－–—／]+$/, '').trim(), b = s.slice(i).replace(/^[\s\u3000、，。,;:―－–—／]+/, '').trim();
+    if ([...a].length < (cjk ? 2 : 1) || [...b].length < (cjk ? 2 : 1)) continue;
+    const off = Math.abs(i - s.length / 2) / s.length;
+    const score = breakCost(s, i, cjk && depth[i] > 0, cjk) + off * off * 40;
+    if (!best || score < best.score) best = { score, a, b };
+  }
+  return best ? [best.a, best.b] : [s, ''];
+}
+function cutJa(text, force) {
+  const s = plainLine(text);
+  if (force) { const cut = cutJa(s); return cut[1] ? cut : forcedCut(s, true); }
+  const c = [...s];
+  const n = c.length;
+  if (n < 16) return [s, ''];
+  const least = Math.max(5, Math.floor(n * 0.28));
+  const OPEN = '「『（(【〔', CLOSE = '」』）)】〕';
+  const kind = ch => (/[\u3041-\u309f]/.test(ch) ? 'h' : /[\u30a0-\u30ffー]/.test(ch) ? 'k' : /[\u4e00-\u9fff々]/.test(ch) ? 'j' : /[0-9A-Za-z０-９Ａ-Ｚａ-ｚ.,%％]/.test(ch) ? 'a' : 'o');
+  let depth = 0;
+  let best = null;
+  for (let i = 1; i < n; i++) {
+    const prev = c[i - 1], next = c[i];
+    if (OPEN.includes(prev)) depth++;
+    if (CLOSE.includes(prev)) depth = Math.max(0, depth - 1);
+    if (i < least || n - i < least || next === ' ') continue;
+    let gain = -1;
+    if (prev === ' ') gain = 10;
+    else if ('。！？!?'.includes(prev)) gain = 10;
+    else if ('、，'.includes(prev)) gain = 8;
+    else if ('―－–—…‥／'.includes(prev)) gain = 7;
+    else if (CLOSE.includes(prev) && !NO_START.includes(next) && kind(next) !== 'h') gain = 6;
+    else if (OPEN.includes(next) && !OPEN.includes(prev)) gain = 6;
+    else if (/[はがをにでとへも]/.test(prev) && kind(next) !== 'h' && !NO_START.includes(next)) gain = 3;
+    else if (kind(prev) === 'h' && kind(next) !== 'h' && !NO_START.includes(next)) gain = 1;
+    if (gain < 0) continue;
+    /* Not inside brackets: a quotation stays whole. */
+    if (depth > 0 && !OPEN.includes(next)) gain -= 6;
+    const off = Math.abs(i - n / 2) / n;
+    const score = gain * 10 - off * off * 400;
+    if (!best || score > best.score) best = { score, i, gain };
+  }
+  if (!best || best.gain < 1) return [s, ''];
+  const a = c.slice(0, best.i).join('').replace(/[\s、，―－–—／]+$/, '').trim();
+  const b = c.slice(best.i).join('').replace(/^[\s、，。―－–—／]+/, '').trim();
+  return a && b ? [a, b] : [s, ''];
+}
+const JOIN_EN = new Set(['and', 'but', 'as', 'after', 'amid', 'while', 'with', 'for', 'to', 'in', 'on', 'at', 'by', 'from', 'over', 'despite', 'because', 'before', 'until', 'says', 'said', 'is', 'are', 'was', 'were', 'will', 'has', 'have', 'that', 'which', 'who', 'when', 'where', 'if', 'than', 'into', 'about', 'against', 'under', 'amid', 'vs']);
+const SMALL_END_EN = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'for', 'from', 'by', 'with', 'and', 'or', 'as', 'its', 'his', 'her', 'their', 'is', 'are', 'was', 'were', 'be']);
+function cutEn(text, force) {
+  const s = plainLine(text);
+  if (force) { const cut = cutEn(s); return cut[1] ? cut : forcedCut(s, false); }
+  const w = s.split(' ').filter(Boolean);
+  const n = w.length;
+  if (n < 6) return [s, ''];
+  const bare = x => String(x || '').toLowerCase().replace(/[^a-z']/g, '');
+  const dash = x => /^[-–—―]+$/.test(x || '');
+  let best = null;
+  const least = Math.max(2, Math.floor(n * 0.3));
+  for (let i = least; i <= n - least; i++) {
+    const prev = w[i - 1], next = w[i];
+    if (dash(next)) continue;
+    let gain = 0;
+    if (/[.!?]$/.test(prev)) gain = 10;
+    else if (/[,;:]$/.test(prev) || dash(prev)) gain = 8;
+    else if (JOIN_EN.has(bare(next))) gain = ['and', 'but', 'as', 'after', 'amid', 'while', 'despite', 'because'].includes(bare(next)) ? 5 : 4;
+    if (SMALL_END_EN.has(bare(prev)) && !dash(prev)) gain -= 5;
+    const off = Math.abs(i - n / 2) / n;
+    const score = gain * 10 - off * off * 400;
+    if (!best || score > best.score) best = { score, i, gain };
+  }
+  /* A short headline with no turn in it stays whole. */
+  if (!best || (best.gain <= 0 && n <= 9)) return [s, ''];
+  const a = w.slice(0, best.i).join(' ').replace(/[\s,;:–—―-]+$/, '').trim();
+  const b = w.slice(best.i).join(' ').replace(/^[\s,;:–—―-]+/, '').trim();
+  return a && b ? [a, b] : [s, ''];
+}
+
+/* ---------- a card in one language: one sentence in two beats, in the same letters ---------- */
+/* The two parts are written alike: the headline's letters, one size for the whole video. A line ends where
+   a phrase ends. What a break costs: nothing after a mark or a space, little after a particle (は, を, の)
+   when a word follows, more where the kind of letter changes inside a word (シード|喪失), most inside a run
+   of the same letters (特別|公演), before hiragana (良好|でない) and inside a quotation. In English: nothing
+   after a mark, little before a joining word (and, to, in), most after a small one (the, of). */
+const KIND = ch => (/[\u3041-\u309f]/.test(ch) ? 'h' : /[\u30a0-\u30ffー]/.test(ch) ? 'k' : /[\u4e00-\u9fff々]/.test(ch) ? 'j' : /[0-9A-Za-z０-９Ａ-Ｚａ-ｚ]/.test(ch) ? 'a' : 'o');
+const OPENERS = '「『（(【〔“', CLOSERS = '」』）)】〕”';
+function breakCost(s, i, quoted, cjk) {
+  const prev = s[i - 1], next = s[i];
+  if (!cjk) {
+    const bare = x => String(x || '').toLowerCase().replace(/[^a-z']/g, '');
+    const before = s.slice(0, i).trim().split(' ').pop() || '', after = s.slice(i).trim().split(' ')[0] || '';
+    if (/[.,;:!?…]$/.test(before) || /^[-–—―\/]+$/.test(before)) return 0;
+    if (SMALL_END_EN.has(bare(before))) return 5;
+    return JOIN_EN.has(bare(after)) ? 0.5 : 1;
+  }
+  let c;
+  if (prev === ' ' || prev === '\u3000') c = KIND(s[i - 2] || '') === 'a' && KIND(next) === 'a' ? 4 : 0;
+  else if ('、。，！？!?…‥／'.includes(prev)) c = 0;
+  else if (OPENERS.includes(next)) c = 0.5;
+  else if (KIND(next) === 'h') c = 8;
+  else if (CLOSERS.includes(prev)) c = 0.5;
+  else if ('・＆&'.includes(prev)) c = 6;
+  else if (KIND(prev) === 'h') c = /[おご]/.test(prev) && KIND(s[i - 2] || '') !== 'h' ? 7 : 1;
+  else if (KIND(prev) === 'a' && KIND(next) === 'j') c = /[0-9０-９]/.test(prev) ? 7 : 3;
+  else if (KIND(prev) !== KIND(next)) c = 3;
+  else c = 7;
+  return c + (quoted ? 2 : 0);
+}
+/* The ways to write a text in lines no wider than a limit: at(limit) gives, for one to four lines at most,
+   the lines whose breaks cost least ({ lines, bad }), or null where the text does not fit. */
+const TWIN = { lines: 4, line: 1.5, gap: 0.55, descent: 0.16, give: 60, floor: 0.45 };
+function fitter(text) {
+  const cjk = CJK_HEAD.test(text);
+  let pts;
+  if (cjk) pts = breakPoints(text);
+  else { pts = []; for (let i = 1; i < text.length; i++) if (text[i - 1] === ' ' && text[i] !== ' ') pts.push(i); }
+  const nodes = [0, ...pts, text.length], N = nodes.length;
+  const depth = [0];
+  for (let i = 0, d = 0; i < text.length; i++) { if (OPENERS.includes(text[i])) d++; else if (CLOSERS.includes(text[i])) d = Math.max(0, d - 1); depth[i + 1] = d; }
+  const ends = nodes.map((p, j) => (j === 0 || j === N - 1 ? 0 : breakCost(text, p, cjk && depth[p] > 0, cjk)));
+  const memo = new Map();
+  const piece = (a, b) => text.slice(nodes[a], nodes[b]).trim();
+  const width = (a, b) => { const k = a * 4096 + b; let v = memo.get(k); if (v === undefined) { v = headW(piece(a, b)); memo.set(k, v); } return v; };
+  return function at(limit) {
+    const INF = 1e9;
+    const best = [], from = [];
+    for (let k = 0; k <= TWIN.lines; k++) { best.push(new Array(N).fill(INF)); from.push(new Array(N).fill(-1)); }
+    best[0][0] = 0;
+    for (let k = 1; k <= TWIN.lines; k++) for (let j = 1; j < N; j++) for (let i = j - 1; i >= 0; i--) {
+      const w = width(i, j);
+      if (w > limit) break;
+      if (best[k - 1][i] >= INF) continue;
+      const slack = (limit - w) / limit;
+      const few = [...piece(i, j)].length < (cjk ? 3 : 4) && N > 2 ? 4 : 0;
+      const c = best[k - 1][i] + ends[j] + few + slack * slack * 1.5;
+      if (c < best[k][j]) { best[k][j] = c; from[k][j] = i; }
+    }
+    const out = [null];
+    let top = null;
+    for (let k = 1; k <= TWIN.lines; k++) {
+      const c = best[k][N - 1];
+      if (c < INF && (!top || c + k * TWIN.line < top.score)) {
+        const lines = [];
+        /* bad: what the poor breaks cost. A good break (after a mark, after a particle) costs a size nothing. */
+        let bad = 0;
+        for (let j = N - 1, n = k; n > 0; n--) {
+          const i = from[n][j];
+          lines.unshift(piece(i, j));
+          bad += Math.max(0, ends[j] - 1) + ([...piece(i, j)].length < (cjk ? 3 : 4) && N > 2 ? 4 : 0);
+          j = i;
+        }
+        top = { lines, bad, score: c + k * TWIN.line };
+      }
+      out.push(top);
+    }
+    return out;
+  };
+}
+const twinSecond = it => (it.jp || []).map(x => String(x).toUpperCase().replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
+const twinHeight = (n1, n2, S) => (P.head.topPad + P.head.cap + (n1 - 1) * P.head.lh + (n2 ? TWIN.gap + P.head.cap + (n2 - 1) * P.head.lh : 0) + TWIN.descent) * S;
+function twinPlan(head, second, S) {
+  const L = { Sh: S, Ss: 0, head: [], sub: [], jp: [] };
+  head.forEach((t, i) => L.head.push({ t, base: (P.head.topPad + P.head.cap + i * P.head.lh) * S }));
+  let last = L.head[L.head.length - 1].base;
+  L.rule = last; L.short = last;
+  second.forEach((t, i) => L.jp.push({ t, base: last + (TWIN.gap + P.head.cap + i * P.head.lh) * S }));
+  if (L.jp.length) last = L.jp[L.jp.length - 1].base;
+  L.bottom = last + TWIN.descent * S;
+  return L;
+}
+/* One size for the video: the largest at which every card fits, then smaller for as long as that buys
+   better line ends (give: a tenth smaller is worth six points of break cost). False when nothing fits. */
+function twinLayout(items, pres) {
+  const fits = items.map((it, i) => inPreset(pres[i], () => {
+    const a = headText(it) || String(it.kw || 'NEWS').toUpperCase(), b = twinSecond(it);
+    return { a: fitter(a), b: b ? fitter(b) : null };
+  }));
+  const plan = S => {
+    let bad = 0;
+    const cards = [];
+    for (let i = 0; i < items.length; i++) {
+      const card = inPreset(pres[i], () => {
+        /* A note under the text (layoutAt) takes its lines from the box. */
+        const note = items[i].note && !items[i].still ? noteLines(items[i].note).length : 0;
+        const avail = P.box.bottom - P.box.top - (note ? P.jp.size * NOTE.k * (NOTE.gap + 1) + (note - 1) * P.jp.line * NOTE.k : 0);
+        const A = fits[i].a(P.head.maxW / S), B = fits[i].b ? fits[i].b(P.head.maxW / S) : null;
+        let best = null;
+        for (let m1 = 1; m1 <= TWIN.lines; m1++) for (let m2 = B ? 1 : 0; m2 <= (B ? TWIN.lines : 0); m2++) {
+          const x = A[m1], y = B ? B[m2] : null;
+          if (!x || (B && !y)) continue;
+          if (twinHeight(x.lines.length, y ? y.lines.length : 0, S) > avail + 0.5) continue;
+          const score = x.score + (y ? y.score : 0);
+          if (!best || score < best.score - 1e-6) best = { score, bad: x.bad + (y ? y.bad : 0), lines: x.lines, second: y ? y.lines : [] };
+        }
+        return best;
+      });
+      if (!card) return null;
+      bad += card.bad; cards.push(card);
+    }
+    return { S, bad, cards };
+  };
+  let top = 0;
+  for (const it of items) top = Math.max(top, inPreset(presetOf(it), () => P.head.max[1]));
+  let first = null, best = null;
+  for (let S = top; S > top * 0.12; S *= 0.95) {
+    const p = plan(S);
+    if (!p) continue;
+    if (!first) first = p;
+    if (S < first.S * TWIN.floor) break;
+    p.score = p.bad + TWIN.give * (1 - S / first.S);
+    if (!best || p.score < best.score - 1e-6) best = p;
+  }
+  if (!best) return false;
+  items.forEach((it, i) => { const c = best.cards[i]; it.L = inPreset(pres[i], () => layoutAt(it, 1, { lines: c.lines, Sh: best.S, twin: c.second })); });
+  return true;
+}
+
 /* Every story in the video gets the same headline size and the same news-line size.
    The news lines stay at OPT.jp, and the headline stays larger than them. The headline size is the
    largest at which every headline fits in four lines or fewer and every story still fits its box. */
@@ -396,6 +657,8 @@ function uniformLayout(items) {
   const pick = (list, S) => list.find(c => c.size >= S - 0.5) || list.reduce((a, b) => (b.size > a.size ? b : a));
   const S0 = Math.min(...choices.map(list => Math.max(...list.map(c => c.size))));
   const J0 = OPT.jp || 1;
+  /* One language on the cards: a card's two parts are one sentence shown in two beats, written alike. */
+  if (OPT.same && twinLayout(items, pres)) return;
   let S = S0, J = J0;
   for (let k = 0; k < 120; k++) {
     const Ls = items.map((it, i) => inPreset(pres[i], () => { const c = pick(choices[i], S); return layoutAt(it, J, { lines: c.lines, Sh: Math.min(S, c.size) }); }));
@@ -446,14 +709,20 @@ function layoutAt(it, scale, forced) {
 }
 function layoutCore(it, scale, forced) {
   jpScale = scale;
+  const twin = !!(forced && forced.twin);
   const jp = [];
-  (it.jp || []).forEach((p, pi) => wrapJp(p).forEach((t, li) => jp.push({ t, para: li === 0 && pi > 0 })));
+  if (!twin) (it.jp || []).forEach((p, pi) => wrapJp(p).forEach((t, li) => jp.push({ t, para: li === 0 && pi > 0 })));
   let head = (it.head && it.head.length ? it.head : [it.kw]).map(s => String(s).toUpperCase());
   let sub = (it.sub || []).map(String);
   const plan = P.layout === 'columns' ? columnPlan : stackPlan;
   const hSize = lines => Math.min(P.head.max[Math.min(lines.length, P.head.max.length) - 1], P.head.maxW / Math.max(...lines.map(headW)));
   let L;
-  if (forced) {
+  if (twin) {
+    /* A card in one language: its second part under the first, in the same letters. */
+    head = forced.lines;
+    L = twinPlan(head, forced.twin, forced.Sh);
+    L.f = 1; L.twin = true;
+  } else if (forced) {
     /* A size chosen for the whole video: no shrinking per story. */
     head = forced.lines;
     const sw = sub.join(' ').split(/\s+/).filter(Boolean);
@@ -687,8 +956,13 @@ function drawItem(ctx, show, i, t, bgs) {
   }
   if (a2 > 0) {
     ctx.globalAlpha = a2 * a1;
-    ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
-    L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
+    if (L.twin) {
+      ctx.font = font(900, L.Sh, F_SERIF);
+      L.jp.forEach(l => textX(ctx, l.t, L.cxHead, l.base, P.head.sx, 'center'));
+    } else {
+      ctx.font = font(P.jp.w, L.jpSize || P.jp.size, F_SERIF);
+      L.jp.forEach(l => textX(ctx, l.t, L.cxJp, l.base, P.jp.sx, 'center'));
+    }
     if (L.note && !L.columns) {
       ctx.globalAlpha = a2 * a1 * 0.92;
       ctx.font = font(P.jp.w, L.noteSize, F_SERIF);
@@ -727,5 +1001,5 @@ function allText(script) {
   return s.filter(Boolean).join(' ');
 }
 
-global.NSEngine = { FPS, get DUR() { return DUR; }, setDuration, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper };
+global.NSEngine = { FPS, get DUR() { return DUR; }, setDuration, PRESETS, BG_ORDER, prepare, drawFrame, drawItem, layout, wrapJp, fontSpecs, allText, use, setMusicCredit, setWallpaper, wholeLine, cutJa, cutEn };
 })(window);
