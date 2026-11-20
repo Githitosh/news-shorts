@@ -2420,15 +2420,26 @@ function englishParts(en) {
 }
 /* The English of headlines, kept in the browser (the newest 800), so a headline is asked for once. */
 function englishKept(name) { try { return JSON.parse(store.get(name || 'news.en', '{}')) || {}; } catch (e) { return {}; } }
-/* The two parts of a headline, as its card shows them: cut where the sentence turns, or, when it does not
-   turn anywhere, the headline and the line the post added to it. Otherwise the headline alone (its English
-   is then cut as English is). */
+/* The two parts of a headline card, speed-read news: what happened on the second beat, who on the third.
+   - The headline names somebody (whoOf): the headline without the name, then the name. What is left of a
+     long headline is its first part, up to where the sentence turns.
+   - It names nobody: its two parts, cut where the sentence turns; or, when it is too short to turn
+     anywhere, the whole of it and then the line the post added, or the paper that wrote it. A short
+     headline is not cut in two. */
 function twoJapanese(row) {
-  const cut = E.cutJa(row.headline);
-  const more = cut[1] || extraLine(row);
-  return more ? [cut[0], more] : [cut[0]];
+  const head = String(row.headline || '');
+  const more = extraLine(row);
+  const w = whoOf(head, more);
+  if (w) {
+    const cut = [...w.what].length > 30 ? E.cutJa(w.what) : [w.what, ''];
+    return [[...cut[0]].length >= 8 ? cut[0] : w.what, w.who];
+  }
+  const cut = E.cutJa(head);
+  if (cut[1]) return cut;
+  const by = String(row.name || '').trim();
+  return more ? [cut[0], more] : by && by !== 'X' ? [cut[0], by] : E.cutJa(head, true);
 }
-/* The English of a headline asked for in two lines (news.en2): the whole of it, and its two parts when
+/* The English of a headline asked for in two lines (news.en3): the whole of it, and its two parts when
    the translator answered in two lines. */
 function twoEnglish(row, text) {
   const lines = String(text || '').split('\n').map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -2454,6 +2465,89 @@ function englishFor(list, name) {
   });
   englishAsking = run.catch(() => {});
   return run;
+}
+/* ---------- who the news is about ---------- */
+/* A card of speed-read news says what happened on its second beat and who did it, said it or showed it on
+   its third. whoOf finds that "who" in a headline, as the papers write one:
+     - a person where a phrase starts: a full name (a common family name and a given name), a name with a
+       title (高市首相, 田嶋幸三氏, 安住アナ), names joined by ＆ or ×, a name after its group
+       (超特急・柏木悠), or whoever stands right before what was said (末澤誠也「…」, 自民「…」);
+     - or the one the news comes from, at the end: an office, a court, a survey (…―国交省, … 東京電力,
+       … 内閣府調査).
+   It answers { who, what } (the headline without the name), or null when the headline names nobody that
+   way: a wrong word in the place of a name is worse than no name. */
+const FAMILY = ('佐藤 鈴木 高橋 田中 伊藤 渡辺 渡邊 渡部 山本 中村 小林 加藤 吉田 山田 佐々木 山口 松本 井上 木村 斎藤 斉藤 齋藤 清水 山崎 池田 橋本 阿部 石川 山下 中島 中嶋 石井 小川 前田 岡田 長谷川 藤田 後藤 近藤 村上 遠藤 青木 坂本 福田 太田 西村 藤井 金子 岡本 藤原 中野 三浦 原田 中川 松田 竹内 小野 田村 中山 和田 石田 森田 上田 内田 柴田 酒井 宮崎 横山 高木 安藤 宮本 大野 小島 工藤 谷口 今井 高田 増田 丸山 杉山 村田 大塚 新井 小山 平野 藤本 河野 上野 野口 武田 松井 千葉 岩崎 菅原 木下 久保 佐野 野村 松尾 市川 菊地 菊池 杉本 古川 大西 島田 水野 桜井 櫻井 高野 吉川 山内 西田 飯田 西川 小松 北村 安田 五十嵐 川口 平田 中田 久保田 服部 岩田 土屋 川崎 福島 本田 樋口 秋山 田口 永井 山中 中西 吉村 川上 石原 大橋 松岡 馬場 浜田 濱田 森本 星野 矢野 浅野 大久保 松下 吉岡 小池 野田 荒木 大谷 内藤 松浦 熊谷 黒田 尾崎 永田 川村 望月 田辺 松村 荒井 大島 平井 早川 菅野 栗原 広瀬 廣瀬 横田 石橋 萩原 岩本 片山 関口 宮田 大石 高山 本間 吉野 須藤 岡崎 小田 伊東 鎌田 上原 篠原 小西 松原 福井 古田 大森 小泉 成田 奥村 内山 沢田 澤田 川島 桑原 三宅 片岡 富田 杉浦 八木 奥田 小沢 小澤 松永 北川 関根 河合 平山 牧野 白石 今村 寺田 青山 中尾 小倉 渋谷 上村 小野寺 大山 足立 岡村 坂口 天野 多田 佐久間 根本 豊田 田島 飯塚 角田 村山 武藤 白井 宮下 塚本 榎本 神田 水谷 坂田 児玉 大川 松崎 竹田 竹下 大竹 新垣 綾瀬 有村 浜辺 永野 今田 福原 目黒 向井 宮舘 深澤 羽生 八村 三笘 堂安 梅津 末澤 曽野 柏木 知念 仲野 吉沢 吉澤 菅田 神木 松坂 窪田 中条 橋爪 二宮 相葉 大倉 山﨑 髙橋 平手 生田 堀田 志田 指原 板野 篠田 黒木 亀梨 赤西 東出 山里 蒼井 高市 石破 岸田 玉木 麻生 茂木').split(' ');
+const FAMILY_RE = FAMILY.slice().sort((a, b) => b.length - a.length).join('|');
+/* Titles a paper writes after a name. */
+const TITLE = '氏|さん|さま|様|陛下|殿下|GM|主将|横綱|大関|親方|首相|総理|大統領|副大統領|外相|財務相|防衛相|経産相|厚労相|文科相|国交相|総務相|法相|農相|環境相|官房長官|報道官|幹事長|政調会長|委員長|党首|議長|総裁|会長|社長|CEO|知事|市長|区長|町長|村長|監督|コーチ|選手|投手|捕手|騎手|名人|竜王|九段|八段|七段|六段|教授|博士|医師|弁護士|アナ|キャスター|代表|大臣';
+const TITLE_END = new RegExp(`(?:${TITLE})$`);
+/* What a given name does not end on: these make a place, a school or a thing of a family name (石川県, 松本城). */
+const NOT_GIVEN = /[県市区町村駅城犬線港山川島湾沖組屋店社寺園院校館場庁署局部課会党軍系風流式型製産発行]$|地方|地域|学院|大学|高校|神社|通り|公園|空港|病院|新聞|電鉄|電力|銀行|工業|産業|建設|自動車/;
+/* Words that stand before a title in quotation marks: a kind of work or of news, not somebody who speaks. */
+const NOT_SPEAKER = /(映画|ドラマ|アニメ|劇場版|舞台|曲|番組|特集|連載|小説|漫画|マンガ|コミック|ゲーム|作|写真集|アルバム|シングル|CM|MV|イベント|企画|展|ミュージカル|劇|映像|予告|主題歌|書籍|絵本|雑誌|作品|シリーズ|アプリ|サービス|商品|機能|キャンペーン|フェア|コラボ|ツアー|ライブ|公演|賞|ランキング|限定|発売|登場|開催|決定|公開|解禁|速報|独占|話題|人気|注目|最新|特別)$/;
+/* Whom news comes from, as the last word of a headline. */
+const WHO_SOURCE = /(調査|発表|省|庁|内閣府|政府|日銀|地裁|高裁|最高裁|地検|県警|府警|道警|警視庁|警察|電力|銀行|証券|自動車|製薬|協会|連盟|委員会|委|院|審|団|党|当局|研究所|機構|大学|HD|グループ|ホールディングス)$/;
+/* Who speaks for an office, a party or a country, before what was said (自民「正解はない」, 中国紙「…」). */
+const SAYS = '自民|立民|立憲|維新|公明|共産|国民|れいわ|参政|社民|民改|民主改革|与党|野党|政府|日銀|米|中国|ロシア|韓国|北朝鮮|ウクライナ|イスラエル|イラン|EU|NATO|国連|WHO|IMF|FRB';
+const SAYS_END = '紙|省|庁|党|側|団|局|軍|地裁|高裁|地検|府|委|当局|首脳|幹部|大使|特使|報道官|GM|監督';
+/* The letter a given name ends on, for a name whose family name is not in the list (山城奈々「…」). */
+const NAME_END = '也哉弥太汰介助輔祐佑裕優雄夫男郎朗斗人仁翔将昌誠真慎信伸進治司史志之行幸子美香奈花菜華恵絵江代葉乃衣希紀樹輝貴喜結唯愛彩綾里理梨莉凛玲麗月陽葵空海洋浩宏弘博啓圭健賢光康孝航剛豪隆俊純潤淳順秀修章彰昭聖成清晴聡智哲徹典登平馬実未吾悟和一吉久穂帆歩保芳邦朋友勇悠由直尚那南羽春遥耀卓拓巧功晃紅佳夏歌雅芽紗沙咲桜央緒音夢睦瑞瑛英栄永々';
+const KJ = '一-鿿々ヶ', HR = 'ぁ-ゟ', KT = 'ァ-ヿ';
+const NAME_CH = `${KJ}${KT}A-Za-z0-9Ａ-Ｚａ-ｚ０-９`;
+/* After a name: a mark, a space, or the particle that follows it. */
+const AFTER = `(?=[、「『“\\s　]|[がはもとにをへの](?![${HR}])|ら(?:[がはも、\\s]|$)|$)`;
+const GIVEN = `[${KJ}${HR}${KT}]{1,3}?`;
+const FULL = `(?:${FAMILY_RE})${GIVEN}`;
+const ONE = `(?:${FULL}|[${NAME_CH}]{1,10}(?:${TITLE}))`;
+/* A name written beside another with ＆ or ×: kanji first, a few letters (黒木華, 横山めぐみ). */
+const NEXT = `[${KJ}][${KJ}${HR}${KT}]{1,5}?`;
+const PERSON_RE = new RegExp(`^(?:([${NAME_CH}！!.\\/ ]{1,12})・)?(${ONE}(?:[＆&×](?:${ONE}|${NEXT})){0,4})${AFTER}`);
+const JOINED_RE = new RegExp(`^(${NEXT}(?:[＆&×]${NEXT}){1,4})(?=[、「『“\\s　]|[がはも](?![${HR}])|$)`);
+const FOREIGN_RE = new RegExp(`^([${KT}]{1,6}(?:・[${KT}]{1,8}){1,2})(?=[、「“\\s　]|[がはも](?![${HR}])|$)`);
+const SPEAKER_RE = new RegExp(`^([${KJ}]{2,4}[${NAME_END}])(?=[「“][^」”]*[${HR}][^」”]*[」”])`);
+const SAYS_RE = new RegExp(`^((?:${SAYS})|[${NAME_CH}]{1,8}(?:${SAYS_END}))(?=[「“])`);
+function personAt(s, noSays) {
+  let m = s.match(PERSON_RE);
+  if (m && m[2].split(/[＆&×]/).every(n => TITLE_END.test(n) || !NOT_GIVEN.test(n))) return (m[1] ? m[1] + '・' : '') + m[2];
+  m = s.match(JOINED_RE);
+  if (m && m[1].split(/[＆&×]/).every(n => !NOT_SPEAKER.test(n) && !NOT_GIVEN.test(n))) return m[1];
+  m = s.match(FOREIGN_RE);
+  if (m && !NOT_SPEAKER.test(m[1])) return m[1];
+  m = s.match(SPEAKER_RE);
+  if (m && !NOT_SPEAKER.test(m[1])) return m[1];
+  m = noSays ? null : s.match(SAYS_RE);
+  if (m) return m[1];
+  return '';
+}
+function whoOf(headline, detail) {
+  const s = String(headline || '').replace(/^【[^】]{0,12}】\s*/, '').replace(/\s+/g, ' ').trim();
+  if (!s || !/[ぁ-ヿ一-鿿]/.test(s)) return null;
+  const len = t => [...t].length;
+  const tidy = t => t.replace(/\s+/g, ' ').replace(/^[\s、，,：:・＆&×－―—]+|[\s、，,：:・＆&×－―—]+$/g, '').trim();
+  const enough = t => len(t.replace(/[\s「」『』“”、。…！？!?]/g, '')) >= 5;
+  /* Two who speak (自民“…” 民改“…”): neither is the one the news is about. */
+  const many = (s.match(new RegExp(`(?:^|[\\s　])(?:${SAYS})(?=[「“])`, 'g')) || []).length > 1;
+  /* A person where a phrase starts: at the start of the headline, or after a space or a dash. (Not after
+     a comma: there a name is one of a list.) */
+  for (let i = 0; i < s.length; i++) {
+    if (i > 0 && !/[\s　―—－]/.test(s[i - 1])) continue;
+    const who = personAt(s.slice(i), many);
+    if (!who) continue;
+    /* The particle after the name goes with it (安住アナに視聴者爆笑: 視聴者爆笑). */
+    const rest = s.slice(i + who.length).replace(/^ら/, '').replace(/^[がはもとにをへの](?![ぁ-ゟ])/, '').replace(/^[、\s]+/, '');
+    const before = s.slice(0, i).replace(/[\s－―—]+$/, '');
+    const what = tidy(before + (before ? ' ' : '') + rest);
+    if (enough(what)) return { who, what };
+    break;
+  }
+  /* Whom the news comes from: the last word, after a dash or a space, when it is an office, a court, a survey. */
+  const m = s.match(/^(.{6,}?)(?:[―—＝=]\s*|[\s　])([^\s　―—＝=、。「」ぁ-ゟ]{2,12})$/);
+  if (m && WHO_SOURCE.test(m[2]) && enough(m[1])) return { who: m[2], what: tidy(m[1]) };
+  /* A short headline that names nobody, and the line the post added begins with the name
+     (“大トリ宣言”の真相告白 / 佐野晶哉、紅白コメント別パターンの構想も). */
+  const d = String(detail || '').replace(/\s+/g, ' ').trim();
+  if (d && len(s) <= 16) { const who = personAt(d); if (who && !s.includes(who)) return { who, what: tidy(s) }; }
+  return null;
 }
 /* The line a post adds to its headline, unless it only says the headline again. */
 function extraLine(row) {
@@ -2497,7 +2591,8 @@ function headCard(row, langId) {
   card.kw = newsWord(row.headline, langId === 'en') || card.kw;
   card.cat = cornerGenre(g, langId, 'NEWS', 'ニュース');
   /* Japanese only: the line the post added to its headline goes under it, as on the card with both languages. */
-  if (langId === 'ja' && extraLine(row) && !E.cutJa(row.headline)[1]) { card.head = [E.cutJa(row.headline)[0]]; card.jp = [row.detail]; }
+  /* Japanese only: what happened, then who (twoJapanese). */
+  if (langId === 'ja') { const two = twoJapanese(row); card.head = [two[0]]; card.jp = two[1] ? [two[1]] : []; }
   card.topic = row.name || 'X';
   card.tags = [];
   return card;
@@ -2652,7 +2747,7 @@ async function preparedScript(date, slots, room, anyway) {
       return { headline: x.t, link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', reply: { handle: x.h, to: a.h, name: a.n, news: a.t, genre: a.g || '' } };
     }
     const x = p.head;
-    return { headline: E.wholeLine(String(x.t).replace(/^【([^【】]+)】$/, '$1')), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '', en: x.e || '', detail: x.d || '' };
+    return { headline: E.wholeLine(String(x.t).replace(/^【([^【】]+)】$/, '$1')).replace(/\s*[:：]\s*[^\s:：]{2,12}(?:新聞|通信|ニュース|オンライン|デジタル)$/, ''), link: replyLink(x), pubDate: x.at || '', cat: 'NEWS', source: x.h, x: true, place: 'middle', name: x.n || '', genre: x.g || '', en: x.e || '', detail: x.d || '' };
   });
   S.pendingKeys = rows.flatMap(storyKeys);
   if (lang.id === 'ja') {
@@ -2680,13 +2775,13 @@ async function preparedScript(date, slots, room, anyway) {
        translated now, which takes a moment. */
     /* A headline is translated in the two parts its card shows (E.cutJa), a line each, so each part of the
        English says what that part of the Japanese says. Kept in the browser like the other English. */
-    const known = englishKept('news.en2');
+    const known = englishKept('news.en3');
     const heads = rows.filter(r => !r.reply);
     heads.forEach(r => { if (known[r.link]) twoEnglish(r, known[r.link]); else if (r.en) r._en = r.en; });
     const ask = heads.filter(r => !r._en && /[\u3040-\u30ff\u4e00-\u9fff]/.test(r.headline));
     /* A translator that does not answer does not hold the video back: after eight seconds the cards are
        made with what there is. */
-    if (ask.length) await timed(englishFor(ask.map(r => ({ key: r.link, text: twoJapanese(r).join('\n') })), 'news.en2'), 8000).then(got => ask.forEach(r => { if (got[r.link]) twoEnglish(r, got[r.link]); })).catch(e => console.warn(e));
+    if (ask.length) await timed(englishFor(ask.map(r => ({ key: r.link, text: twoJapanese(r).filter(Boolean).join('\n') })), 'news.en3'), 8000).then(got => ask.forEach(r => { if (got[r.link]) twoEnglish(r, got[r.link]); })).catch(e => console.warn(e));
     await timed(fillText(rows, lang), 8000).catch(e => console.warn(e));
     const rr = rows.filter(r => r.reply);
     if (rr.length) try { (await timed(translateMany(rr.map(r => r.reply.news), 'en'), 5000)).forEach((t, i) => { rr[i].reply.newsEn = t || ''; }); } catch (e) { console.warn(e); }

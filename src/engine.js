@@ -420,12 +420,13 @@ function forcedCut(s, cjk) {
   else { pts = []; for (let i = 1; i < s.length; i++) if (s[i - 1] === ' ' && s[i] !== ' ') pts.push(i); }
   const depth = [0];
   for (let i = 0, d = 0; i < s.length; i++) { if (OPENERS.includes(s[i])) d++; else if (CLOSERS.includes(s[i])) d = Math.max(0, d - 1); depth[i + 1] = d; }
+  const words = cjk ? wordsOf(s) : null;
   let best = null;
   for (const i of pts) {
     const a = s.slice(0, i).replace(/[\s\u3000、，,;:―－–—／]+$/, '').trim(), b = s.slice(i).replace(/^[\s\u3000、，。,;:―－–—／]+/, '').trim();
     if ([...a].length < (cjk ? 2 : 1) || [...b].length < (cjk ? 2 : 1)) continue;
     const off = Math.abs(i - s.length / 2) / s.length;
-    const score = breakCost(s, i, cjk && depth[i] > 0, cjk) + off * off * 40;
+    const score = breakCost(s, i, cjk && depth[i] > 0, cjk, words) + off * off * 40;
     if (!best || score < best.score) best = { score, a, b };
   }
   return best ? [best.a, best.b] : [s, ''];
@@ -447,10 +448,12 @@ function cutJa(text, force) {
     if (CLOSE.includes(prev)) depth = Math.max(0, depth - 1);
     if (i < least || n - i < least || next === ' ') continue;
     let gain = -1;
-    if (prev === ' ') gain = 10;
+    /* (A space between two words in Latin letters is inside a name: SIX LOUNGE.) */
+    if (prev === ' ') gain = kind(c[i - 2] || '') === 'a' && kind(next) === 'a' ? -1 : 10;
     else if ('。！？!?'.includes(prev)) gain = 10;
     else if ('、，'.includes(prev)) gain = 8;
-    else if ('―－–—…‥／'.includes(prev)) gain = 7;
+    else if ('…‥'.includes(prev)) gain = 9;
+    else if ('―－–—／'.includes(prev)) gain = 7;
     else if (CLOSE.includes(prev) && !NO_START.includes(next) && kind(next) !== 'h') gain = 6;
     else if (OPEN.includes(next) && !OPEN.includes(prev)) gain = 6;
     else if (/[はがをにでとへも]/.test(prev) && kind(next) !== 'h' && !NO_START.includes(next)) gain = 3;
@@ -506,7 +509,16 @@ function cutEn(text, force) {
    after a mark, little before a joining word (and, to, in), most after a small one (the, of). */
 const KIND = ch => (/[\u3041-\u309f]/.test(ch) ? 'h' : /[\u30a0-\u30ffー]/.test(ch) ? 'k' : /[\u4e00-\u9fff々]/.test(ch) ? 'j' : /[0-9A-Za-z０-９Ａ-Ｚａ-ｚ]/.test(ch) ? 'a' : 'o');
 const OPENERS = '「『（(【〔“', CLOSERS = '」』）)】〕”';
-function breakCost(s, i, quoted, cjk) {
+/* The words of a Japanese text, as the browser divides them: at(i) is the word that starts at i, before(i)
+   the word that ends there ('' where no word starts or ends, or where the browser has no divider). */
+function wordsOf(s) {
+  const at = new Map(), before = new Map();
+  try {
+    if (Intl.Segmenter) for (const x of new Intl.Segmenter('ja', { granularity: 'word' }).segment(s)) { at.set(x.index, x.segment); before.set(x.index + x.segment.length, x.segment); }
+  } catch (e) {}
+  return { at: i => at.get(i) || '', before: i => before.get(i) || '' };
+}
+function breakCost(s, i, quoted, cjk, words) {
   const prev = s[i - 1], next = s[i];
   if (!cjk) {
     const bare = x => String(x || '').toLowerCase().replace(/[^a-z']/g, '');
@@ -519,22 +531,29 @@ function breakCost(s, i, quoted, cjk) {
   if (prev === ' ' || prev === '\u3000') c = KIND(s[i - 2] || '') === 'a' && KIND(next) === 'a' ? 4 : 0;
   else if ('、。，！？!?…‥／'.includes(prev)) c = 0;
   else if (OPENERS.includes(next)) c = 0.5;
-  else if (KIND(next) === 'h') c = 8;
+  else if (KIND(next) === 'h') {
+    /* Hiragana at the head of a line is the end of the phrase before it (を, に, でない), unless a word
+       starts there: one of three letters or more (こども), or お and ご before a word (お姉さん). */
+    const w = words ? words.at(i) : '';
+    c = [...w].length >= 3 || (/^[おご]$/.test(w) && KIND(s[i + 1] || '') === 'j') ? 1.5 : 8;
+  }
   else if (CLOSERS.includes(prev)) c = 0.5;
   else if ('・＆&'.includes(prev)) c = 6;
-  else if (KIND(prev) === 'h') c = /[おご]/.test(prev) && KIND(s[i - 2] || '') !== 'h' ? 7 : 1;
+  /* (お and ご before a kanji word belong to it: お|姉さん is not a place to break.) */
+  else if (KIND(prev) === 'h') c = /[おご]/.test(prev) && KIND(next) === 'j' ? 8 : 1;
   else if (KIND(prev) === 'a' && KIND(next) === 'j') c = /[0-9０-９]/.test(prev) ? 7 : 2;
   else if (KIND(prev) !== KIND(next)) c = 2;
-  else c = 4;
+  /* Inside a run of katakana is inside a word or a name (アンパン|マン); between two kanji words less so. */
+  else c = KIND(prev) === 'k' ? 10 : 4;
   /* Words in quotation marks stay on one line when a slightly smaller size lets them. */
   return c + (quoted ? 6 : 0);
 }
 /* The ways to write a text in lines no wider than a limit: at(limit) gives, for one to four lines at most,
    the lines whose breaks cost least ({ lines, bad }), or null where the text does not fit. */
 /* lines: how many lines a part may take. top: the largest letters, by page shape. give and floor: a card
-   is written a little smaller when that buys better line ends (a tenth smaller is worth three points of
-   break cost), but never under floor of the largest size it fits at. */
-const TWIN = { lines: 6, line: 1.5, gap: 0.55, descent: 0.16, give: 30, floor: 0.72, top: { x: 250, youtube: 200, pc: 190, wide: 150 } };
+   is written a little smaller when that buys better line ends (a tenth smaller is worth two and a half
+   points of break cost), but never under floor of the largest size it fits at. */
+const TWIN = { lines: 6, line: 1.5, gap: 0.55, descent: 0.16, give: 24, floor: 0.66, top: { x: 250, youtube: 200, pc: 190, wide: 150 } };
 function fitter(text) {
   const cjk = CJK_HEAD.test(text);
   let pts;
@@ -543,7 +562,8 @@ function fitter(text) {
   const nodes = [0, ...pts, text.length], N = nodes.length;
   const depth = [0];
   for (let i = 0, d = 0; i < text.length; i++) { if (OPENERS.includes(text[i])) d++; else if (CLOSERS.includes(text[i])) d = Math.max(0, d - 1); depth[i + 1] = d; }
-  const ends = nodes.map((p, j) => (j === 0 || j === N - 1 ? 0 : breakCost(text, p, cjk && depth[p] > 0, cjk)));
+  const words = cjk ? wordsOf(text) : null;
+  const ends = nodes.map((p, j) => (j === 0 || j === N - 1 ? 0 : breakCost(text, p, cjk && depth[p] > 0, cjk, words)));
   const memo = new Map();
   const piece = (a, b) => text.slice(nodes[a], nodes[b]).trim();
   const width = (a, b) => { const k = a * 4096 + b; let v = memo.get(k); if (v === undefined) { v = headW(piece(a, b)); memo.set(k, v); } return v; };
