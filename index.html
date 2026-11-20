@@ -161,13 +161,12 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
-    <!-- The accounts whose replies and comments play, and the button that sends them to githito.xapi:
-         on the main screen, under the video (they used to be in Settings). -->
+    <!-- The accounts whose replies and comments play: on the main screen, under the video. Add also sends
+         the list to githito.xapi (there is no separate button for that). -->
     <p class="music-label">Accounts with replies and comments</p>
     <div class="x-add">
       <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Accounts with replies and comments">
       <button type="button" id="addX">Add</button>
-      <button type="button" id="sendAccounts">Send to githito.xapi</button>
     </div>
     <div id="xAccounts" class="music"></div>
     <p class="note" id="askedNote"></p>
@@ -2305,8 +2304,8 @@ const PATTERNS = [
   [/^No posts from (.+) yet$/, m => `${m[1]}の投稿はまだありません`],
   [/^Press Submit on GitHub to send an empty list$/, () => 'GitHub で Submit を押すと、空の一覧を送ります'],
   [/^Press Submit on GitHub to send (.+)$/, m => `GitHub で Submit を押すと、${m[1]}を送ります`],
-  [/^githito\.xapi reads (.+?)\.(?: Not sent yet: (.+)\.)?$/, m => `xapiが集めています：${m[1]}。` + (m[2] ? `まだ送っていません：${m[2]}。` : '')],
-  [/^Not sent yet: (.+)\.$/, m => `まだ送っていません：${m[1]}。`],
+  [/^githito\.xapi reads (.+?)\.(?: Waiting for githito\.xapi: (.+)\.)?$/, m => `xapiが集めています：${m[1]}。` + (m[2] ? `反映待ち：${m[2]}。` : '')],
+  [/^Waiting for githito\.xapi: (.+)\.$/, m => `反映待ち：${m[1]}。`],
   [/^Could not read the JSON: (.*)$/, m => `JSONを読めませんでした：${m[1]}`],
   [/^Export failed: (.*)$/, m => `書き出しに失敗しました：${m[1]}`],
   [/^Exporting (.+)… (\d+)%$/, m => `${tr(m[1])}を書き出し中… ${m[2]}%`],
@@ -3965,6 +3964,7 @@ function paintAccounts() {
       saveAccounts(xAccounts().filter(n => n.toLowerCase() !== name.toLowerCase()));
       say('Removed @' + name);
       refreshMarket();
+      sendAccounts();
     };
     box.appendChild(b);
   });
@@ -3996,18 +3996,20 @@ function addAccount() {
   saveAccounts(list.concat(name));
   say('Loading @' + name);
   refreshMarket();
+  sendAccounts();
 }
 function xHandle() { return xAccounts()[0] || ''; }
-/* The list goes to githito.xapi as an issue titled "account" (one account on each line), which the owner
-   submits on GitHub. githito.xapi then reads those accounts' posts and the replies under them. */
+/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
+   issue titled "account" already written, one account on each line, and Submit there sends it. githito.xapi
+   then reads those accounts' posts and the replies under them. The list is one for News and Reply News. */
 const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
 function sendAccounts() {
   const list = xAccounts();
   const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
-  const url = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
-  const w = window.open(url, '_blank', 'noopener');
-  if (!w) location.href = url;
-  say(list.length ? 'Press Submit on GitHub to send @' + list.join(', @') : 'Press Submit on GitHub to send an empty list');
+  const a = document.createElement('a');
+  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 /* Which of the added accounts githito.xapi already reads (the "asked" list in its news file). */
 function paintAsked() {
@@ -4017,7 +4019,7 @@ function paintAsked() {
   if (!list.length) { el.textContent = ''; return; }
   const got = new Set((PREP.asked || []).map(a => String(a.h || '').toLowerCase()));
   const yes = list.filter(n => got.has(n.toLowerCase())), no = list.filter(n => !got.has(n.toLowerCase()));
-  el.textContent = [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Not sent yet: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ');
+  el.textContent = [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Waiting for githito.xapi: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ');
 }
 const SECTIONS = [
   ['', 'NEWS'],
@@ -6660,7 +6662,6 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     paceBox.appendChild(b);
   });
-  $('sendAccounts').onclick = sendAccounts;
   $('mediaFind').onclick = () => findMedia();
   $('mediaQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findMedia(); } });
   paintMedia();
@@ -6910,7 +6911,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = '9f2425ab4d2c';
+  const BUILD = '6c6aa52630cd';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

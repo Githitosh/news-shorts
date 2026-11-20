@@ -50,7 +50,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
       <li>GitHub（ページとデータの配信）、Google Fonts（文字の読み込み）</li>
       <li>Google 翻訳（ニュースの見出しを英語でも表示するため。見出しの文が送られます）</li>
       <li>利用者が設定で海外のメディア（BBC・ABC・ロイター）をオンにしたとき：そのメディアの公開フィードと、それを読むための中継サービス（rss2json、allorigins、r.jina.ai）。日本のメディアのRSSやウェブのニュース検索は使いません。</li>
-      <li>利用者が設定で「githito.xapi に送る」を押したとき：GitHub の画面が開きます（送信は利用者が自分のGitHubアカウントで行います）。</li>
+      <li><strong>アカウントを「追加」したとき</strong>（ニュース・リプライニュースの動画の下の入力欄）：追加したXのアカウント名は、収集の依頼として運営者のプログラム（githito.xapi）に追加されます。そのために GitHub の画面が開き、利用者が自分の GitHub アカウントで送信します。依頼は GitHub 上で公開され（送信した方の GitHub アカウント名と、追加したアカウント名の一覧が誰でも見られます）、受け付けられたアカウントの投稿と、それに付いた返信を githito.xapi が集めます。アカウントを外したときも、同じ方法で一覧を送り直します。</li>
     </ul>
   </li>
   <li>読み込んだデータ、見た動画の記録（同じものを繰り返さないため）、設定、追加した言葉は、利用者のブラウザの中に保存されます。運営者には送られません。</li>
@@ -62,6 +62,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
   <li><strong>リプライニュース</strong>：Xの個人の投稿と、それに付いた返信を2つ1組で表示します（挨拶や好意を伝えるやりとり）。それぞれの投稿者の名前（@）と元の投稿へのリンクを表示します。</li>
   <li>どちらも、運営者のプログラム（githito.xapi）が30分ごとに自動で集め、3日たったものは消します。Xの投稿は、FxTwitter・vxTwitter・FixupX・X公式の埋め込みサービスを通して読みます。</li>
   <li>暴力、性的な内容、重い話題、けんか腰の言葉、広告、学校に関する言葉があるもの、プロフィールから未成年と分かる方の投稿は選ばないようにしています。ただし自動の選別のため完全ではなく、不適切なものが表示されることがあります。</li>
+  <li>追加されたアカウントの投稿と返信も、ほかと同じ基準で選びます（下の「表示しません」に当たるものは載せません）。報道機関でないアカウントは、政治や特定の集団に触れる投稿なども載せず、1つのアカウントが多くを占めないように件数を限ります。短い時間に多くの依頼が届いた場合は、その送信元からの受け付けを一時的に止めます。</li>
   <li>次のものは、設定にかかわらず表示しません：残酷なニュース（殺害、遺体、拷問、性暴力、虐待、自殺、子どもが被害にあった事件など）、個人の名誉や私生活にかかわるニュース（逮捕・容疑者・起訴・判決、疑惑・告発・暴露、不倫・熱愛、炎上など）、投稿や返信の中の誹謗中傷（悪口・侮辱・差別的な言葉、脅し、人を犯罪者などと決めつける言葉、住所・本名・勤務先などを指す言葉）。言葉による自動の判定のため、完全ではありません。</li>
   <li>ご自身の投稿を表示しないでほしい場合や、権利の侵害を見つけた場合は、下記のお問い合わせ先までお知らせください。確認のうえ対応します。</li>
   <li>表示される投稿・返信・見出しの権利は、それぞれの投稿者にあります。運営者が内容を書いたり、書き換えたりすることはありません（一部を抜き出しての表示と、機械翻訳の併記を除きます）。運営者は、X社および各報道機関とは関係ありません。</li>
@@ -123,7 +124,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
       <li>GitHub (the pages and the data) and Google Fonts (the letters)</li>
       <li>Google Translate (to show a news headline in English too; the headline's words are sent)</li>
       <li>When you switch a paper from abroad on in Settings (BBC, ABC, Reuters): that paper's public feed and the relays that read it (rss2json, allorigins, r.jina.ai). No Japanese medium's RSS and no news search of the web is used.</li>
-      <li>When you press "Send to githito.xapi" in Settings: GitHub opens, and you send the request yourself with your own GitHub account.</li>
+      <li><strong>When you add an account</strong> (the field under the video, on News and on Reply News): the name of the X account you add is added to the Operator's program (githito.xapi) as a request to collect it. For that GitHub opens, and you send the request yourself with your own GitHub account. The request is public on GitHub (your GitHub account's name and the list of account names you added can be seen by anyone), and githito.xapi collects the posts of the accounts that are accepted and the replies under them. Taking an account away sends the list again in the same way.</li>
     </ul>
   </li>
   <li>The data that was loaded, the record of what has played (so that it is not repeated), your settings and the words you added are kept in your browser. They are not sent to the Operator.</li>
@@ -135,6 +136,7 @@ section + section { margin-top: 44px; padding-top: 22px; border-top: 2px solid v
   <li><strong>Reply News</strong>: a post by an individual on X and a reply to it, shown as a pair (greetings and words of affection), each with its writer's name (@) and a link to the original post.</li>
   <li>Both are collected automatically every half hour by the Operator's program (githito.xapi) and removed after three days. Posts on X are read through FxTwitter, vxTwitter, FixupX and X's own embed service.</li>
   <li>Posts with violence, sexual content, grave subjects, quarrelsome words, advertising or talk of school, and posts by people whose profile says they are under age, are meant to be left out. The choice is automatic and not perfect: something unsuitable may appear.</li>
+  <li>The posts and replies of an account that was added are chosen by the same rules as everything else (nothing listed under "Never shown" below). For an account that is not a news organization, posts on politics or on groups of people are left out as well, and the number taken from one account is limited so that it does not fill the page. When many requests arrive in a short time, requests from that sender are not taken for a while.</li>
   <li>Never shown, whatever the settings: cruel news (killing, bodies, torture, sexual violence, abuse, suicide, violence that reached children), news that touches one person's honour or private life (an arrest, a suspect, a charge, a sentence; an allegation, an exposure, an affair, a pile-on), and slander in posts and replies (insults, slurs, threats, charges against a person, anything pointing at where somebody lives or works). The check is automatic, by words, and not perfect.</li>
   <li>If you do not want your post shown, or you find an infringement of rights, please tell us at the contact below. We will look into it and act.</li>
   <li>The rights in the posts, replies and headlines shown belong to those who wrote them. The Operator does not write or rewrite them (other than showing a part of one and adding a machine translation beside it). The Operator is not affiliated with X Corp. or with any news organization.</li>

@@ -126,6 +126,13 @@ textarea { min-height: 260px; font: 12px/1.5 ui-monospace,Menlo,monospace; }
 .x-add { display: flex; gap: 8px; align-items: center; }
 .x-add input { flex: 1 1 auto; width: auto; }
 .x-add button { flex: 0 0 auto; }
+/* Under the video the account row is as wide as the choices below it, and its names sit in the middle. */
+main > .x-add { max-width: 560px; margin: 0 auto; gap: 6px; }
+main > .x-add input { min-width: 0; padding: 8px 10px; }
+main > .x-add button { padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+main > #xAccounts { justify-content: center; }
+main > #xAccounts:empty, main > #askedNote:empty { display: none; }
+main > #askedNote { text-align: center; }
 #xAccounts { margin-top: 8px; }
 #xAccounts button, #genreChips button { flex: 0 1 auto; }
 .filter-row { display: flex; align-items: center; gap: 8px; }
@@ -166,6 +173,15 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
     </div>
   </div>
   <p id="caption" class="caption"></p>
+  <!-- The accounts whose posts play with the replies under them: on the main screen, under the video, as on
+       News (one list for the two pages). Add also sends the list to githito.xapi. -->
+  <p class="music-label">Accounts with replies and comments</p>
+  <div class="x-add">
+    <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Accounts with replies and comments">
+    <button type="button" id="addX">Add</button>
+  </div>
+  <div id="xAccounts" class="music"></div>
+  <p class="note" id="askedNote"></p>
   <p class="music-label">Items</p>
   <div class="music" id="counts"></div>
   <p class="music-label">Story length</p>
@@ -215,12 +231,6 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       </div>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
-      <label for="xUser">X accounts</label>
-      <div class="x-add">
-        <input id="xUser" type="text" autocomplete="username" spellcheck="false" placeholder="@name">
-        <button type="button" id="addX">Add</button>
-      </div>
-      <div id="xAccounts" class="music"></div>
       <label for="date">Date</label>
       <input type="date" id="date">
       <label class="check"><input type="checkbox" id="autoExport"> Export MP4 files after the stories are ready</label>
@@ -494,9 +504,12 @@ function cleanHandle(v) {
   return (url ? url[1] : raw).replace(/^@+/, '').split(/[\s/?#]/)[0];
 }
 function validHandle(name) { return /^[A-Za-z0-9_]{1,15}$/.test(name); }
+/* The accounts are one list for News and Reply News, as githito.xapi holds one: it is kept under News' name
+   in the browser. (Reply News had a list of its own, which nothing read any more.) */
+const ACCOUNTS_KEY = 'newsShorts.xAccounts';
 function xAccounts() {
   let list = [];
-  try { list = JSON.parse(store.get('xAccounts', '[]')); } catch (e) { list = []; }
+  try { list = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]'); } catch (e) { list = []; }
   if (!Array.isArray(list)) list = [];
   const out = [];
   const seen = new Set();
@@ -519,9 +532,31 @@ function saveAccounts(list) {
     seen.add(key);
     clean.push(name);
   });
-  store.set('xAccounts', JSON.stringify(clean));
+  try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(clean)); } catch (e) {}
   paintAccounts();
+  paintAsked();
   return clean;
+}
+/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
+   issue titled "account" already written, one account on each line, and Submit there sends it. */
+const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
+function sendAccounts() {
+  const list = xAccounts();
+  const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
+  const a = document.createElement('a');
+  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+/* Which of the added accounts githito.xapi already reads (the "asked" list in its news file). */
+function paintAsked() {
+  const el = $('askedNote');
+  if (!el) return;
+  const list = xAccounts();
+  if (!list.length) { el.textContent = ''; return; }
+  const got = new Set((ASKED.asked || []).map(a => String(a.h || '').toLowerCase()));
+  const yes = list.filter(n => got.has(n.toLowerCase())), no = list.filter(n => !got.has(n.toLowerCase()));
+  el.textContent = ASKED.at ? [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Waiting for githito.xapi: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ') : '';
 }
 function paintAccounts() {
   const box = $('xAccounts');
@@ -535,6 +570,7 @@ function paintAccounts() {
       saveAccounts(xAccounts().filter(n => n.toLowerCase() !== name.toLowerCase()));
       say('Removed @' + name);
       refreshMarket();
+      sendAccounts();
     };
     box.appendChild(b);
   });
@@ -549,6 +585,7 @@ function addAccount() {
   saveAccounts(list.concat(name));
   say('Loading @' + name);
   refreshMarket();
+  sendAccounts();
 }
 function savedJson(key) { try { return JSON.parse(store.get(key, '{}')) || {}; } catch (e) { return {}; } }
 /* Every genre is used, in its usual place; the lineup chooses what to play. */
@@ -1591,6 +1628,54 @@ async function prepared(lang) {
   }
   return PREP.lang === lang ? PREP.stories : [];
 }
+/* ---------- the accounts the reader added: their posts and the replies under them ---------- */
+/* githito.xapi collects these for the accounts sent to it and keeps them in its news file: `news` (the
+   account's post) and `items` (an earnest reply to it). Reply News plays them as pairs, the post and then
+   the reply, first in a video and up to a quarter of its cards as pairs (half of a video with News' share).
+   The file is read only when the reader has added an account. */
+let ASKED = { at: 0, items: [], news: {}, asked: [] };
+async function askedData() {
+  if (ASKED.at && Date.now() - ASKED.at < 600000) return ASKED;
+  try {
+    const res = await withTimeout(fetch(XAPI + 'news-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 8000);
+    if (res.ok) {
+      const d = await res.json();
+      const news = (d && d.news && typeof d.news === 'object') ? d.news : {};
+      const never = window.NSNever;
+      /* Never shown (src/never.js): a reply with slander in it, a post that is cruel or against a person. */
+      const items = (Array.isArray(d && d.items) ? d.items : []).filter(x => x && x.id && x.h && x.t && x.n && news[x.n] && news[x.n].t && news[x.n].h
+        && !(never && (never.slander(x.t) || never.slander(news[x.n].t) || never.news(news[x.n].t))));
+      ASKED = { at: Date.now(), items, news, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
+      paintAsked();
+    }
+  } catch (e) { console.warn(e); }
+  return ASKED;
+}
+async function askedRows(need) {
+  const mine = new Set(xAccounts().map(n => n.toLowerCase()));
+  if (!mine.size || need <= 0) return [];
+  const d = await askedData();
+  const past = seenSet(SEEN_JOKES);
+  const now = playingKeys();
+  const keysOf = x => ['id:' + x.id, 't:' + squash(x.t).slice(0, 50)];
+  const ok = t => !NEVER.test(t) && !VIOLENT.test(t) && !heavy(t);
+  const list = d.items.filter(x => mine.has(String(d.news[x.n].h).toLowerCase()) && ok(x.t) && ok(d.news[x.n].t) && !keysOf(x).some(k => now.has(k)))
+    .sort((x, y) => (Date.parse(y.at || 0) || 0) - (Date.parse(x.at || 0) || 0));
+  const rows = [];
+  const posts = new Set(), people = new Set();
+  /* What has not played yet first; one reply for a post, and nobody twice. */
+  [false, true].forEach(played => list.forEach(x => {
+    if (rows.length >= need || keysOf(x).some(k => past.has(k)) !== played) return;
+    const who = String(x.h).toLowerCase();
+    if (posts.has(x.n) || people.has(who)) return;
+    posts.add(x.n); people.add(who);
+    const a = d.news[x.n];
+    rows.push({ romance: true, asked: true, lang: 'ja', keys: keysOf(x), story: {
+      a: { handle: a.h, text: a.t, url: 'https://x.com/' + a.h + '/status/' + x.n, id: x.n },
+      b: { handle: x.h, text: x.t, url: 'https://x.com/' + x.h + '/status/' + x.id, id: x.id }, cheers: [] } });
+  }));
+  return rows;
+}
 /* Stories for one video, read from the order githito.xapi chose (see below). Not played yet first; when
    those run out, played ones come round again, the one that played longest ago first. */
 async function preparedRows(need) {
@@ -1698,8 +1783,9 @@ function romanceCards(r, langId) {
   const st = r.story;
   const ja = r.lang !== 'en';
   const en = langId === 'en';
-  /* The corner says 恋愛 (ROMANCE in English); that is enough to set the scene. */
-  const corner = ja && !en ? '恋愛' : 'ROMANCE';
+  /* The corner says 恋愛 (ROMANCE in English); that is enough to set the scene. A pair from an account the
+     reader added (askedRows) says リプライ (REPLY). */
+  const corner = r.asked ? (ja && !en ? 'リプライ' : 'REPLY') : (ja && !en ? '恋愛' : 'ROMANCE');
   const one = (said, src, url) => {
     const text = en ? (EN_KEPT.get(said) || said) : said;
     let card;
@@ -1710,7 +1796,7 @@ function romanceCards(r, langId) {
     } else {
       const words = String(text).split(/\s+/).filter(Boolean);
       const kw = storyWord(text, '');
-      card = { kw, cat: 'ROMANCE', topic: corner, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
+      card = { kw, cat: r.asked ? 'REPLY' : 'ROMANCE', topic: corner, head: [words.slice(0, 12).join(' ') || kw], sub: [], jp: words.length > 12 ? [words.slice(12).join(' ')] : [], tags: [], src };
     }
     card.url = url || '';
     card.key = r.keys;
@@ -1957,7 +2043,9 @@ async function collect() {
   /* The video is made of the stories githito.xapi prepared, whatever the lineup says: the page searches
      nothing itself (X is not asked from here), so it starts at once. With nothing prepared it says so. */
   {
-    const rows = await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
+    /* The accounts the reader added come first: their posts with a reply under each. */
+    const mine = await askedRows(Math.max(1, Math.floor(N / 4))).catch(e => { console.warn(e); return []; });
+    const rows = mine.concat(await preparedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; }));
     if (S.again || !rows.length) return null;
     if (lang.id === 'en') await englishStories(rows);
     const items = rows.flatMap(r => romanceCards(r, lang.id)).slice(0, N);
@@ -2188,7 +2276,7 @@ function toggleSound() {
 }
 function watchLine() {
   const items = (S.script && S.script.items) || [];
-  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE' || it.cat === '恋愛' || it.cat === 'TRAVEL').length;
+  const jokes = items.filter(it => it.cat === 'HUMOR' || it.cat === 'ROMANCE' || it.cat === '恋愛' || it.cat === 'REPLY' || it.cat === 'リプライ' || it.cat === 'TRAVEL').length;
   const news = items.length - jokes;
   const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
   return 'Playing ' + what + '.';

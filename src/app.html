@@ -161,13 +161,12 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
-    <!-- The accounts whose replies and comments play, and the button that sends them to githito.xapi:
-         on the main screen, under the video (they used to be in Settings). -->
+    <!-- The accounts whose replies and comments play: on the main screen, under the video. Add also sends
+         the list to githito.xapi (there is no separate button for that). -->
     <p class="music-label">Accounts with replies and comments</p>
     <div class="x-add">
       <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Accounts with replies and comments">
       <button type="button" id="addX">Add</button>
-      <button type="button" id="sendAccounts">Send to githito.xapi</button>
     </div>
     <div id="xAccounts" class="music"></div>
     <p class="note" id="askedNote"></p>
@@ -919,6 +918,7 @@ function paintAccounts() {
       saveAccounts(xAccounts().filter(n => n.toLowerCase() !== name.toLowerCase()));
       say('Removed @' + name);
       refreshMarket();
+      sendAccounts();
     };
     box.appendChild(b);
   });
@@ -950,18 +950,20 @@ function addAccount() {
   saveAccounts(list.concat(name));
   say('Loading @' + name);
   refreshMarket();
+  sendAccounts();
 }
 function xHandle() { return xAccounts()[0] || ''; }
-/* The list goes to githito.xapi as an issue titled "account" (one account on each line), which the owner
-   submits on GitHub. githito.xapi then reads those accounts' posts and the replies under them. */
+/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
+   issue titled "account" already written, one account on each line, and Submit there sends it. githito.xapi
+   then reads those accounts' posts and the replies under them. The list is one for News and Reply News. */
 const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
 function sendAccounts() {
   const list = xAccounts();
   const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
-  const url = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
-  const w = window.open(url, '_blank', 'noopener');
-  if (!w) location.href = url;
-  say(list.length ? 'Press Submit on GitHub to send @' + list.join(', @') : 'Press Submit on GitHub to send an empty list');
+  const a = document.createElement('a');
+  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 /* Which of the added accounts githito.xapi already reads (the "asked" list in its news file). */
 function paintAsked() {
@@ -971,7 +973,7 @@ function paintAsked() {
   if (!list.length) { el.textContent = ''; return; }
   const got = new Set((PREP.asked || []).map(a => String(a.h || '').toLowerCase()));
   const yes = list.filter(n => got.has(n.toLowerCase())), no = list.filter(n => !got.has(n.toLowerCase()));
-  el.textContent = [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Not sent yet: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ');
+  el.textContent = [yes.length ? 'githito.xapi reads @' + yes.join(', @') + '.' : '', no.length ? 'Waiting for githito.xapi: @' + no.join(', @') + '.' : ''].filter(Boolean).join(' ');
 }
 const SECTIONS = [
   ['', 'NEWS'],
@@ -3614,7 +3616,6 @@ function initUI() {
     b.onclick = () => usePace(p.sec);
     paceBox.appendChild(b);
   });
-  $('sendAccounts').onclick = sendAccounts;
   $('mediaFind').onclick = () => findMedia();
   $('mediaQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findMedia(); } });
   paintMedia();
