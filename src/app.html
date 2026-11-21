@@ -13,6 +13,15 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=2">
 <link rel="manifest" href="manifest.webmanifest">
 <title>News Shorts</title>
+<script>
+/* Main entry is Japanese registered-account news. Bare / must not keep an old default video. */
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (!q.get('lang') && !q.get('country')) {
+    location.replace(location.pathname + '?lang=ja&country=JP' + (location.hash || ''));
+  }
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link id="gf" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+JP:wght@600;700;900&family=Noto+Serif+KR:wght@700&family=Noto+Serif+SC:wght@700&family=Noto+Serif+TC:wght@700&family=Tinos:wght@700&display=swap" rel="stylesheet">
@@ -2281,7 +2290,7 @@ function withCoffee(rows) {
      added in this browser. A post of an account that is not a news account ("q") plays only for a
      reader who added it.
    With another edition or a lineup line that is not a genre, the page searches as before. When the file cannot be read it searches the web only if a web source is switched on. */
-const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
+const XAPI = (location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? '/v1/' : 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
 let PREP = { items: [], news: {}, heads: [], play: null, asked: [], at: 0, part: false };
 let prepLoading = null;
 const replyLink = x => 'https://x.com/' + x.h + '/status/' + x.id;
@@ -2311,21 +2320,8 @@ function keptPrep() {
   } catch (e) {}
 }
 function loadPrep() {
-  if (prepLoading) return prepLoading;
-  prepLoading = (async () => {
-    try {
-      const res = await timed(fetch(XAPI + 'news-ja.json?t=' + Math.floor(Date.now() / 300000), { cache: 'no-store' }), 9000);
-      if (!res.ok) return false;
-      const g = prepGood(await res.json());
-      if (!g.items.length && !g.heads.length) return false;
-      PREP = { ...g, at: Date.now(), part: false };
-      keepPrep();
-      paintAsked();
-      return true;
-    } catch (e) { console.warn(e); return false; }
-    finally { prepLoading = null; }
-  })();
-  return prepLoading;
+  /* Old news-ja.json (unofficial search / replies) is not used for videos anymore. */
+  return Promise.resolve(false);
 }
 /* The kept copy at once; the file itself when there is no copy; a fresh read when what is held is more
    than ten minutes old. */
@@ -2612,7 +2608,11 @@ function headCard(row, langId) {
 /* A video from the prepared file, with room for `room` cards, or null when the page should search
    instead. What has not played yet comes first, newer news before older; one reply for one piece of
    news, nobody twice, and no paper or genre taking most of the video. */
-async function preparedScript(date, slots, room, anyway) {
+async function preparedScript() {
+  /* Removed: videos come only from registered-account stock (stock-news-ja / stock-news-en). */
+  return null;
+}
+async function preparedScriptRemoved(date, slots, room, anyway) {
   if (!prepWanted()) return null;
   const { country, lang } = market();
   /* anyway: every genre, whatever is chosen (asked for when the page's own search failed). */
@@ -2814,14 +2814,18 @@ const stockLoading = {};
 const stockKey = lang => (lang === 'en' ? 'stock.news.en' : 'stock.news');
 function stockGood(d) {
   const never = window.NSNever;
-  /* (A person's reply that names a politician, a party, the government or a paper does not play; their own
-     post does not when it runs them down: never.news.) */
-  const ok = c => c && c.id && c.h && Array.isArray(c.ja) && c.ja[0] && !(never && (never.news(c.ja.join(' ')) || (c.how === 'person' && never.safeWords && !never.safeWords(c.ja.join(' ') + ' ' + (c.kw || ''), !!c.own))));
+  /* Registered accounts' own posts only (news-famous → people.mjs → stock). No replies, no live search,
+     no unofficial-API heads. */
+  const textOk = c => {
+    const t = c.ja.join(' ');
+    if (c.lang === 'en') return (t.match(/[A-Za-z]/g) || []).length >= 12 && !/[ぁ-ヿ一-鿿\u0900-\u097F]/.test(t);
+    return (t.match(/[ぁ-ヿ一-鿿]/g) || []).length >= 4;
+  };
+  const ok = c => c && c.id && c.h && c.own && Array.isArray(c.ja) && c.ja[0] && textOk(c) && !(never && (never.news(c.ja.join(' ')) || (c.how === 'person' && never.safeWords && !never.safeWords(c.ja.join(' ') + ' ' + (c.kw || ''), true))));
   const cards = (Array.isArray(d && d.cards) ? d.cards : []).filter(ok);
   const byId = new Map(cards.map(c => [String(c.id), c]));
   const videos = (Array.isArray(d && d.videos) ? d.videos : []).filter(v => v && Array.isArray(v.c) && v.c.length).map(v => ({ i: v.i, at: v.at, c: v.c.map(String).filter(id => byId.has(id)) })).filter(v => v.c.length);
-  const replies = (Array.isArray(d && d.replies) ? d.replies : []).filter(c => c && c.id && c.ask && Array.isArray(c.ja) && c.ja[0] && !(never && never.slander(c.ja.join(' '))));
-  return { cards, byId, videos, replies, asked: (Array.isArray(d && d.asked) ? d.asked : []).filter(a => a && a.h) };
+  return { cards, byId, videos, replies: [], asked: [] };
 }
 function keptStock(lang) {
   try {
@@ -2898,10 +2902,9 @@ function pickStock(st, N, slots) {
     return got;
   };
   const fresh = list => list.filter(c => !seen(c)).concat(list.filter(seen));
+  /* Asked-account replies are not used: news videos are registered own posts only. */
   if (asked.size) {
-    const half = Math.ceil(N / 2);
-    take(fresh(st.replies.filter(c => asked.has(String(c.ask).toLowerCase()))), half);
-    take(fresh(st.cards.filter(c => asked.has(String(c.h).toLowerCase()))), half - picked.length);
+    take(fresh(st.cards.filter(c => c.own && asked.has(String(c.h).toLowerCase()))), Math.ceil(N / 2));
   }
   if (wants.length) {
     for (const w of wants) take(fresh(st.cards.filter(c => (w.gid ? c.g === w.gid : wordsHit(w.q, { h: c.h, n: c.n, t: c.ja.join(' '), d: '' })))), w.count);
@@ -2919,20 +2922,22 @@ function pickStock(st, N, slots) {
    stock (the Japanese one while githito.xapi has no English yet). Both: English and Japanese cards in turn,
    the English first, each in its own language. */
 async function stockScript(date, slots, room) {
-  if (!prepWanted()) return null;
+  /* News videos: stock-news-ja.json / stock-news-en.json only (registered own posts). */
   const { country, lang } = market();
   const N = Math.max(1, room || total());
   const ja = lang.id === 'en' ? null : await stock('ja');
   const en = lang.id === 'ja' ? null : await stock('en');
   let picked = [];
-  if (lang.id === 'both' && en.videos.length && ja.videos.length) {
+  if (lang.id === 'both' && en && en.videos.length && ja && ja.videos.length) {
     const a = pickStock(en, Math.floor(N / 2), slots).map(c => ({ ...c, lang: 'en' }));
     const b = pickStock(ja, N - a.length, slots);
     for (let i = 0; i < Math.max(a.length, b.length); i++) { if (a[i]) picked.push(a[i]); if (b[i]) picked.push(b[i]); }
+  } else if (lang.id === 'en') {
+    if (!en || !en.videos.length) return null;
+    picked = pickStock(en, N, slots).map(c => ({ ...c, lang: 'en' }));
   } else {
-    const st = lang.id === 'en' && en.videos.length ? en : (ja && ja.videos.length ? ja : await stock('ja'));
-    if (!st.videos.length) return null;
-    picked = pickStock(st, N, slots).map(c => (st === en ? { ...c, lang: 'en' } : c));
+    if (!ja || !ja.videos.length) return null;
+    picked = pickStock(ja, N, slots);
   }
   if (!picked.length) return null;
   S.pendingKeys = picked.flatMap(stockKeys);
@@ -3253,27 +3258,23 @@ async function collectPosts(date) {
   return { date, items, market: country.name + ' · ' + lang.name };
 }
 async function collect(date) {
-  if (feedMode() === 'x') return collectPosts(date);
   beginCollect();
   const slots = parseLineup(lineupText());
   const N = total();
-  /* The prepared file (the news githito.xapi collected from X), which plays at once. What the reader
-     added in Settings and the words of a lineup are looked for in it too. */
+  /* Registered-account stock only. No live X search, no news-ja.json prep, no sample fallback. */
   let script = null;
-  let noNew = null;
-  let failed = null;
-  /* The stock githito.xapi made: the cards it wrote and checked, dealt into videos. */
   try { script = await stockScript(date, slots, N); } catch (e) { console.warn(e); }
   if (script) return script;
-  /* (News is people's own words: the papers' headlines, githito.xapi's other file, do not play.) */
-  /* (The page makes no search of its own: what githito.xapi holds is all it plays.) */
-  /* Nothing for the lineup or the genres: the newest video, whatever they say. */
-  if (!script && slots.length) script = await stockScript(date, [], N).catch(() => null);
+  if (slots.length) script = await stockScript(date, [], N).catch(() => null);
   if (script) return script;
-  throw noNew || failed || noNewError('No news from githito.xapi yet. Press Update again later.');
+  throw noNewError('No news from registered accounts yet. Press Update again later.');
 }
-/* The search the page makes itself: the lineup's requests, or the front pages. */
-async function collectLive(date, slots) {
+/* Old live news search (web / keyword / random X). Removed: news videos come only from
+   registered accounts in githito.xapi stock-news-*.json (people.mjs → stock.mjs). */
+async function collectLive() {
+  throw noNewError('No news from githito.xapi yet. Press Update again later.');
+}
+async function collectLiveRemoved(date, slots) {
   if (slots.length) return collectSlots(date, slots);
   const { country, lang } = market();
   const genres = genreChoices();
@@ -3920,18 +3921,14 @@ function initUI() {
   const langBox = $('lang');
   COUNTRIES.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; countryBox.appendChild(o); });
   LANGS.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; langBox.appendChild(o); });
-  const nav = (navigator.language || 'en').toLowerCase();
-  const navCountry = nav.startsWith('ja') ? 'JP' : 'US';
+  /* Default market is Japan / Japanese (main page). English only when ?lang=en (or Settings). */
   const pickedCountry = COUNTRIES.some(c => c.id === (Q.get('country') || '')) ? Q.get('country')
-    : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : navCountry);
+    : (COUNTRIES.some(c => c.id === store.get('country', '')) ? store.get('country', '') : 'JP');
   countryBox.value = pickedCountry;
   const countryDefault = (COUNTRIES.find(c => c.id === pickedCountry) || COUNTRIES[0]).lang;
-  /* Japanese is Japanese only, English is English only, and only Both writes the two. For a day a choice
-     of Japanese saved earlier was moved to Both (Japanese used to show the English as well), so a reader
-     who had set Japanese saw both: it is moved back once. Both is there to be chosen. */
   if (store.get('langV', '') !== '3') { if (store.get('lang', '') === 'both') store.set('lang', 'ja'); store.set('langV', '3'); }
   const pickedLang = LANGS.some(l => l.id === (Q.get('lang') || '')) ? Q.get('lang')
-    : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : countryDefault);
+    : (LANGS.some(l => l.id === store.get('lang', '')) ? store.get('lang', '') : (countryDefault || 'ja'));
   langBox.value = pickedLang;
   const feedBox = $('feed');
   if (feedBox) {
