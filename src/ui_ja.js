@@ -75,14 +75,20 @@ const JA = {
     '情報源はXです。ウェブと海外のメディアは、ここでオンにしたときだけ流します。',
   'X is the source: the news githito.xapi collects from X. Nothing is read from the web, and no Japanese medium by RSS. The papers from abroad play when they are switched on and X is off.':
     '情報源はXです（githito.xapi がXから集めたニュース）。ウェブからは取りません。日本のメディアのRSSも使いません。海外のメディアは、オンにしてXをオフにしたときに流します。',
+  'Favorites': 'お気に入り',
+  'Add a medium, an @account, or a keyword. The list stays in this browser. When you add one, its posts from X can play.':
+    'メディア名・@アカウント・キーワードを追加します。一覧はこのブラウザにだけ残ります。追加すると、そのXの投稿が流せるようになります。',
   'Add a medium or a keyword': 'メディア・キーワードを追加', 'Company name, Nikkei': '会社名、日経 など',
+  '@name, company, Nikkei': '@name、会社名、日経 など',
   'Type the name of a medium or a word (your company, say) and press Search: it is looked for in the news githito.xapi collected from X, not on the web. Add what was found: its news plays first in every video. Press a name to remove it.':
     'メディア名や言葉（自分の会社名など）を入れて「検索」を押します。ウェブではなく、githito.xapi がXから集めたニュースの中から探します。見つかったものを追加すると、そのニュースが毎回の動画の最初に流れます。名前を押すと外せます。',
   'Or one account only:': 'アカウントを1つだけ追加する場合：',
   'A medium githito.xapi does not read yet: add its X account under Accounts below and send it.':
     'githito.xapi がまだ集めていないメディアは、下の「アカウント」にそのXアカウントを追加して送ってください。',
+  'A medium githito.xapi does not read yet: add its X account under News request and send it.':
+    'githito.xapi がまだ集めていないメディアは、動画下の「ニュースリクエスト」にそのXアカウントを追加して送ってください。',
   'No news could be read. Press Update again later.': 'ニュースを読み込めませんでした。しばらくしてから更新を押してください。',
-  'Add a medium, a website or a keyword': 'メディア・サイト・キーワードを追加', 'Company name, example.com': '会社名、example.com', 'Search': '検索', 'Searching…': '検索中…',
+  'Add a medium, a website or a keyword': 'メディア・サイト・キーワードを追加', 'Company name, example.com': '会社名、example.com', 'Search': '検索', 'Add': '追加', 'Searching…': '検索中…',
   'Type the name of your company, a medium, or a website, and press Search. Add what was found: its news plays first in every video. Press a name to remove it.':
     '会社名、メディア名、サイトのアドレスなどを入れて「検索」を押します。見つかったものを追加すると、そのニュースが毎回の動画の最初に流れます。名前を押すと外せます。',
   'Or one medium only:': 'メディアを1つだけ追加する場合：', 'Eight is the limit': '追加できるのは8つまでです',

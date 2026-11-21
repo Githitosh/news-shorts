@@ -53,14 +53,14 @@ canvas#cv.wide { aspect-ratio: 16 / 9; }
 .picks button { flex: 1 1 100%; }
 #keySlot { flex: 1 1 100%; }
 .music-label { text-align: center; color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 14px 0 4px; }
-#lineupGo, #applyLine, #backVideo { width: 100%; }
+#backVideo { width: 100%; }
 .music { display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px; margin: 0 auto; }
 .music button { flex: 1 1 40%; padding: 8px 6px; font-size: 13px; }
 /* The choices under the video (Items, Story length, Wallpaper, Music) are in three columns. */
 #counts, #paces, #walls, #music { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 button.on, .music button.on { background: var(--ink); color: #111; border-color: var(--ink); }
 .filter-row:has(input:checked), .check:has(input:checked) { color: var(--acc); }
-#lineup.live { border-color: var(--acc); }
+.set-note { margin: 0 0 8px; font: 400 13px/1.45 "Noto Sans JP",sans-serif; color: var(--mute); }
 .caption { text-align: center; color: var(--mute); font-size: 13px; margin: 8px auto 0; max-width: 36em; }
 #storyLink { color: var(--acc); }
 .caption:empty { display: none; }
@@ -207,19 +207,14 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <select id="feed" hidden>
         <option value="news">News</option>
       </select>
-      <label>Genres</label>
-      <div id="genreChips" class="music"></div>
-      <button type="button" id="lineupGo">Lineup</button>
-      <textarea id="lineup" rows="8" spellcheck="false" placeholder="Musk X&#10;SpaceX&#10;ABC&#10;Sports&#10;Food&#10;Restaurant"></textarea>
-      <button id="applyLine" type="button">Apply lineup</button>
-      <div id="genres" class="filters"></div>
       <label class="check"><input type="checkbox" id="hideViolent"> Turn violence off</label>
       <label>Sources</label>
       <div id="sourceFilters" class="filters"></div>
-      <label for="mediaQ">Add a medium or a keyword</label>
+      <label for="mediaQ">Favorites</label>
+      <p class="set-note">Add a medium, an @account, or a keyword. The list stays in this browser. When you add one, its posts from X can play.</p>
       <div class="x-add">
-        <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="Company name, Nikkei">
-        <button type="button" id="mediaFind">Search</button>
+        <input id="mediaQ" type="text" spellcheck="false" autocomplete="off" placeholder="@name, company, Nikkei">
+        <button type="button" id="mediaFind">Add</button>
       </div>
       <div id="mediaFound" class="found" hidden></div>
       <div id="myMedia" class="music"></div>
@@ -1049,18 +1044,9 @@ function splitHeadline(title) {
 function savedJson(key) {
   try { return JSON.parse(store.get(key, '{}')); } catch (e) { return {}; }
 }
+/* Genre pickers were removed from Settings. Classification labels on cards stay; every genre is on. */
 function genreChoices() {
-  const saved = savedJson('genres');
-  return GENRES.map(g => {
-    const box = document.querySelector('.genre[value="' + g.id + '"]');
-    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
-    const rec = saved[g.id] || {};
-    return {
-      ...g,
-      on: box ? box.checked : rec.on !== false,
-      place: (place && place.value) || rec.place || g.place,
-    };
-  }).filter(g => g.on);
+  return GENRES.map(g => ({ ...g, on: true }));
 }
 /* Sources taken out of the settings (NHK, Asahi, Yomiuri, AP, CNN, The New York Times):
    never read, and their stories are skipped. Abroad means BBC, ABC and Reuters only. */
@@ -1969,10 +1955,9 @@ const CHIPS = [
   { label: 'SpaceX', line: 'SpaceX' },
   { label: 'ABC', line: 'ABC' },
 ];
+/* Lineup UI removed: videos follow favorites (myMedia), news requests, then the stock. */
 function lineupText() {
-  const el = $('lineup');
-  if (el) return el.value;
-  return store.get('lineup', '');
+  return '';
 }
 function lineName(line) {
   return String(line || '').replace(/^\s*\d+\s*[\.\)、]\s*/, '').split(/[,、]/)[0].trim().toLowerCase();
@@ -2899,17 +2884,18 @@ function stockCard(c) {
     src: ('X @' + (c.ask ? c.b.h + ' → @' + c.ask : c.h)).slice(0, 40), date: md, url: stockLink(c), sub: [], tags: [],
     kw: c.kw || (langId === 'en' ? storyWord(ja[0], '') : jaWord(ja[0])), head: [ja[0]], jp: ja[1] ? [ja[1]] : [] };
 }
-/* The cards for one video from one stock: the accounts the reader added first; the lineup's words or genres;
-   or the next stock video not played yet (Update advances one video at a time). */
+/* The cards for one video from one stock: favorites (myMedia) and news-request accounts first;
+   then the next stock video not played yet (Update advances one video at a time). */
 function pickStock(st, N, slots, lang) {
   const past = seenKeys();
   const playing = playingCardIds();
   const seen = c => !c || stockKeys(c).some(k => past.has(k)) || playing.has(String(c.id));
-  const genres = genreChoices();
-  const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
   const wants = slots.map(s => ({ gid: slotGenre(s), q: slotWords(s), count: s.count || 1 })).filter(w => w.gid || w.q);
   const asked = new Set(xAccounts().map(n => n.toLowerCase()));
-  const fits = c => !barred(c.ja.join(' ')) && (!c.q || asked.has(String(c.h).toLowerCase()));
+  const favorites = myMedia();
+  const asHead = c => ({ h: c.h, n: c.n || c.nm || '', t: (c.ja || []).join(' '), d: c.kw || '' });
+  const favoriteHit = c => favorites.some(m => mediaHit(m, asHead(c)));
+  const fits = c => !barred(c.ja.join(' ')) && (!c.q || asked.has(String(c.h).toLowerCase()) || favoriteHit(c));
   const picked = [];
   const people = new Set();
   const take = (list, n) => {
@@ -2924,14 +2910,16 @@ function pickStock(st, N, slots, lang) {
     return got;
   };
   const freshest = list => list.filter(c => !seen(c)).concat(list.filter(c => c && !playing.has(String(c.id)) && seen(c)));
+  /* Favorites: that medium's (or keyword's) posts from X play first, up to half the video. */
+  if (favorites.length) {
+    take(freshest(st.cards.filter(c => c.own && favoriteHit(c))), Math.ceil(N / 2));
+  }
   /* Asked-account replies are not used: news videos are registered own posts only. */
   if (asked.size) {
     take(freshest(st.cards.filter(c => c.own && asked.has(String(c.h).toLowerCase()))), Math.ceil(N / 2));
   }
   if (wants.length) {
-    for (const w of wants) take(freshest(st.cards.filter(c => (w.gid ? c.g === w.gid : wordsHit(w.q, { h: c.h, n: c.n, t: c.ja.join(' '), d: '' })))), w.count);
-  } else if (allowed) {
-    take(freshest(st.cards.filter(c => allowed.has(c.g || 'other'))), N - picked.length);
+    for (const w of wants) take(freshest(st.cards.filter(c => (w.gid ? c.g === w.gid : wordsHit(w.q, asHead(c))))), w.count);
   } else {
     /* One stock video at a time: skip ids already shown and the pack on screen. When every id has
        played, clear the list and go round again from the newest. */
@@ -2986,11 +2974,10 @@ async function stockScript(date, slots, room, fresh) {
   S.pendingKeys = picked.flatMap(stockKeys);
   return { date, items: picked.map(stockCard), market: country.name + ' · ' + lang.name };
 }
-/* ---------- media and keywords the user added ---------- */
-/* X is the page's source. A user can add a medium or a keyword (their own company, say): it is looked
-   for in the news githito.xapi collected from X, by the account's name and by the words of the headline,
-   and what is found plays first, up to half of a video. Nothing is searched on the web. (A medium
-   githito.xapi does not read yet is added under Accounts and sent to it.) */
+/* ---------- favorites: media and keywords the user added (localStorage only) ---------- */
+/* X is the page's source. Favorites stay in this browser. A medium, @account, or keyword is matched
+   in the stock githito.xapi prepared from X; matching posts play first, up to half of a video.
+   Nothing is searched on the web, and nothing is written to the public repo. */
 function myMedia() {
   try {
     const list = JSON.parse(store.get('myMedia', '[]'));
@@ -3049,18 +3036,21 @@ function paintMedia() {
     box.appendChild(b);
   });
 }
-function addMedia(m) {
+function addMedia(m, opts) {
   const list = myMedia();
-  if (list.some(x => sameMedia(x, m))) { say('Already added ' + mediaName(m)); return; }
-  if (list.length >= 8) { say('Eight is the limit'); return; }
+  if (list.some(x => sameMedia(x, m))) { say('Already added ' + mediaName(m)); return false; }
+  if (list.length >= 8) { say('Eight is the limit'); return false; }
   store.set('myMedia', JSON.stringify(list.concat(m)));
   paintMedia();
-  $('mediaFound').hidden = true;
-  $('mediaQ').value = '';
+  if (!(opts && opts.keep)) {
+    $('mediaFound').hidden = true;
+    $('mediaQ').value = '';
+  }
   say('Added ' + mediaName(m));
   refreshMarket();
+  return true;
 }
-/* Look for what was typed in the news from X and show what was found, with a button to add it. */
+/* Add a favorite at once (like the News request list). Then show matching stock posts from X if any. */
 async function findMedia() {
   const raw = $('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60);
   const box = $('mediaFound');
@@ -3068,23 +3058,28 @@ async function findMedia() {
   const site = domainOf(raw);
   const handle = /^[@＠]/.test(raw) && validHandle(cleanHandle(raw)) ? cleanHandle(raw) : '';
   const m = handle ? { kind: 'x', q: handle, name: '@' + handle } : site ? { kind: 'site', q: site, name: site } : { kind: 'word', q: raw, name: raw };
+  addMedia(m, { keep: true });
+  $('mediaQ').value = '';
   box.hidden = false;
   box.textContent = 'Searching…';
+  try { await stock(wordsLang() === 'en' ? 'en' : 'ja', false); } catch (e) { console.warn(e); }
   let prep = PREP;
   try { prep = await prepared(); } catch (e) { console.warn(e); }
-  if ($('mediaQ').value.trim().replace(/\s+/g, ' ').slice(0, 60) !== raw) return;
   box.innerHTML = '';
   const line = (text, cls) => { const p = document.createElement('p'); p.className = cls || 'found-line'; p.textContent = text; box.appendChild(p); return p; };
   const button = (text, item) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = () => addMedia(item); box.appendChild(b); return b; };
   const asked = new Set(xAccounts().map(n => n.toLowerCase()));
-  const heads = (prep.heads || []).filter(x => (!x.q || asked.has(lowText(x.h))) && !barred(x.t));
+  const fromStock = (lang) => (STOCKS[lang] && STOCKS[lang].cards || []).map(c => ({
+    h: c.h, n: c.n || c.nm || '', t: (c.ja || []).join(' '), d: c.kw || '', at: c.at, found: c.at,
+  }));
+  const heads = fromStock('ja').concat(fromStock('en'))
+    .concat((prep.heads || []).filter(x => (!x.q || asked.has(lowText(x.h))) && !barred(x.t)));
   const when = x => Date.parse(x.at || x.found || 0) || 0;
-  const rows = heads.filter(x => mediaHit(m, x)).sort((a, b) => when(b) - when(a));
+  const rows = heads.filter(x => mediaHit(m, x) && !barred(x.t)).sort((a, b) => when(b) - when(a));
   if (rows.length) {
     line('Found ' + rows.length + ' stories');
     rows.slice(0, 4).forEach(x => line('・' + x.t + '（' + (x.n || '@' + x.h) + '）', 'found-story'));
-  } else line('No news from X for ' + raw + ' yet. Added, it plays when there is some.');
-  button('Add: ' + mediaName(m), m);
+  } else line('No news from X for ' + mediaName(m) + ' yet. Added, it plays when there is some.');
   if (m.kind !== 'x') {
     /* The accounts whose name holds what was typed: one of them can be added on its own. */
     const q = lowText(site ? site.split('.')[0] : raw);
@@ -3094,7 +3089,7 @@ async function findMedia() {
     if (accounts.length) line('Or one account only:', 'found-line');
     accounts.forEach(([h, n]) => button('Add: ' + n + ' @' + h, { kind: 'x', q: h, name: n }));
   }
-  if (!rows.length) line('A medium githito.xapi does not read yet: add its X account under Accounts below and send it.', 'found-line');
+  if (!rows.length) line('A medium githito.xapi does not read yet: add its X account under News request and send it.', 'found-line');
 }
 function scriptFromSequence(date, sequence, lang, country, comments) {
   const items = [];
@@ -3657,13 +3652,10 @@ function setBusy(b) {
 function previewLabel() {
   const { country, lang } = market();
   const frame = country.name + ' · ' + lang.name;
-  const preview = parseLineup(lineupText());
   const names = xAccounts();
-  if (preview.length) {
-    const title = [frame].concat(preview.map(s => s.label || 'News')).join('\n');
-    return { title, say: 'Reading ' + frame };
-  }
-  const title = names.length ? frame + '\n' + names.map(n => '@' + n).join('\n') : frame;
+  const favs = myMedia().map(mediaName).filter(Boolean);
+  const bits = names.map(n => '@' + n).concat(favs);
+  const title = bits.length ? frame + '\n' + bits.join('\n') : frame;
   return { title, say: 'Reading ' + frame };
 }
 let waitCard = 0;
@@ -4014,65 +4006,9 @@ function initUI() {
   $('shareGo').onclick = async () => { const out = shareOut; if (out && await openSheet(out)) closeShare(); };
   $('shareClose').onclick = () => closeShare();
   $('shareBox').addEventListener('click', e => { if (e.target === $('shareBox')) closeShare(); });
-  const lineup = $('lineup');
-  lineup.value = store.get('lineup', '').split(/\n/).map(noCount).filter(Boolean).join('\n');
-  store.set('lineup', lineup.value);
-  const paintChips = () => {
-    const keys = new Set(lineup.value.split(/\n/).map(chipKey).filter(Boolean));
-    document.querySelectorAll('#genreChips button').forEach(b => b.classList.toggle('on', keys.has(b.dataset.line)));
-    lineup.classList.toggle('live', !!lineup.value.trim());
-  };
-  const chips = $('genreChips');
-  CHIPS.forEach(chip => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = chip.label;
-    b.dataset.line = chip.label.toLowerCase();
-    b.onclick = () => {
-      const lines = lineup.value.split(/\n/).map(s => s.trim()).filter(Boolean);
-      const key = chip.label.toLowerCase();
-      const idx = lines.findIndex(line => chipKey(line) === key);
-      if (idx >= 0) lines.splice(idx, 1);
-      else lines.push(chipLine(chip));
-      lineup.value = lines.join('\n');
-      store.set('lineup', lineup.value);
-      paintChips();
-      arm('applyLine');
-      refreshMarket();
-    };
-    chips.appendChild(b);
-  });
-  paintChips();
-  lineup.addEventListener('input', () => {
-    store.set('lineup', lineup.value);
-    paintChips();
-    $('applyLine').classList.remove('on');
-    scheduleRefresh(800);
-  });
-  const applyLineup = () => {
-    clearTimeout(refreshTimer);
-    store.set('lineup', lineup.value);
-    paintChips();
-    arm('applyLine');
-    closeStudio();
-    window.scrollTo(0, 0);
-    refreshMarket();
-  };
-  $('applyLine').onclick = applyLineup;
-  $('lineupGo').onclick = applyLineup;
-  const markLine = () => { if (lineup.value.trim()) arm('applyLine'); };
-  const oldRefresh = refreshMarket;
-  refreshMarket = function () { markLine(); return oldRefresh(); };
   keepInitTail();
 }
 function saveFilters() {
-  const genres = {};
-  GENRES.forEach(g => {
-    const box = document.querySelector('.genre[value="' + g.id + '"]');
-    const place = document.querySelector('.place[data-genre="' + g.id + '"]');
-    genres[g.id] = { on: !!(box && box.checked), place: place ? place.value : g.place };
-  });
-  store.set('genres', JSON.stringify(genres));
   const sources = {};
   SOURCES.forEach(s => {
     const box = document.querySelector('.srcf[value="' + s.id + '"]');
@@ -4082,42 +4018,12 @@ function saveFilters() {
   store.set('hideViolent', $('hideViolent').checked ? '1' : '0');
 }
 function buildFilters() {
-  const savedG = savedJson('genres');
   /* Once: in Japan the sources go back to X only. What is switched on after that is kept. */
   if (store.get('srcV', '') !== '2') {
     if (!sourceDefault('web')) store.set('sourcesOn', JSON.stringify({ x: true, web: false, bbc: false, abc: false, reuters: false }));
     store.set('srcV', '2');
   }
   const savedS = savedJson('sourcesOn');
-  const box = $('genres');
-  GENRES.forEach(g => {
-    const row = document.createElement('div');
-    row.className = 'filter-row';
-    const lab = document.createElement('label');
-    lab.className = 'check';
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.className = 'genre';
-    input.value = g.id;
-    input.checked = !savedG[g.id] || savedG[g.id].on !== false;
-    lab.appendChild(input);
-    lab.appendChild(document.createTextNode(g.name));
-    const sel = document.createElement('select');
-    sel.className = 'place';
-    sel.dataset.genre = g.id;
-    [['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']].forEach(([value, name]) => {
-      const o = document.createElement('option');
-      o.value = value;
-      o.textContent = name;
-      sel.appendChild(o);
-    });
-    sel.value = (savedG[g.id] && savedG[g.id].place) || g.place;
-    const changed = () => { saveFilters(); refreshMarket(); };
-    input.onchange = changed;
-    sel.onchange = changed;
-    row.append(lab, sel);
-    box.appendChild(row);
-  });
   $('hideViolent').checked = store.get('hideViolent', '0') === '1';
   $('hideViolent').onchange = () => { saveFilters(); refreshMarket(); };
   const sbox = $('sourceFilters');
