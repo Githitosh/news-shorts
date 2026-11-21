@@ -1730,8 +1730,10 @@ async function stockRows(N, fresh) {
       rows.push({ romance: true, stock: x, asked: true, keys: msgKeys(x) });
     }
   }
-  const hour = new Date().getHours();
-  const morning = hour >= 4 && hour < 11;
+  /* Match the viewer’s Japan-time band to the hour the talks were posted (not only the word おはよう). */
+  const jstHour = (() => { const d = new Date(Date.now() + 9 * 3600e3); return d.getUTCHours(); })();
+  const slotNow = jstHour >= 4 && jstHour < 11 ? 'morning' : (jstHour >= 21 || jstHour < 4 ? 'night' : 'day');
+  const videoSlot = v => v.slot || (v.m ? 'morning' : 'day');
   const talkSeen = t => !t || t.m.some(seenMsg) || t.m.some(x => msgKeys(x).some(k => now.has(k)));
   const onScreen = v => v.c.some(id => { const t = st.byId.get(id); return t && t.m.some(x => msgKeys(x).some(k => now.has(k))); });
   let done = seenHumorVideos();
@@ -1742,8 +1744,12 @@ async function stockRows(N, fresh) {
     pool = st.videos.filter(v => v && v.c && v.c.length && !onScreen(v));
   }
   if (!pool.length) pool = st.videos.filter(v => v && v.c && v.c.length);
+  /* Prefer the current time-of-day; demote morning packs outside the morning. */
+  let timed = pool.filter(v => videoSlot(v) === slotNow);
+  if (!timed.length) timed = pool.filter(v => !(slotNow !== 'morning' && videoSlot(v) === 'morning'));
+  if (!timed.length) timed = pool;
   const unseen = v => v.c.filter(id => !talkSeen(st.byId.get(id))).length;
-  const order = pool.map((v, i) => [(v.m === morning ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
+  const order = timed.map((v, i) => [(videoSlot(v) === slotNow ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
   const took = new Set();
   S.pendingHumorVideo = null;
   for (const v of order) {
