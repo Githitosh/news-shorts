@@ -5095,10 +5095,20 @@ async function stockRows(N, fresh) {
       rows.push({ romance: true, stock: x, asked: true, keys: msgKeys(x) });
     }
   }
-  /* Match the viewer’s Japan-time band to the hour the talks were posted (not only the word おはよう). */
+  /* Hard match Japan-time: outside morning, never play おはよう / morning packs (even if that is all that is left). */
   const jstHour = (() => { const d = new Date(Date.now() + 9 * 3600e3); return d.getUTCHours(); })();
   const slotNow = jstHour >= 4 && jstHour < 11 ? 'morning' : (jstHour >= 21 || jstHour < 4 ? 'night' : 'day');
   const videoSlot = v => v.slot || (v.m ? 'morning' : 'day');
+  const morningText = t => /おはよ|おはよう|おっはー|おはおは|good\s*morning|rise and shine|morning sunshine/i.test((t.m || []).map(x => (x.ja || []).join(' ')).join(' '));
+  const talkOkHour = t => {
+    if (!t) return false;
+    if (slotNow !== 'morning' && (t.k === 'morning' || morningText(t))) return false;
+    if (slotNow !== 'night' && t.k === 'night' && /おやす|ねんね|sweet dreams|good\s*night|night night/i.test((t.m || []).map(x => (x.ja || []).join(' ')).join(' '))) {
+      /* Night greetings only in the night band. */
+      return false;
+    }
+    return true;
+  };
   const talkSeen = t => !t || t.m.some(seenMsg) || t.m.some(x => msgKeys(x).some(k => now.has(k)));
   const onScreen = v => v.c.some(id => { const t = st.byId.get(id); return t && t.m.some(x => msgKeys(x).some(k => now.has(k))); });
   let done = seenHumorVideos();
@@ -5109,28 +5119,40 @@ async function stockRows(N, fresh) {
     pool = st.videos.filter(v => v && v.c && v.c.length && !onScreen(v));
   }
   if (!pool.length) pool = st.videos.filter(v => v && v.c && v.c.length);
-  /* Prefer the current time-of-day; demote morning packs outside the morning. */
+  /* Never fall back to morning videos at night/day. */
   let timed = pool.filter(v => videoSlot(v) === slotNow);
-  if (!timed.length) timed = pool.filter(v => !(slotNow !== 'morning' && videoSlot(v) === 'morning'));
-  if (!timed.length) timed = pool;
+  if (!timed.length) timed = pool.filter(v => videoSlot(v) !== 'morning' || slotNow === 'morning');
+  if (slotNow !== 'morning') timed = timed.filter(v => videoSlot(v) !== 'morning');
   const unseen = v => v.c.filter(id => !talkSeen(st.byId.get(id))).length;
   const order = timed.map((v, i) => [(videoSlot(v) === slotNow ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
   const took = new Set();
   S.pendingHumorVideo = null;
+  const takeTalk = t => {
+    if (!t || !talkOkHour(t) || took.has(t.i)) return false;
+    const who = [...new Set(t.m.map(x => String(x.h).toLowerCase()))];
+    if (who.some(h => people.has(h)) || !t.m.every(x => okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)))) return false;
+    took.add(t.i); who.forEach(h => people.add(h));
+    t.m.forEach(x => rows.push({ romance: true, stock: x, talk: t.i, keys: msgKeys(x) }));
+    return true;
+  };
   for (const v of order) {
     const before = rows.length;
     for (const id of v.c) {
       if (rows.length >= N) break;
-      const t = st.byId.get(id);
-      if (!t) continue;
-      const who = [...new Set(t.m.map(x => String(x.h).toLowerCase()))];
-      if (took.has(t.i) || who.some(h => people.has(h)) || !t.m.every(x => okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)))) continue;
-      took.add(t.i); who.forEach(h => people.add(h));
-      t.m.forEach(x => rows.push({ romance: true, stock: x, talk: t.i, keys: msgKeys(x) }));
+      takeTalk(st.byId.get(id));
     }
     if (rows.length > before) {
       S.pendingHumorVideo = v.i;
       break;
+    }
+  }
+  /* If every stock video is morning-tagged, build a pack from non-morning talks directly. */
+  if (rows.length < Math.min(4, N) && slotNow !== 'morning') {
+    const free = [...st.byId.values()].filter(t => talkOkHour(t) && !talkSeen(t) && !took.has(t.i))
+      .sort((a, b) => (b.gl - a.gl) || ((Date.parse(b.at || 0) || 0) - (Date.parse(a.at || 0) || 0)));
+    for (const t of free) {
+      if (rows.length >= N) break;
+      takeTalk(t);
     }
   }
   return rows;
@@ -6730,7 +6752,7 @@ E.setMusicCredit(TRACKS[0].credit);
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'f4ced2060c07';
+  const BUILD = '192fba10bcac';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {
