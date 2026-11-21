@@ -1606,7 +1606,8 @@ const XAPI = 'https://raw.githubusercontent.com/Githitosh/githito.xapi/api/v1/';
 let PREP = { lang: '', stories: [], play: null, at: 0 };
 /* A story with slander in it is never shown (src/never.js, the same list githito.xapi collects by): insults,
    slurs, threats, charges against a person, anything pointing at where somebody lives or works. */
-const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && s.a.handle && s.b.handle && s.a.id && s.b.id
+const speakerHandle = side => (side && side.handle) || (side && side.s != null ? 's' + side.s : '');
+const goodStories = list => (Array.isArray(list) ? list : []).filter(s => s && s.a && s.b && s.a.text && s.b.text && speakerHandle(s.a) && speakerHandle(s.b) && s.a.id && s.b.id
   && !(window.NSNever && NSNever.slander(s.a.text + ' ' + s.b.text)));
 const goodPlay = p => (p && typeof p === 'object' && ['morning', 'day', 'night'].every(k => Array.isArray(p[k])) ? p : null);
 function keptPrep(lang) {
@@ -1653,7 +1654,8 @@ let STOCK = { talks: [], byId: new Map(), videos: [], replies: [], at: 0 };
 let stockLoading = null;
 function stockGood(d) {
   const never = window.NSNever;
-  const okMsg = x => x && x.h && Array.isArray(x.ja) && x.ja[1] && !(never && never.slander(x.ja[1]));
+  const msgWho = x => (x && x.h) || (x && x.s != null ? 's' + x.s : '');
+  const okMsg = x => x && msgWho(x) && Array.isArray(x.ja) && x.ja[1] && !(never && never.slander(x.ja[1]));
   const talks = (Array.isArray(d && d.talks) ? d.talks : []).filter(t => t && t.i && Array.isArray(t.m) && t.m.length >= 2 && t.m.every(okMsg));
   const byId = new Map(talks.map(t => [String(t.i), t]));
   const videos = (Array.isArray(d && d.videos) ? d.videos : []).filter(v => v && Array.isArray(v.c)).map(v => ({ i: v.i, at: v.at, m: !!v.m, c: v.c.map(String).filter(id => byId.has(id)) })).filter(v => v.c.length);
@@ -1764,7 +1766,8 @@ async function stockRows(N, fresh) {
   S.pendingHumorVideo = null;
   const takeTalk = t => {
     if (!t || !talkOkHour(t) || took.has(t.i)) return false;
-    const who = [...new Set(t.m.map(x => String(x.h).toLowerCase()))];
+    const msgWho = x => String((x && x.h) || (x && x.s != null ? 's' + x.s : '')).toLowerCase();
+    const who = [...new Set(t.m.map(msgWho).filter(Boolean))];
     if (who.some(h => people.has(h)) || !t.m.every(x => okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)))) return false;
     took.add(t.i); who.forEach(h => people.add(h));
     t.m.forEach(x => rows.push({ romance: true, stock: x, talk: t.i, keys: msgKeys(x) }));
@@ -1975,8 +1978,10 @@ function romanceCards(r, langId) {
     const parts = en || x.ja;
     const ja = !en;
     const corner = r.asked ? (ja ? 'リプライ' : 'REPLY') : (ja ? '恋愛' : 'ROMANCE');
+    const who = x.h || (x.s != null ? 's' + x.s : 's');
+    const whom = x.to || '';
     return [{ kw: parts[0] || parts[1], cat: corner, topic: ja ? '' : corner, head: [ja ? parts[1] : parts[1].toUpperCase()], sub: [], jp: [], tags: [],
-      src: 'X @' + x.h + (x.to ? ' → @' + x.to : ''), url: x.i ? 'https://x.com/' + x.h + '/status/' + x.i : '', key: r.keys }];
+      src: 'X @' + who + (whom ? ' → @' + whom : ''), url: x.i && x.h && !/^s\d+$/i.test(x.h) ? 'https://x.com/' + x.h + '/status/' + x.i : '', key: r.keys }];
   }
   const st = r.story;
   const ja = r.lang !== 'en';
@@ -2257,9 +2262,10 @@ async function collect(fresh) {
        the video. The stories fill the rest (two cards each). */
     /* The stock githito.xapi made (a card a story); without it, the stories file as before. */
     const fromStock = await stockRows(N, fresh).catch(e => { console.warn(e); return null; });
-    const mine = fromStock ? [] : await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
-    const more = fromStock ? [] : await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
-    const rows = fromStock || mine.concat(more);
+    const stockOk = Array.isArray(fromStock) && fromStock.length > 0;
+    const mine = stockOk ? [] : await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
+    const more = stockOk ? [] : await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
+    const rows = stockOk ? fromStock : mine.concat(more);
     if (!rows.length) return null;
     /* A newer Update arrived: keep the stock video id as used so the next pick advances. */
     if (S.again) {
