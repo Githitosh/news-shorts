@@ -170,11 +170,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
-    <!-- The accounts whose replies and comments play: on the main screen, under the video. Add also sends
-         the list to githito.xapi (there is no separate button for that). -->
-    <p class="music-label">Reply request</p>
+    <!-- News request: Add opens a private-memo Issue (githito.memo → accounts.json). Filtered later. -->
+    <p class="music-label">News request</p>
     <div class="x-add">
-      <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Reply request">
+      <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="News request">
       <button type="button" id="addX">Add</button>
     </div>
     <div id="xAccounts" class="music"></div>
@@ -2231,9 +2230,13 @@ const JA = {
   'Reuters': 'ロイター', 'Associated Press': 'AP通信', 'BBC': 'BBC', 'CNN': 'CNN', 'The New York Times': 'ニューヨーク・タイムズ',
   'NHK': 'NHK', 'Asahi Shimbun': '朝日新聞', 'Yomiuri Shimbun': '読売新聞',
   'X accounts': 'Xアカウント', 'Add': '追加',
-  'Reply request': 'リプライリクエスト', 'Accounts with replies and comments': 'リプライとコメントを流すアカウント', 'Send to githito.xapi': 'xapiに送る',
+  'Reply request': 'リプライリクエスト', 'News request': 'ニュースリクエスト',
+  'Accounts with replies and comments': 'リプライとコメントを流すアカウント',
+  'Send to githito.xapi': 'xapiに送る', 'Send to private memo': '非公開メモに送る',
   'News plays no replies. Add an account here, and its posts play with the replies and comments under them (up to half of a video). Press Send to githito.xapi and then Submit: githito.xapi reads that account\'s replies from its next run, every half hour. Press a name to remove it, and send again.':
-    'ニュースはふだんリプライを流しません。ここにアカウントを追加すると、そのアカウントの投稿と、それに付いたリプライとコメントを流します（動画の半分まで）。「xapiに送る」を押して GitHub で Submit を押すと、30分ごとの次の収集から、そのアカウントへのリプライを集めます。名前を押すと外せます（外したら、もう一度送ります）。',
+    'ニュースはふだんリプライを流しません。ここにアカウントを追加（ニュースリクエスト）すると、非公開メモに保存され、フィルターを通したうえで投稿とリプライを集めます。「追加」で GitHub（非公開メモ）の Submit を押すと、30分ごとの次の収集から読みます。名前を押すと外せます。',
+  'Add a news account here. It is saved only in the private memo (not on the public API), then filtered and collected every half hour. Press a name to remove it, and send again.':
+    'ここにニュース用アカウントを追加します。公開APIには出さず、非公開メモだけに保存し、フィルターをかけて30分ごとに集めます。名前を押すと外せます（外したらもう一度送ります）。',
   'News plays the headlines from X, without replies. A story that has played does not play again. X posts skips the news and plays posts from the lineup and the accounts below.':
     'ニュースは、Xのニュースの見出しを流します（リプライなし）。一度流したニュースは二度と流しません。Xの投稿を選ぶと、ニュースは流さず、ラインナップと下のアカウントの投稿を流します。',
   'Replies': 'リプライ', 'With replies': 'リプライあり', 'News only': 'リプライなし',
@@ -4200,10 +4203,11 @@ function playSound() {
 NSMusic.onchange = heard => { if (heard) soundOn(); else soundOff(); };
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); return; }
+  if (S.playing) { stop(); say('Paused. Tap the video or press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
+  playSound();
   say(watchLine());
 }
 function pauseMusic() {
@@ -4229,7 +4233,7 @@ function toggleMusic() {
   if (S.mute) pauseMusic();
   else if (S.show && S.playing) playSound();
 }
-/* Stops the video. The music goes on (pauseMusic stops it). */
+/* Stops the video and the music together. */
 function stop() {
   if (S.show && S.playing && S.show.duration) {
     const T = Math.max(0, Math.min(currentT(), S.show.duration));
@@ -4239,6 +4243,7 @@ function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   $('play').textContent = 'Play';
+  pauseMusic();
 }
 
 /* ---------- collection ---------- */
@@ -4323,15 +4328,16 @@ function addAccount() {
   sendAccounts();
 }
 function xHandle() { return xAccounts()[0] || ''; }
-/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
-   issue titled "account" already written, one account on each line, and Submit there sends it. githito.xapi
-   then reads those accounts' posts and the replies under them. The list is one for News and Reply News. */
+/* Adding an account (or taking one away) opens the PRIVATE memo (githito.memo): an issue titled
+   "account", one handle per line. Submit there writes accounts.json in that private repo only —
+   never the public githito.xapi / api branch. Collect then reads that list for replies. */
 const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
+const MEMO_REPO = 'https://github.com/Githitosh/githito.memo';
 function sendAccounts() {
   const list = xAccounts();
   const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
   const a = document.createElement('a');
-  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.href = MEMO_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
   a.target = '_blank'; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
 }
@@ -5665,7 +5671,7 @@ function withCoffee(rows) {
    - Every card is a headline from X: News plays no replies.
    - For an account added in Settings, its posts play with the replies and comments under them (one
      card each, saying which post it answers), up to half of a video. githito.xapi reads replies only
-     for the accounts sent to it (Send to githito.xapi), and the page plays them only for the accounts
+     for the accounts sent to the private memo (News request), and the page plays them only for the accounts
      added in this browser. A post of an account that is not a news account ("q") plays only for a
      reader who added it.
    With another edition or a lineup line that is not a genre, the page searches as before. When the file cannot be read it searches the web only if a web source is switched on. */
@@ -7166,7 +7172,7 @@ function setupVideoFull() {
   v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
   v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
   /* Pause and play in the system player pause and play the video and the music. */
-  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); } }, 300); });
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); say('Paused. Tap the video or press Play to continue.'); } }, 300); });
   v.addEventListener('play', () => { if (S.vfull && !S.playing && S.show) { play().catch(() => {}); playSound(currentT()); } });
 }
 function videoFull() {
@@ -7558,7 +7564,7 @@ function keepInitTail() {
 /* A newer copy on the site: load it, so a copy the browser kept from before is not shown.
    version.json names the latest build of each page; it is read past the browser's cache. */
 function watchVersion(key, url) {
-  const BUILD = 'dd6d1a1df323';
+  const BUILD = 'b9fdadb48110';
   if (location.protocol === 'file:' || BUILD.indexOf('BUILD_ID') >= 0) return;
   /* At the start it may reload at once; later it waits while a video is being made or saved. */
   const check = first => {

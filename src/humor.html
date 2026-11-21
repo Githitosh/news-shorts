@@ -540,14 +540,14 @@ function saveAccounts(list) {
   paintAsked();
   return clean;
 }
-/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
-   issue titled "account" already written, one account on each line, and Submit there sends it. */
+/* Adding an account opens the PRIVATE memo (githito.memo): issue "account" → accounts.json only. */
 const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
+const MEMO_REPO = 'https://github.com/Githitosh/githito.memo';
 function sendAccounts() {
   const list = xAccounts();
   const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
   const a = document.createElement('a');
-  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.href = MEMO_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
   a.target = '_blank'; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
 }
@@ -2480,11 +2480,13 @@ function watchLine() {
   const what = news && jokes ? `${news} ${news === 1 ? 'story' : 'stories'}, then ${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : (jokes ? `${jokes} ${jokes === 1 ? 'comment' : 'comments'}` : `${news} ${news === 1 ? 'story' : 'stories'}`);
   return 'Playing ' + what + '.';
 }
-/* Stops the video. The music goes on. */
+/* Stops the video and the music together. */
 function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   $('play').textContent = 'Play';
+  NSMusic.pause();
+  S.audioOn = false;
   paintSound();
 }
 function beginPlayback(T0) {

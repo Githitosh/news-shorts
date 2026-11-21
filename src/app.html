@@ -170,11 +170,10 @@ pre#sources { white-space: pre-wrap; font: 12px/1.5 ui-monospace,Menlo,monospace
       <span id="time">0.0 / 0.0</span>
     </div>
     </div>
-    <!-- The accounts whose replies and comments play: on the main screen, under the video. Add also sends
-         the list to githito.xapi (there is no separate button for that). -->
-    <p class="music-label">Reply request</p>
+    <!-- News request: Add opens a private-memo Issue (githito.memo → accounts.json). Filtered later. -->
+    <p class="music-label">News request</p>
     <div class="x-add">
-      <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="Reply request">
+      <input id="xUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@name" aria-label="News request">
       <button type="button" id="addX">Add</button>
     </div>
     <div id="xAccounts" class="music"></div>
@@ -839,10 +838,11 @@ function playSound() {
 NSMusic.onchange = heard => { if (heard) soundOn(); else soundOff(); };
 async function play() {
   if (!S.show) return;
-  if (S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); return; }
+  if (S.playing) { stop(); say('Paused. Tap the video or press Play to continue.'); return; }
   let T0 = (+$('seek').value / 1000) * S.show.duration;
   if (T0 >= S.show.duration - 0.05) T0 = 0;
   beginPlayback(T0);
+  playSound();
   say(watchLine());
 }
 function pauseMusic() {
@@ -868,7 +868,7 @@ function toggleMusic() {
   if (S.mute) pauseMusic();
   else if (S.show && S.playing) playSound();
 }
-/* Stops the video. The music goes on (pauseMusic stops it). */
+/* Stops the video and the music together. */
 function stop() {
   if (S.show && S.playing && S.show.duration) {
     const T = Math.max(0, Math.min(currentT(), S.show.duration));
@@ -878,6 +878,7 @@ function stop() {
   S.playing = false;
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   $('play').textContent = 'Play';
+  pauseMusic();
 }
 
 /* ---------- collection ---------- */
@@ -962,15 +963,16 @@ function addAccount() {
   sendAccounts();
 }
 function xHandle() { return xAccounts()[0] || ''; }
-/* Adding an account (or taking one away) sends the list to githito.xapi: GitHub opens in a new tab with an
-   issue titled "account" already written, one account on each line, and Submit there sends it. githito.xapi
-   then reads those accounts' posts and the replies under them. The list is one for News and Reply News. */
+/* Adding an account (or taking one away) opens the PRIVATE memo (githito.memo): an issue titled
+   "account", one handle per line. Submit there writes accounts.json in that private repo only —
+   never the public githito.xapi / api branch. Collect then reads that list for replies. */
 const XAPI_REPO = 'https://github.com/Githitosh/githito.xapi';
+const MEMO_REPO = 'https://github.com/Githitosh/githito.memo';
 function sendAccounts() {
   const list = xAccounts();
   const body = list.length ? list.map(n => '@' + n).join('\n') : 'none';
   const a = document.createElement('a');
-  a.href = XAPI_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
+  a.href = MEMO_REPO + '/issues/new?title=account&body=' + encodeURIComponent(body);
   a.target = '_blank'; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
 }
@@ -2304,7 +2306,7 @@ function withCoffee(rows) {
    - Every card is a headline from X: News plays no replies.
    - For an account added in Settings, its posts play with the replies and comments under them (one
      card each, saying which post it answers), up to half of a video. githito.xapi reads replies only
-     for the accounts sent to it (Send to githito.xapi), and the page plays them only for the accounts
+     for the accounts sent to the private memo (News request), and the page plays them only for the accounts
      added in this browser. A post of an account that is not a news account ("q") plays only for a
      reader who added it.
    With another edition or a lineup line that is not a genre, the page searches as before. When the file cannot be read it searches the web only if a web source is switched on. */
@@ -3805,7 +3807,7 @@ function setupVideoFull() {
   v.addEventListener('webkitbeginfullscreen', () => { S.vfull = true; paintFull(); });
   v.addEventListener('webkitendfullscreen', () => { S.vfull = false; paintFull(); setTimeout(kick, 50); });
   /* Pause and play in the system player pause and play the video and the music. */
-  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); pauseMusic(); say('Paused. Tap the video or press Play to continue.'); } }, 300); });
+  v.addEventListener('pause', () => { setTimeout(() => { if (S.vfull && v.paused && S.playing) { stop(); say('Paused. Tap the video or press Play to continue.'); } }, 300); });
   v.addEventListener('play', () => { if (S.vfull && !S.playing && S.show) { play().catch(() => {}); playSound(currentT()); } });
 }
 function videoFull() {
