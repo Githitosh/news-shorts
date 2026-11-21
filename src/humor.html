@@ -1978,10 +1978,17 @@ function romanceCards(r, langId) {
     const parts = en || x.ja;
     const ja = !en;
     const corner = r.asked ? (ja ? 'リプライ' : 'REPLY') : (ja ? '恋愛' : 'ROMANCE');
-    const who = x.h || (x.s != null ? 's' + x.s : 's');
-    const whom = x.to || '';
+    /* Prefer real @handles + real X status URLs from stock (opaque s0/s1 never become x.com links). */
+    const realH = h => { const v = String(h || '').replace(/^@+/, ''); return v && !/^s\d+$/i.test(v) ? v : ''; };
+    const who = realH(x.h);
+    const whom = realH(x.to);
+    const stockUrl = String(x.url || '');
+    const url = /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^/\s]+\/status\/\d+/i.test(stockUrl)
+      ? stockUrl.replace(/[?#].*$/, '').replace(/\/\/(?:www\.)?twitter\.com\//i, '//x.com/')
+      : (x.i && who ? 'https://x.com/' + who + '/status/' + x.i : '');
+    const src = who ? ('X @' + who + (whom ? ' → @' + whom : '')) : corner;
     return [{ kw: parts[0] || parts[1], cat: corner, topic: ja ? '' : corner, head: [ja ? parts[1] : parts[1].toUpperCase()], sub: [], jp: [], tags: [],
-      src: 'X @' + who + (whom ? ' → @' + whom : ''), url: x.i && x.h && !/^s\d+$/i.test(x.h) ? 'https://x.com/' + x.h + '/status/' + x.i : '', key: r.keys }];
+      src, url, key: r.keys }];
   }
   const st = r.story;
   const ja = r.lang !== 'en';
