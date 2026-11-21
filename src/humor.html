@@ -1689,19 +1689,28 @@ function loadStock() {
   })();
   return stockLoading;
 }
-async function stock() {
+async function stock(fresh) {
   if (!STOCK.videos.length) keptStock();
   if (!STOCK.videos.length) await loadStock();
+  else if (fresh) await withTimeout(loadStock(), 8000).catch(() => {});
   else if (Date.now() - STOCK.at > 600000) { STOCK.at = Date.now(); await withTimeout(loadStock(), 2500).catch(() => {}); }
   return STOCK;
+}
+const SEEN_VIDEOS = 'seenVideos.humor';
+function seenHumorVideos() {
+  try { return new Set(JSON.parse(store.get(SEEN_VIDEOS, '[]'))); } catch (e) { return new Set(); }
+}
+function rememberHumorVideos(ids) {
+  const all = [...(ids || []), ...seenHumorVideos()].filter((k, i, a) => k && a.indexOf(k) === i).slice(0, 500);
+  store.set(SEEN_VIDEOS, JSON.stringify(all));
 }
 const msgKeys = x => ['id:' + x.i, 't:' + squash(x.ja[1]).slice(0, 50)].filter(k => k !== 'id:');
 /* A video from the stock, message by message: the replies to the reader's accounts first (up to half), then
    the first video that has not played, as githito.xapi ordered them (in the morning, a video of morning
    greetings first). Talks are taken whole: the video may be a message or two longer than chosen, so that
    no conversation stops in the middle. Null when there is no stock yet. */
-async function stockRows(N) {
-  const st = await stock();
+async function stockRows(N, fresh) {
+  const st = await stock(fresh);
   if (!st.videos.length) return null;
   const past = seenSet(SEEN_JOKES);
   const now = playingKeys();
@@ -1723,20 +1732,35 @@ async function stockRows(N) {
   }
   const hour = new Date().getHours();
   const morning = hour >= 4 && hour < 11;
-  const talkSeen = t => t.m.some(seenMsg);
+  const talkSeen = t => !t || t.m.some(seenMsg) || t.m.some(x => msgKeys(x).some(k => now.has(k)));
+  const onScreen = v => v.c.some(id => { const t = st.byId.get(id); return t && t.m.some(x => msgKeys(x).some(k => now.has(k))); });
+  let done = seenHumorVideos();
+  let pool = st.videos.filter(v => v && v.c && v.c.length && !done.has(v.i) && !onScreen(v));
+  if (!pool.length) {
+    done = new Set();
+    store.set(SEEN_VIDEOS, '[]');
+    pool = st.videos.filter(v => v && v.c && v.c.length && !onScreen(v));
+  }
+  if (!pool.length) pool = st.videos.filter(v => v && v.c && v.c.length);
   const unseen = v => v.c.filter(id => !talkSeen(st.byId.get(id))).length;
-  const order = st.videos.map((v, i) => [(v.m === morning ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
+  const order = pool.map((v, i) => [(v.m === morning ? 2e6 : 0) + (unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i), v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
   const took = new Set();
+  S.pendingHumorVideo = null;
   for (const v of order) {
+    const before = rows.length;
     for (const id of v.c) {
       if (rows.length >= N) break;
       const t = st.byId.get(id);
+      if (!t) continue;
       const who = [...new Set(t.m.map(x => String(x.h).toLowerCase()))];
       if (took.has(t.i) || who.some(h => people.has(h)) || !t.m.every(x => okText(x.ja[1]) && !msgKeys(x).some(k => now.has(k)))) continue;
       took.add(t.i); who.forEach(h => people.add(h));
       t.m.forEach(x => rows.push({ romance: true, stock: x, talk: t.i, keys: msgKeys(x) }));
     }
-    if (rows.length >= N) break;
+    if (rows.length > before) {
+      S.pendingHumorVideo = v.i;
+      break;
+    }
   }
   return rows;
 }
@@ -2192,7 +2216,7 @@ async function cardsFrom(rows, langId) {
 }
 
 /* ---------- making the video ---------- */
-async function collect() {
+async function collect(fresh) {
   beginCollect();
   const { country, lang } = market();
   const mode = feedMode();
@@ -2204,11 +2228,17 @@ async function collect() {
     /* The accounts the reader added come first: the replies to their posts, a card each, up to half of
        the video. The stories fill the rest (two cards each). */
     /* The stock githito.xapi made (a card a story); without it, the stories file as before. */
-    const fromStock = await stockRows(N).catch(e => { console.warn(e); return null; });
+    const fromStock = await stockRows(N, fresh).catch(e => { console.warn(e); return null; });
     const mine = fromStock ? [] : await askedRows(Math.max(1, Math.floor(N / 2))).catch(e => { console.warn(e); return []; });
     const more = fromStock ? [] : await preparedRows(Math.max(1, Math.ceil((N - mine.length) / 2))).catch(e => { console.warn(e); return []; });
     const rows = fromStock || mine.concat(more);
-    if (S.again || !rows.length) return null;
+    if (!rows.length) return null;
+    /* A newer Update arrived: keep the stock video id as used so the next pick advances. */
+    if (S.again) {
+      if (S.pendingHumorVideo) rememberHumorVideos([S.pendingHumorVideo]);
+      S.pendingHumorVideo = null;
+      return null;
+    }
     if (lang.id === 'en') await englishStories(rows);
     /* Only what fits in the video counts as played. */
     const items = [];
@@ -2218,7 +2248,7 @@ async function collect() {
       items.push(...romanceCards(r, lang.id));
       shown.push(r);
     }
-    return { date: chosenDate(), items: fromStock ? items : items.slice(0, N), market: country.name + ' · ' + lang.name, played: { news: [], jokes: shown.flatMap(r => r.keys) } };
+    return { date: chosenDate(), items: fromStock ? items : items.slice(0, N), market: country.name + ' · ' + lang.name, played: { news: [], jokes: shown.flatMap(r => r.keys) }, videoId: S.pendingHumorVideo || null };
   }
   const SPECIAL = new Set(['jokes', 'romance', 'travel']);
   const topicSlots = slots.filter(s => !SPECIAL.has(s.type));
@@ -2533,13 +2563,13 @@ function setBusy(b) {
 }
 async function runAll(opts) {
   opts = opts || {};
-  if (S.busy) { S.again = opts; return; }
+  if (S.busy) { S.again = Object.assign({}, opts, { fresh: true }); return; }
   setBusy(true);
   say('Searching ' + (feedMode() === 'x' ? 'X' : 'the news'));
   progress(0.05);
   let script = null;
   try {
-    script = await collect();
+    script = await collect(!!opts.fresh || !!S.show);
   } catch (e) {
     console.error(e);
     if (!S.again) { say(e.message || String(e), true); progress(0); }
@@ -2548,7 +2578,7 @@ async function runAll(opts) {
   S.again = null;
   setBusy(false);
   /* A newer request came in while collecting: collect again instead of showing the older result. */
-  if (again) return runAll(again);
+  if (again) return runAll(Object.assign({}, again, { fresh: true }));
   if (!script) return;
   if (script.empty) {
     progress(0);
@@ -2560,6 +2590,8 @@ async function runAll(opts) {
     await setScript(script, true);
     remember(SEEN_NEWS, script.played.news, 1200);
     remember(SEEN_JOKES, script.played.jokes, 3000);
+    if (script.videoId) rememberHumorVideos([script.videoId]);
+    S.pendingHumorVideo = null;
     if (opts.export) await exportMP4(chosenFormats());
   } catch (e) {
     console.error(e);
@@ -2568,7 +2600,7 @@ async function runAll(opts) {
   }
 }
 let refreshTimer = 0;
-function refreshMarket() { clearTimeout(refreshTimer); refreshTimer = 0; return runAll({ export: false }).catch(() => {}); }
+function refreshMarket() { clearTimeout(refreshTimer); refreshTimer = 0; return runAll({ export: false, fresh: true }).catch(() => {}); }
 function scheduleRefresh(delay) {
   clearTimeout(refreshTimer);
   if (!delay) { refreshMarket(); return; }
@@ -3293,7 +3325,7 @@ function initUI() {
   $('shareClose').onclick = () => closeShare();
   $('shareBox').addEventListener('click', e => { if (e.target === $('shareBox')) closeShare(); });
   $('full').onclick = () => toggleFull().catch(e => say(e.message || String(e), true));
-  $('update').onclick = () => { closeStudio(); refreshMarket(); };
+  $('update').onclick = () => { closeStudio(); runAll({ export: false, fresh: true }).catch(() => {}); };
   $('sound').onclick = () => { if (!soundTapNow()) toggleSound(); };
   paintSound();
   ['pointerup', 'touchend', 'click', 'keydown'].forEach(t => document.addEventListener(t, firstTap, true));

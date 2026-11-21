@@ -1203,6 +1203,24 @@ function rememberKeys(keys) {
   const prev = [...seenKeys()];
   store.set('seen', JSON.stringify([...keys, ...prev].filter((k, i, a) => k && a.indexOf(k) === i).slice(0, 2000)));
 }
+/* Stock videos already shown (by githito.xapi video id). Update advances to the next id. */
+const seenVideoKey = lang => (lang === 'en' ? 'seenVideos.en' : 'seenVideos.ja');
+function seenVideoIds(lang) {
+  try { return new Set(JSON.parse(store.get(seenVideoKey(lang), '[]'))); } catch (e) { return new Set(); }
+}
+function rememberVideos(lang, ids) {
+  const list = [...(ids || []), ...seenVideoIds(lang)].filter((k, i, a) => k && a.indexOf(k) === i).slice(0, 500);
+  store.set(seenVideoKey(lang), JSON.stringify(list));
+}
+/* Card ids / status links currently on screen — Update must not pick the same pack again. */
+function playingCardIds() {
+  const ids = new Set();
+  ((S.script && S.script.items) || []).forEach(it => {
+    const m = String((it && it.url) || '').match(/status(?:es)?\/(\d+)/);
+    if (m) ids.add(m[1]);
+  });
+  return ids;
+}
 function noNewError(text) {
   const e = new Error(text || 'No new stories yet. Press Update again later.');
   e.noNew = true;
@@ -2853,12 +2871,13 @@ function loadStock(lang) {
   })();
   return stockLoading[lang];
 }
-/* The kept copy at once; the file when there is no copy; a fresh read (two and a half seconds at most)
-   when what is held is more than ten minutes old. */
-async function stock(lang) {
+/* The kept copy at once; the file when there is no copy; a fresh read when what is held is old.
+   fresh: Update pressed — wait for a new file so the next video can be a new one. */
+async function stock(lang, fresh) {
   const st = () => STOCKS[lang];
   if (!st().videos.length) keptStock(lang);
   if (!st().videos.length) await loadStock(lang);
+  else if (fresh) await timed(loadStock(lang), 8000).catch(() => {});
   else if (Date.now() - st().at > 600000) { st().at = Date.now(); await timed(loadStock(lang), 2500).catch(() => {}); }
   return st();
 }
@@ -2879,10 +2898,11 @@ function stockCard(c) {
     kw: c.kw || (langId === 'en' ? storyWord(ja[0], '') : jaWord(ja[0])), head: [ja[0]], jp: ja[1] ? [ja[1]] : [] };
 }
 /* The cards for one video from one stock: the accounts the reader added first; the lineup's words or genres;
-   or the newest video not played yet, closed with what people said (Japanese). */
-function pickStock(st, N, slots) {
+   or the next stock video not played yet (Update advances one video at a time). */
+function pickStock(st, N, slots, lang) {
   const past = seenKeys();
-  const seen = c => stockKeys(c).some(k => past.has(k));
+  const playing = playingCardIds();
+  const seen = c => !c || stockKeys(c).some(k => past.has(k)) || playing.has(String(c.id));
   const genres = genreChoices();
   const allowed = genres.length === GENRES.length ? null : new Set(genres.map(g => g.id));
   const wants = slots.map(s => ({ gid: slotGenre(s), q: slotWords(s), count: s.count || 1 })).filter(w => w.gid || w.q);
@@ -2901,43 +2921,64 @@ function pickStock(st, N, slots) {
     }
     return got;
   };
-  const fresh = list => list.filter(c => !seen(c)).concat(list.filter(seen));
+  const freshest = list => list.filter(c => !seen(c)).concat(list.filter(c => c && !playing.has(String(c.id)) && seen(c)));
   /* Asked-account replies are not used: news videos are registered own posts only. */
   if (asked.size) {
-    take(fresh(st.cards.filter(c => c.own && asked.has(String(c.h).toLowerCase()))), Math.ceil(N / 2));
+    take(freshest(st.cards.filter(c => c.own && asked.has(String(c.h).toLowerCase()))), Math.ceil(N / 2));
   }
   if (wants.length) {
-    for (const w of wants) take(fresh(st.cards.filter(c => (w.gid ? c.g === w.gid : wordsHit(w.q, { h: c.h, n: c.n, t: c.ja.join(' '), d: '' })))), w.count);
+    for (const w of wants) take(freshest(st.cards.filter(c => (w.gid ? c.g === w.gid : wordsHit(w.q, { h: c.h, n: c.n, t: c.ja.join(' '), d: '' })))), w.count);
   } else if (allowed) {
-    take(fresh(st.cards.filter(c => allowed.has(c.g || 'other'))), N - picked.length);
+    take(freshest(st.cards.filter(c => allowed.has(c.g || 'other'))), N - picked.length);
   } else {
-    /* The newest video not played yet; when all have played, the one played least. */
-    const unseen = v => v.c.filter(id => !seen(st.byId.get(id))).length;
-    const order = st.videos.map((v, i) => [unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i, v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
-    for (const v of order) { if (picked.length >= N) break; take(v.c.map(id => st.byId.get(id)), N - picked.length); }
+    /* One stock video at a time: skip ids already shown and the pack on screen. When every id has
+       played, clear the list and go round again from the newest. */
+    let done = seenVideoIds(lang || 'ja');
+    const onScreen = v => v.c.some(id => playing.has(String(id)));
+    const ready = v => v && Array.isArray(v.c) && v.c.length && v.c.every(id => st.byId.has(id));
+    let pool = st.videos.filter(v => ready(v) && !done.has(v.i) && !onScreen(v));
+    if (!pool.length) {
+      done = new Set();
+      store.set(seenVideoKey(lang || 'ja'), '[]');
+      pool = st.videos.filter(v => ready(v) && !onScreen(v));
+    }
+    if (!pool.length) pool = st.videos.filter(ready);
+    const unseen = v => v.c.filter(id => { const c = st.byId.get(id); return c && !seen(c); }).length;
+    const order = pool.map((v, i) => [unseen(v) === v.c.length ? 1e6 - i : unseen(v) * 1000 - i, v]).sort((a, b) => b[0] - a[0]).map(x => x[1]);
+    for (const v of order) {
+      if (picked.length >= N) break;
+      const before = picked.length;
+      take(freshest(v.c.map(id => st.byId.get(id))), N - picked.length);
+      if (picked.length > before) {
+        S.pendingVideoIds = (S.pendingVideoIds || []).concat({ lang: lang || 'ja', i: v.i });
+        /* Default Update: one prepared video, not a mix of several. */
+        break;
+      }
+    }
   }
   return picked;
 }
 /* A video from the stock, or null when there is none yet. Japanese: the Japanese stock. English: the English
    stock (the Japanese one while githito.xapi has no English yet). Both: English and Japanese cards in turn,
    the English first, each in its own language. */
-async function stockScript(date, slots, room) {
+async function stockScript(date, slots, room, fresh) {
   /* News videos: stock-news-ja.json / stock-news-en.json only (registered own posts). */
   const { country, lang } = market();
   const N = Math.max(1, room || total());
-  const ja = lang.id === 'en' ? null : await stock('ja');
-  const en = lang.id === 'ja' ? null : await stock('en');
+  S.pendingVideoIds = [];
+  const ja = lang.id === 'en' ? null : await stock('ja', fresh);
+  const en = lang.id === 'ja' ? null : await stock('en', fresh);
   let picked = [];
   if (lang.id === 'both' && en && en.videos.length && ja && ja.videos.length) {
-    const a = pickStock(en, Math.floor(N / 2), slots).map(c => ({ ...c, lang: 'en' }));
-    const b = pickStock(ja, N - a.length, slots);
+    const a = pickStock(en, Math.floor(N / 2), slots, 'en').map(c => ({ ...c, lang: 'en' }));
+    const b = pickStock(ja, N - a.length, slots, 'ja');
     for (let i = 0; i < Math.max(a.length, b.length); i++) { if (a[i]) picked.push(a[i]); if (b[i]) picked.push(b[i]); }
   } else if (lang.id === 'en') {
     if (!en || !en.videos.length) return null;
-    picked = pickStock(en, N, slots).map(c => ({ ...c, lang: 'en' }));
+    picked = pickStock(en, N, slots, 'en').map(c => ({ ...c, lang: 'en' }));
   } else {
     if (!ja || !ja.videos.length) return null;
-    picked = pickStock(ja, N, slots);
+    picked = pickStock(ja, N, slots, 'ja');
   }
   if (!picked.length) return null;
   S.pendingKeys = picked.flatMap(stockKeys);
@@ -3257,15 +3298,15 @@ async function collectPosts(date) {
   const items = rows.filter(r => r && r.headline).map(r => storyFrom(r, r._en || r.headline, r._local || r.headline, lang.id));
   return { date, items, market: country.name + ' · ' + lang.name };
 }
-async function collect(date) {
+async function collect(date, fresh) {
   beginCollect();
   const slots = parseLineup(lineupText());
   const N = total();
   /* Registered-account stock only. No live X search, no news-ja.json prep, no sample fallback. */
   let script = null;
-  try { script = await stockScript(date, slots, N); } catch (e) { console.warn(e); }
+  try { script = await stockScript(date, slots, N, fresh); } catch (e) { console.warn(e); }
   if (script) return script;
-  if (slots.length) script = await stockScript(date, [], N).catch(() => null);
+  if (slots.length) script = await stockScript(date, [], N, fresh).catch(() => null);
   if (script) return script;
   throw noNewError('No news from registered accounts yet. Press Update again later.');
 }
@@ -3624,6 +3665,15 @@ function previewLabel() {
   return { title, say: 'Reading ' + frame };
 }
 let waitCard = 0;
+function commitPendingSeen() {
+  if (S.pendingKeys) { rememberKeys(S.pendingKeys); S.pendingKeys = null; }
+  if (S.pendingVideoIds && S.pendingVideoIds.length) {
+    const byLang = {};
+    S.pendingVideoIds.forEach(x => { if (x && x.i) { (byLang[x.lang || 'ja'] || (byLang[x.lang || 'ja'] = [])).push(x.i); } });
+    Object.keys(byLang).forEach(lang => rememberVideos(lang, byLang[lang]));
+    S.pendingVideoIds = [];
+  }
+}
 async function runAll(opts) {
   opts = opts || {};
   if (S.busy) {
@@ -3633,7 +3683,7 @@ async function runAll(opts) {
     say(feedMode() === 'x' ? 'Searching X' : 'Searching the news');
     return;
   }
-  S.busy = true; S.grew = false; S.pendingKeys = null; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
+  S.busy = true; S.grew = false; S.pendingKeys = null; S.pendingVideoIds = []; setBusy(true); $('out').classList.remove('show'); $('out').innerHTML = ''; S.outs = [];
   if (!opts.sample) {
     stop();
     /* Before a video shows, the card says SEARCHING News. With the prepared news at hand the new video is
@@ -3646,15 +3696,15 @@ async function runAll(opts) {
   }
   try {
     const date = opts.date || $('date').value || todayJST();
-    const script = opts.sample ? { ...SAMPLE } : await collect(date).finally(() => clearTimeout(waitCard));
+    /* Update / next: refresh the stock file and skip the video already on screen. */
+    const script = opts.sample ? { ...SAMPLE } : await collect(date, !!opts.fresh || !!S.show).finally(() => clearTimeout(waitCard));
     progress(0.7);
     if (S.again) {
-      /* A newer update is waiting. Keep that search on screen. */
+      /* A newer update is waiting: mark this pack used so the next pick is a different video. */
+      commitPendingSeen();
     } else if (!opts.sample && S.grew && S.playing && S.show) growShow(script);
     else await setScript(script, true);
-    /* Remember the stories once they are on screen, so they do not play again. */
-    if (!S.again && S.pendingKeys) { rememberKeys(S.pendingKeys); S.pendingKeys = null; }
-    if (!S.again) say(watchLine());
+    if (!S.again) { commitPendingSeen(); say(watchLine()); }
   } catch (e) {
     console.error(e); progress(0);
     S.busy = false; setBusy(false);
@@ -3669,7 +3719,7 @@ async function runAll(opts) {
     throw e;
   }
   S.busy = false; setBusy(false);
-  if (S.again) { const next = S.again; S.again = null; return runAll(next); }
+  if (S.again) { const next = S.again; S.again = null; return runAll(Object.assign({}, next, { fresh: true })); }
   if (opts.export !== false && $('autoExport').checked) {
     const names = await exportMP4(opts.formats || chosenFormats());
     if (opts.download) for (const a of document.querySelectorAll('#out a')) { a.click(); await sleep(400); }
@@ -3957,7 +4007,7 @@ function initUI() {
   const saved = (store.get('formats', '') || '').split(',').filter(f => FORMATS[f]);
   const on = fq.length ? fq : (saved.length ? saved : Object.keys(FORMATS));
   document.querySelectorAll('.fx').forEach(x => { x.checked = on.includes(x.value); x.onchange = () => store.set('formats', chosenFormats().join(',')); });
-  $('update').onclick = () => runAll({ download: false, export: false }).catch(() => {});
+  $('update').onclick = () => runAll({ download: false, export: false, fresh: true }).catch(() => {});
   $('dl').onclick = () => download();
   $('shareGo').onclick = async () => { const out = shareOut; if (out && await openSheet(out)) closeShare(); };
   $('shareClose').onclick = () => closeShare();
